@@ -2,5 +2,8 @@ using NaiveGAflux
 using Test
 
 @testset "NaiveGAflux.jl" begin
-    # Write your own tests here.
+    @info "Testing mutation"
+
+    include("mutation.jl")
+
 end
