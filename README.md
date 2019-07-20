@@ -4,7 +4,7 @@
 [![Build Status](https://ci.appveyor.com/api/projects/status/github/DrChainsaw/NaiveGAflux.jl?svg=true)](https://ci.appveyor.com/project/DrChainsaw/NaiveGAflux-jl)
 [![Codecov](https://codecov.io/gh/DrChainsaw/NaiveGAflux.jl/branch/master/graph/badge.svg)](https://codecov.io/gh/DrChainsaw/NaiveGAflux.jl)
 
-Neural archiecture search for [Flux](https://github.com/FluxML/Flux.jl) through a genetic algorithm.
+Neural architecture search for [Flux](https://github.com/FluxML/Flux.jl) through a genetic algorithm.
 
 A marketing person might describe it as "practical proxyless NAS using an unrestricted search space".
 
