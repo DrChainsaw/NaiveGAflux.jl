@@ -1,9 +1,10 @@
 module NaiveGAflux
 
 using NaiveNASflux
+using Random
 
 # types
-export AbstractMutation
+export AbstractMutation, Probability, VertexMutation
 
 # functions
 export mutate
