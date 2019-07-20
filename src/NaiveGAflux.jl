@@ -1,5 +1,5 @@
 module NaiveGAflux
 
-greet() = print("Hello World!")
+using NaiveNASflux
 
 end # module

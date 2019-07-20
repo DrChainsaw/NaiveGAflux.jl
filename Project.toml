@@ -3,11 +3,11 @@ uuid = "81ede08e-ab29-11e9-16d3-79edd30a1d76"
 authors = ["DrChainsaw"]
 version = "0.1.0"
 
+[deps]
+NaiveNASflux = "85610aed-7d32-5e57-bb50-4c2e1c9e7997"
+
 [compat]
 julia = "1.1"
 
 [extras]
 Test = "8dfed614-e22c-5e08-85e1-65c5234f0b40"
-
-[targets]
-test = ["Test"]
