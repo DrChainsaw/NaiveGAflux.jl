@@ -2,24 +2,11 @@
 
 @testset "Mutation" begin
     using NaiveNASflux
-    using Random
 
     @testset "Unsupported fallback" begin
         struct Dummy <:AbstractMutation end
         @test_throws ArgumentError mutate(Dummy(), "Test")
     end
-
-    mutable struct MockRng <:AbstractRNG
-        seq::AbstractVector
-        ind::Integer
-        MockRng(seq) = new(seq, 0)
-    end
-
-    function Random.rand(rng::MockRng)
-        rng.ind = rng.ind % length(rng.seq) + 1
-        return rng.seq[rng.ind]
-    end
-
 
     @testset "Probability" begin
         import NaiveGAflux: apply
