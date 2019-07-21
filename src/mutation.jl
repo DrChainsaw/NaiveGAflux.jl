@@ -29,6 +29,23 @@ function mutate(m::MutationProbability{T}, e::T) where T
 end
 
 """
+    RecordMutation
+
+Records all mutated entities.
+
+Intended use case is to be able to do parameter selection on mutated vertices.
+"""
+struct RecordMutation{T} <:AbstractMutation{T}
+    m::AbstractMutation{T}
+    mutated::AbstractVector{T}
+end
+RecordMutation(m::AbstractMutation{T}) where T = RecordMutation(m, T[])
+function mutate(m::RecordMutation{T}, e::T) where T
+    push!(m.mutated, e)
+    mutate(m.m, e)
+end
+
+"""
     VertexMutation
 
 Applies a wrapped `AbstractMutation` for each selected vertex in a `CompGraph`.

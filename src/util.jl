@@ -73,4 +73,4 @@ struct FilterMutationAllowed <:AbstractVertexSelection
     s::AbstractVertexSelection
 end
 FilterMutationAllowed() = FilterMutationAllowed(AllVertices())
-select(s::FilterMutationAllowed, g::CompGraph) = filter(v -> allow_mutation(v), select(s.s, g))
+select(s::FilterMutationAllowed, g::CompGraph) = filter(allow_mutation, select(s.s, g))
