@@ -1,13 +1,17 @@
 module NaiveGAflux
 
-using NaiveNASflux
+using Reexport
+@reexport using NaiveNASflux
 using Random
 
-# types
-export AbstractMutation, Probability, VertexMutation
+# misc types
+export Probability, MutationShield
+
+# mutation types
+export AbstractMutation, VertexMutation
 
 # functions
-export mutate
+export mutate, allow_mutation
 
 include("util.jl")
 include("mutation.jl")
