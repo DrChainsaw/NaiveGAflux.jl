@@ -45,3 +45,25 @@ function mutate(m::VertexMutation, g::CompGraph)
         mutate(m.m, v)
     end
 end
+
+"""
+    NoutMutation
+
+Mutate the out size of a vertex.
+
+Size is changed by `x * nout(v)` quantized to closest non-zero integer of `minΔnoutfactor(v)` where `x` is drawn from `U(0, maxrel)` if `maxrel` is positive or U(maxrel, 0) if `maxrel` is negative.
+"""
+struct NoutMutation <:AbstractMutation{AbstractVertex}
+    maxrel::Real
+    rng::AbstractRNG
+end
+NoutMutation(maxrel::Real) = NoutMutation(maxrel, Random.GLOBAL_RNG)
+function mutate(m::NoutMutation, v::AbstractVertex)
+    Δfactor = minΔnoutfactor(v)
+    # Missing Δfactor means vertex can't be mutated, for example if it touches an immutable vertex such as an input vertex
+    ismissing(Δfactor) && return
+
+    Δ = Int(sign(m.maxrel) * max(Δfactor, (nout(v) * rand(m.rng) * abs(m.maxrel)) ÷ Δfactor * Δfactor))
+
+    Δnout(v, Δ)
+end

@@ -37,4 +37,27 @@
         # Vertex 1 (inpt) is immutable, all others are selected
         @test probe.seen == vertices(graph)[2:end]
     end
+
+    @testset "NoutMutation" begin
+        inpt = inputvertex("in", 3, FluxDense())
+
+        # Can't mutate, don't do anything
+        mutate(NoutMutation(0.4), inpt)
+        @test nout(inpt) == 3
+
+        rng = MockRng([0.5])
+        v = dense(inpt, 11)
+        
+        mutate(NoutMutation(0.4, rng), v)
+        @test nout(v) == 13
+
+        mutate(NoutMutation(-0.4, rng), v)
+        @test nout(v) == 11
+
+        mutate(NoutMutation(-0.001, rng), v)
+        @test nout(v) == 10
+
+        mutate(NoutMutation(0.001, rng), v)
+        @test nout(v) == 11
+    end
 end

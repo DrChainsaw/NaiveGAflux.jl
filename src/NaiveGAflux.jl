@@ -11,7 +11,7 @@ export Probability, MutationShield
 export AbstractVertexSelection, AllVertices, FilterMutationAllowed
 
 # mutation types
-export AbstractMutation, MutationProbability, VertexMutation
+export AbstractMutation, MutationProbability, VertexMutation, NoutMutation
 
 # functions
 export mutate, allow_mutation, select
