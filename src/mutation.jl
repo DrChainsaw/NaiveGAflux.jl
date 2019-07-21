@@ -35,7 +35,7 @@ Probability(p::Integer, rng) = Probability(p / 100.0, rng)
 
 Return true with a probability of ´p.p´ (subject to `p.rng` behaviour).
 """
-apply(p::Probability) = rand(p.rng) > p.p
+apply(p::Probability) = rand(p.rng) < p.p
 
 """
     apply(f, p::Probability)

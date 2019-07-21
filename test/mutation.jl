@@ -26,7 +26,7 @@
         @test_throws AssertionError Probability(-1)
         @test_throws AssertionError Probability(1.1)
 
-        p = Probability(0.3, MockRng([0.2, 0.3, 0.4]))
+        p = Probability(0.3, MockRng([0.4, 0.3, 0.2]))
         @test !apply(p)
         @test !apply(p)
         @test apply(p)
@@ -39,6 +39,11 @@
         @test cnt == 0
         apply(ff, p)
         @test cnt == 1
+
+        p = Probability(0.3, MockRng(0:0.1:0.9))
+        cnt = 0
+        foreach(_ -> apply(ff, p), 1:10)
+        @test cnt == 3
     end
 
     struct ProbeMutation <:AbstractMutation
@@ -55,7 +60,7 @@
         graph = CompGraph(inpt, outpt)
 
         probe = ProbeMutation()
-        m = VertexMutation(probe, Probability(0.3, MockRng([0.5,0.2,0.4])))
+        m = VertexMutation(probe, Probability(0.3, MockRng([0.2,0.5,0.1])))
         mutate(m, graph)
         @test probe.seen == vertices(graph)[[1,3,4]]
     end
