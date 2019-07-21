@@ -31,16 +31,17 @@ end
 """
     VertexMutation
 
-Applies a wrapped `AbstractMutation` for each vertex in a `CompGraph`.
+Applies a wrapped `AbstractMutation` for each selected vertex in a `CompGraph`.
+
+Vertices to select is determined by the configured `AbstractVertexSelection`.
 """
 struct VertexMutation <:AbstractMutation{CompGraph}
     m::AbstractMutation{AbstractVertex}
-    p::Probability
+    s::AbstractVertexSelection
 end
+VertexMutation(m::AbstractMutation{AbstractVertex}) = VertexMutation(m, FilterMutationAllowed())
 function mutate(m::VertexMutation, g::CompGraph)
-    for v in vertices(g)
-        apply(m.p) do
-            mutate(m.m, v)
-        end
+    for v in select(m.s, g)
+        mutate(m.m, v)
     end
 end

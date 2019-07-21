@@ -32,8 +32,9 @@
         graph = CompGraph(inpt, outpt)
 
         probe = ProbeMutation{AbstractVertex}()
-        m = VertexMutation(probe, Probability(0.3, MockRng([0.2,0.5,0.1])))
+        m = VertexMutation(probe)
         mutate(m, graph)
-        @test probe.seen == vertices(graph)[[1,3,4]]
+        # Vertex 1 (inpt) is immutable, all others are selected
+        @test probe.seen == vertices(graph)[2:end]
     end
 end
