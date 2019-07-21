@@ -4,7 +4,7 @@
     using NaiveNASflux
 
     @testset "Unsupported fallback" begin
-        struct Dummy <:AbstractMutation end
+        struct Dummy <:AbstractMutation{Any} end
         @test_throws ArgumentError mutate(Dummy(), "Test")
     end
 
@@ -33,9 +33,9 @@
         @test cnt == 3
     end
 
-    struct ProbeMutation <:AbstractMutation
+    struct ProbeMutation <:AbstractMutation{AbstractVertex}
         seen::AbstractVector
-        ProbeMutation() = new(Any[])
+        ProbeMutation() = new(AbstractVertex[])
     end
     NaiveGAflux.mutate(m::ProbeMutation, t) = push!(m.seen, t)
 

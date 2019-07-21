@@ -3,7 +3,7 @@
 
 Generic mutation type.
 """
-abstract type AbstractMutation end
+abstract type AbstractMutation{T} end
 
 """
     mutate(m::M, t::T) where {M<:AbstractMutation, T}
@@ -15,10 +15,10 @@ mutate(::M, ::T) where {M<:AbstractMutation, T} = throw(ArgumentError("$M of $T 
 """
     VertexMutation
 
-Applies
+Applies a wrapped `AbstractMutation` for each vertex in a `CompGraph` with a configured probability.
 """
-struct VertexMutation <:AbstractMutation
-    m::AbstractMutation
+struct VertexMutation <:AbstractMutation{CompGraph}
+    m::AbstractMutation{AbstractVertex}
     p::Probability
 end
 function mutate(m::VertexMutation, g::CompGraph)
