@@ -34,3 +34,21 @@ end
     @test !allow_mutation(v3)
     @test !allow_mutation(v4)
 end
+
+@testset "VertexSelection" begin
+
+    v1 = inputvertex("v1", 3)
+    v2 = mutable("v2", Dense(nout(v1), 5), v1)
+    v3 = mutable("v3", Dense(nout(v2), 4), v2, traitfun = MutationShield)
+    v4 = mutable("v4", Dense(nout(v2), 2), v3)
+    g1 = CompGraph(v1, v4)
+
+    @testset "AllVertices" begin
+        @test select(AllVertices(), g1) == [v1,v2,v3,v4]
+    end
+
+    @testset "FilterMutationAllowed" begin
+        @test select(FilterMutationAllowed(), g1) == [v2,v4]
+    end
+
+end

@@ -30,7 +30,7 @@ Call `f` with probability `p.p` (subject to `p.rng` behaviour).
 """
 apply(f::Function, p::Probability) =  apply(p) && f()
 
-# TODO: Fix NaiveNaslib issue #18 
+# TODO: Fix NaiveNaslib issue #18
 import NaiveNASlib: DecoratingTrait
 """
     MutationShield <: DecoratingTrait
@@ -48,3 +48,29 @@ allow_mutation(t::DecoratingTrait) = allow_mutation(base(t))
 allow_mutation(::MutationTrait) = true
 allow_mutation(::Immutable) = false
 allow_mutation(::MutationShield) = false
+
+"""
+    AbstractVertexSelection
+
+Abstract type for determining how to select vertices from a `CompGraph`
+"""
+abstract type AbstractVertexSelection end
+
+"""
+    AllVertices
+
+Select all vertices in `g`.
+"""
+struct AllVertices <:AbstractVertexSelection end
+select(::AllVertices, g::CompGraph) = vertices(g)
+
+"""
+    FilterMutationAllowed
+
+Filters out only the vertices for which mutation is allowed from another selection.
+"""
+struct FilterMutationAllowed <:AbstractVertexSelection
+    s::AbstractVertexSelection
+end
+FilterMutationAllowed() = FilterMutationAllowed(AllVertices())
+select(s::FilterMutationAllowed, g::CompGraph) = filter(v -> allow_mutation(v), select(s.s, g))
