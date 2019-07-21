@@ -8,7 +8,7 @@ using Random
 export Probability, MutationShield
 
 # mutation types
-export AbstractMutation, VertexMutation
+export AbstractMutation, MutationProbability, VertexMutation
 
 # functions
 export mutate, allow_mutation

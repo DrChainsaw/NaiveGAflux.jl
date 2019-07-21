@@ -13,9 +13,25 @@ Mutate `t` using operation `m`.
 mutate(::M, ::T) where {M<:AbstractMutation, T} = throw(ArgumentError("$M of $T not implemented!"))
 
 """
+    MutationProbability
+
+Applies a wrapped `AbstractMutation` with a configured probability
+"""
+struct MutationProbability{T} <:AbstractMutation{T}
+    m::AbstractMutation{T}
+    p::Probability
+end
+
+function mutate(m::MutationProbability{T}, e::T) where T
+    apply(m.p) do
+        mutate(m.m, e)
+    end
+end
+
+"""
     VertexMutation
 
-Applies a wrapped `AbstractMutation` for each vertex in a `CompGraph` with a configured probability.
+Applies a wrapped `AbstractMutation` for each vertex in a `CompGraph`.
 """
 struct VertexMutation <:AbstractMutation{CompGraph}
     m::AbstractMutation{AbstractVertex}
