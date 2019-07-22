@@ -1,51 +1,26 @@
 
 
 @testset "Mutation" begin
-    using NaiveNASflux
-    using Random
 
     @testset "Unsupported fallback" begin
-        struct Dummy <:AbstractMutation end
+        struct Dummy <:AbstractMutation{Any} end
         @test_throws ArgumentError mutate(Dummy(), "Test")
     end
 
-    mutable struct MockRng <:AbstractRNG
-        seq::AbstractVector
-        ind::Integer
-        MockRng(seq) = new(seq, 0)
+    struct NoOpMutation{T} <:AbstractMutation{T} end
+    function NaiveGAflux.mutate(m::NoOpMutation, t) end
+    ProbeMutation(T) = RecordMutation(NoOpMutation{T}())
+
+    @testset "MutationProbability" begin
+        probe = ProbeMutation(Int)
+        m = MutationProbability(probe, Probability(0.3, MockRng([0.2,0.5,0.1])))
+
+        mutate(m, 1)
+        mutate(m, 2)
+        mutate(m, 3)
+        mutate(m, 4)
+        @test probe.mutated == [1,3,4]
     end
-
-    function Random.rand(rng::MockRng)
-        rng.ind = rng.ind % length(rng.seq) + 1
-        return rng.seq[rng.ind]
-    end
-
-
-    @testset "Probability" begin
-        import NaiveGAflux: apply
-        @test_throws AssertionError Probability(-1)
-        @test_throws AssertionError Probability(1.1)
-
-        p = Probability(0.3, MockRng([0.2, 0.3, 0.4]))
-        @test !apply(p)
-        @test !apply(p)
-        @test apply(p)
-
-        cnt = 0
-        ff() = cnt += 1
-        apply(ff, p)
-        @test cnt == 0
-        apply(ff, p)
-        @test cnt == 0
-        apply(ff, p)
-        @test cnt == 1
-    end
-
-    struct ProbeMutation <:AbstractMutation
-        seen::AbstractVector
-        ProbeMutation() = new(Any[])
-    end
-    NaiveGAflux.mutate(m::ProbeMutation, t) = push!(m.seen, t)
 
     dense(in, outsizes...) = foldl((next,size) -> mutable(Dense(nout(next), size), next), outsizes, init=in)
 
@@ -54,9 +29,33 @@
         outpt = dense(inpt, 3,4,5)
         graph = CompGraph(inpt, outpt)
 
-        probe = ProbeMutation()
-        m = VertexMutation(probe, Probability(0.3, MockRng([0.5,0.2,0.4])))
+        probe = ProbeMutation(AbstractVertex)
+        m = VertexMutation(probe)
         mutate(m, graph)
-        @test probe.seen == vertices(graph)[[1,3,4]]
+        # Vertex 1 (inpt) is immutable, all others are selected
+        @test probe.mutated == vertices(graph)[2:end]
+    end
+
+    @testset "NoutMutation" begin
+        inpt = inputvertex("in", 3, FluxDense())
+
+        # Can't mutate, don't do anything
+        mutate(NoutMutation(0.4), inpt)
+        @test nout(inpt) == 3
+
+        rng = MockRng([0.5])
+        v = dense(inpt, 11)
+
+        mutate(NoutMutation(0.4, rng), v)
+        @test nout(v) == 13
+
+        mutate(NoutMutation(-0.4, rng), v)
+        @test nout(v) == 11
+
+        mutate(NoutMutation(-0.001, rng), v)
+        @test nout(v) == 10
+
+        mutate(NoutMutation(0.001, rng), v)
+        @test nout(v) == 11
     end
 end

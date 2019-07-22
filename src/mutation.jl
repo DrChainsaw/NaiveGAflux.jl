@@ -3,7 +3,7 @@
 
 Generic mutation type.
 """
-abstract type AbstractMutation end
+abstract type AbstractMutation{T} end
 
 """
     mutate(m::M, t::T) where {M<:AbstractMutation, T}
@@ -13,45 +13,74 @@ Mutate `t` using operation `m`.
 mutate(::M, ::T) where {M<:AbstractMutation, T} = throw(ArgumentError("$M of $T not implemented!"))
 
 """
-    Probability
-Represents a probability that something (typically mutation) will happen.
+    MutationProbability
 
-Possible to specify RNG implementation. If not specified, `GLOBAL_RNG` will be used
+Applies a wrapped `AbstractMutation` with a configured probability
 """
-struct Probability
-    p::Real
-    rng::AbstractRNG
-    function Probability(p::Real, rng)
-         @assert 0 <= p <= 1
-         return new(p, rng)
-    end
-end
-Probability(p::Real) = Probability(p, Random.GLOBAL_RNG)
-Probability(p::Integer) = Probability(p, Random.GLOBAL_RNG)
-Probability(p::Integer, rng) = Probability(p / 100.0, rng)
-
-"""
-    apply(p::Probability)
-
-Return true with a probability of ´p.p´ (subject to `p.rng` behaviour).
-"""
-apply(p::Probability) = rand(p.rng) > p.p
-
-"""
-    apply(f, p::Probability)
-
-Call `f` with probability `p.p` (subject to `p.rng` behaviour).
-"""
-apply(f::Function, p::Probability) =  apply(p) && f()
-
-struct VertexMutation <:AbstractMutation
-    m::AbstractMutation
+struct MutationProbability{T} <:AbstractMutation{T}
+    m::AbstractMutation{T}
     p::Probability
 end
-function mutate(m::VertexMutation, g::CompGraph)
-    for v in vertices(g)
-        apply(m.p) do
-            mutate(m.m, v)
-        end
+
+function mutate(m::MutationProbability{T}, e::T) where T
+    apply(m.p) do
+        mutate(m.m, e)
     end
+end
+
+"""
+    RecordMutation
+
+Records all mutated entities.
+
+Intended use case is to be able to do parameter selection on mutated vertices.
+"""
+struct RecordMutation{T} <:AbstractMutation{T}
+    m::AbstractMutation{T}
+    mutated::AbstractVector{T}
+end
+RecordMutation(m::AbstractMutation{T}) where T = RecordMutation(m, T[])
+function mutate(m::RecordMutation{T}, e::T) where T
+    push!(m.mutated, e)
+    mutate(m.m, e)
+end
+
+"""
+    VertexMutation
+
+Applies a wrapped `AbstractMutation` for each selected vertex in a `CompGraph`.
+
+Vertices to select is determined by the configured `AbstractVertexSelection`.
+"""
+struct VertexMutation <:AbstractMutation{CompGraph}
+    m::AbstractMutation{AbstractVertex}
+    s::AbstractVertexSelection
+end
+VertexMutation(m::AbstractMutation{AbstractVertex}) = VertexMutation(m, FilterMutationAllowed())
+function mutate(m::VertexMutation, g::CompGraph)
+    for v in select(m.s, g)
+        mutate(m.m, v)
+    end
+end
+
+"""
+    NoutMutation
+
+Mutate the out size of a vertex.
+
+Size is changed by `x * nout(v)` quantized to closest non-zero integer of `minΔnoutfactor(v)` where `x` is drawn from `U(0, maxrel)` if `maxrel` is positive or U(maxrel, 0) if `maxrel` is negative.
+"""
+struct NoutMutation <:AbstractMutation{AbstractVertex}
+    maxrel::Real
+    rng::AbstractRNG
+end
+NoutMutation(maxrel::Real) = NoutMutation(maxrel, Random.GLOBAL_RNG)
+function mutate(m::NoutMutation, v::AbstractVertex)
+    Δfactor = minΔnoutfactor(v)
+    # Missing Δfactor means vertex can't be mutated, for example if it touches an immutable vertex such as an input vertex
+    ismissing(Δfactor) && return
+
+    Δ = Int(sign(m.maxrel) * max(Δfactor, (nout(v) * rand(m.rng) * abs(m.maxrel)) ÷ Δfactor * Δfactor))
+
+    Δnout(v, Δ)
 end
