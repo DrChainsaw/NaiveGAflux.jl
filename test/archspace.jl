@@ -49,6 +49,14 @@
         @test SamePad()((3,7), (2,4)) == (2,2,12,12)
     end
 
+    @testset "DenseSpace" begin
+        rng = SeqRng()
+        space = DenseSpace(BaseLayerSpace(3, σ))
+        l = space(2, rng)
+        @test l.σ == σ
+        @test size(l.W) == (3,2) 
+    end
+
     @testset "ConvSpace" begin
         rng = SeqRng()
         space = Conv2DSpace(BaseLayerSpace(5, relu), 2:5)

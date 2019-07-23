@@ -96,6 +96,16 @@ function (::SamePad)(ks, dilation, rng=nothing)
 end
 
 """
+    DenseSpace
+
+Search space of Dense layers
+"""
+struct DenseSpace <:AbstractLayerSpace
+    base::BaseLayerSpace
+end
+(s::DenseSpace)(in::Integer,rng=rng_default) = Dense(in, s.base()...)
+
+"""
     ConvSpace{N}
 
 Search space of basic `N`D convolutional layers.
