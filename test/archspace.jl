@@ -96,4 +96,15 @@
         @test space(2, rng).k == (3,1)
     end
 
+    @testset "VertexSpace" begin
+        space = VertexSpace(DenseSpace(BaseLayerSpace(3,relu)))
+        inpt = inputvertex("in", 2, FluxDense())
+        v = space(inpt)
+        @test nin(v) == [2]
+        @test nout(v) == 3
+
+        v = space("v", inpt)
+        @test name(v) == "v"
+    end
+
 end

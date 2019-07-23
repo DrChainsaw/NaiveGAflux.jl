@@ -57,7 +57,7 @@ Singleton2DParSpace(p::T) where T = SingletonParSpace(p,p)
 (s::SingletonParSpace{1, T})(rng=nothing) where T = s.p[1]
 
 """
-    ParSpace{N}
+    ParSpace{N, T} <:AbstractParSpace{N, T}
 
 Search space for parameters.
 
@@ -80,7 +80,7 @@ Abstract type for generating padding parameters for conv layers.
 abstract type AbstractPadSpace end
 
 """
-    SamePad
+    SamePad <:AbstractPadSpace
 
 Generates padding parameters so that outputshape == inputshape ./ stride.
 
@@ -97,7 +97,7 @@ function (::SamePad)(ks, dilation, rng=nothing)
 end
 
 """
-    DenseSpace
+    DenseSpace <:AbstractLayerSpace
 
 Search space of Dense layers.
 """
@@ -107,7 +107,7 @@ end
 (s::DenseSpace)(in::Integer,rng=rng_default) = Dense(in, s.base()...)
 
 """
-    ConvSpace{N}
+    ConvSpace{N} <:AbstractLayerSpace
 
 Search space of basic `N`D convolutional layers.
 """
@@ -132,7 +132,7 @@ function (s::ConvSpace)(insize::Integer, rng=rng_default; convfun = Conv)
 end
 
 """
-    BatchNormSpace
+    BatchNormSpace <:AbstractLayerSpace
 
 Search space of BatchNorm layers.
 """
@@ -144,7 +144,7 @@ BatchNormSpace(act, acts...) = BatchNormSpace(ParSpace1D(act,acts...))
 (s::BatchNormSpace)(in::Integer, rng=rng_default) = BatchNorm(in, s.acts(rng))
 
 """
-    PoolSpace{N}
+    PoolSpace{N} <:AbstractLayerSpace
 
 Search space of `N`D pooling layers.
 """
@@ -164,7 +164,7 @@ function (s::PoolSpace)(in::Integer, rng=rng_default;pooltype)
 end
 
 """
-    MaxPoolSpace{N}
+    MaxPoolSpace{N} <: AbstractLayerSpace
 
 Search space of `N`D max pooling layers.
 """
@@ -172,3 +172,31 @@ struct MaxPoolSpace{N} <: AbstractLayerSpace
     s::PoolSpace{N}
 end
 (s::MaxPoolSpace)(in::Integer, rng=rng_default) = s.s(in, rng, pooltype=MaxPool)
+
+"""
+    VertexConf
+
+Generic configuration template for computation graph vertices.
+
+Intention is to make it easy to add logging, validation and pruning metrics in an uniform way.
+"""
+struct VertexConf
+    layerfun
+    traitfun
+end
+VertexConf() = VertexConf(ActivationContribution ∘ LazyMutable, validated() ∘ logged(level=Base.CoreLogging.Info))
+(c::VertexConf)(in::AbstractVertex, l) = mutable(l,in,layerfun=c.layerfun, mutation=IoChange, traitfun=c.traitfun)
+(c::VertexConf)(name::String, in::AbstractVertex, l) = mutable(name, l,in,layerfun=c.layerfun, mutation=IoChange, traitfun=c.traitfun)
+
+"""
+    VertexSpace <:AbstractArchSpace
+
+Search space of one `AbstractVertex` from one `AbstractLayerSpace`.
+"""
+struct VertexSpace <:AbstractArchSpace
+    conf::VertexConf
+    lspace::AbstractLayerSpace
+end
+VertexSpace(lspace::AbstractLayerSpace) = VertexSpace(VertexConf(), lspace)
+(s::VertexSpace)(in::AbstractVertex, rng=rng_default) = s.conf(in, s.lspace(nout(in), rng))
+(s::VertexSpace)(name::String, in::AbstractVertex, rng=rng_default) = s.conf(name, in, s.lspace(nout(in), rng))
