@@ -63,6 +63,13 @@
         l = space(4, rng)
         @test size(l.weight) == (2,3,4,5)
         @test size(l(ones(5,5,4,1))) == (5,5,5,1)
+
+        rng.ind = 0
+        space = ConvSpace(BaseLayerSpace(4, elu), 2:5)
+        l = space(3, rng)
+        @test size(l.weight) == (2,3,4)
+        @test size(l(ones(5,3,1))) == (5,4,1)
+
     end
 
     @testset "BatchNormSpace" begin
@@ -75,6 +82,18 @@
         @test space(2,rng).λ == relu
         @test space(3,rng).λ == elu
         @test space(4,rng).λ == identity
+    end
+
+    @testset "MaxPoolSpace" begin
+        rng = SeqRng()
+        space = MaxPoolSpace(PoolSpace([1,2,3]))
+        @test space(2, rng).k == (1,)
+        @test space(2, rng).k == (2,)
+        @test space(2, rng).k == (3,)
+
+        space = MaxPoolSpace(PoolSpace2D([1,2,3]))
+        @test space(2, rng).k == (1,2)
+        @test space(2, rng).k == (3,1)
     end
 
 end

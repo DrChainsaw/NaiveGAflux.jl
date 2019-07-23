@@ -123,7 +123,7 @@ Conv2DSpace(base::BaseLayerSpace, ks::AbstractVector{<:Integer}) = ConvSpace(bas
 ConvSpace(base::BaseLayerSpace, ks::AbstractVector{<:Integer}...) = ConvSpace(base, ParSpace(ks), SingletonParSpace(1), SingletonParSpace(1), SamePad())
 
 function (s::ConvSpace)(insize::Integer, rng=rng_default; convfun = Conv)
-    ks = s.kernelsize(rng)
+    ks = Tuple(s.kernelsize(rng))
     stride = s.stride(rng)
     dilation = s.dilation(rng)
     pad = s.padding(ks, dilation, rng)
@@ -132,13 +132,43 @@ function (s::ConvSpace)(insize::Integer, rng=rng_default; convfun = Conv)
 end
 
 """
-    BatchNormSpace{N,T}
+    BatchNormSpace
 
 Search space of BatchNorm layers.
 """
-struct BatchNormSpace{N,T} <:AbstractLayerSpace
-    acts::AbstractParSpace{N, T}
+struct BatchNormSpace <:AbstractLayerSpace
+    acts::AbstractParSpace
 end
 BatchNormSpace(act) = BatchNormSpace(SingletonParSpace(act))
 BatchNormSpace(act, acts...) = BatchNormSpace(ParSpace1D(act,acts...))
 (s::BatchNormSpace)(in::Integer, rng=rng_default) = BatchNorm(in, s.acts(rng))
+
+"""
+    PoolSpace{N}
+
+Search space of `N`D pooling layers.
+"""
+struct PoolSpace{N} <:AbstractLayerSpace
+    ws::AbstractParSpace{N, <:Integer}
+    stride::AbstractParSpace
+    pad::AbstractPadSpace
+end
+PoolSpace2D(ws::AbstractVector{<:Integer}) = PoolSpace(ws,ws)
+PoolSpace(ws::AbstractVector{<:Integer}...) = PoolSpace(ParSpace(ws), SingletonParSpace(1))
+PoolSpace(ws::AbstractParSpace, stride::AbstractParSpace) = PoolSpace(ws,stride, SamePad())
+function (s::PoolSpace)(in::Integer, rng=rng_default;pooltype)
+    ws = Tuple(s.ws(rng))
+    stride = s.stride(rng)
+    pad = s.pad(ws, 1, rng)
+    pooltype(ws, stride=stride, pad=pad)
+end
+
+"""
+    MaxPoolSpace{N}
+
+Search space of `N`D max pooling layers.
+"""
+struct MaxPoolSpace{N} <: AbstractLayerSpace
+    s::PoolSpace{N}
+end
+(s::MaxPoolSpace)(in::Integer, rng=rng_default) = s.s(in, rng, pooltype=MaxPool)
