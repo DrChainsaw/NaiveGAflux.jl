@@ -18,26 +18,26 @@
         @test [gen_act(space, rng) for _ in 1:4] == [relu,σ,identity,relu]
     end
 
-    @testset "FixedNDParSpace" begin
-        @test FixedNDParSpace(666)() == 666
+    @testset "SingletonParSpace" begin
+        @test SingletonParSpace(666)() == 666
         for d in 2:4
-            @test FixedNDParSpace(1:d...)() == Tuple(1:d)
+            @test SingletonParSpace(1:d...)() == Tuple(1:d)
         end
-        @test Fixed2DParSpace(7)() == (7,7)
+        @test Singleton2DParSpace(7)() == (7,7)
     end
 
-    @testset "ParNDSpace" begin
+    @testset "RandParSpace" begin
         rng = SeqRng()
-        space = ParNDSpace(1:3)
+        space = RandParSpace(1:3)
         @test [space(rng) for _ in 1:4]== [1,2,3,1]
 
         rng.ind = 0
-        space = Par2DSpace(2:4)
+        space = Rand2DParSpace(2:4)
         @test space(rng) == (2, 3)
         @test space(rng) == (4, 2)
 
         rng.ind = 0
-        space = ParNDSpace(1:4, 5:7, 8:9)
+        space = RandParSpace(1:4, 5:7, 8:9)
         @test space(rng) == (1, 6, 8)
         @test space(rng) == (2, 7, 9)
     end
