@@ -19,7 +19,7 @@ export AbstractMutation, MutationProbability, RecordMutation, VertexMutation, No
 export AbstractArchSpace
 
 # architecture space config types
-export BaseLayerSpace, AbstractParSpace, SingletonParSpace, Singleton2DParSpace, RandParSpace, Rand2DParSpace, AbstractPadSpace, SamePad, ConvSpace, Conv2DSpace
+export BaseLayerSpace, AbstractParSpace, SingletonParSpace, Singleton2DParSpace, ParSpace, ParSpace2D, AbstractPadSpace, SamePad, ConvSpace, Conv2DSpace
 
 # functions
 export mutate, allow_mutation, select

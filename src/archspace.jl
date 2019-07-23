@@ -5,58 +5,71 @@ Abstract functor representing an architecture search space.
 
 Architecture spaces define a range of possible hyperparameters for a model architecture. Used to create new models or parts of models.
 
-Return an `AbstractVertex` when invoked with an input `AbstractVertex`.
+Return an `AbstractVertex` from the search space when invoked with an input `AbstractVertex`.
 """
 abstract type AbstractArchSpace end
 
 """
+    AbstractLayerSpace
+
+Abstract functor representing a search space for layers.
+
+Return a layer in the search space given an input size and (optionally) a random number generator.
+"""
+abstract type AbstractLayerSpace end
+
+"""
+    AbstractParSpace{N, T}
+
+Abstract functor representing a seach space of `N`D parameters of type `T`.
+
+Return a tuple of parameters from the search space when invoked. Random number generator may be supplied.
+"""
+abstract type AbstractParSpace{N, T} end
+
+"""
     BaseLayerSpace
 
-Generates basic attributes common to all layers.
+Search space for basic attributes common to all layers.
+
+Return a tuple `(outsize,activation)` from the search space when invoked.
 """
-struct BaseLayerSpace
-    nouts::AbstractVector{<:Integer}
-    acts::AbstractVector
+struct BaseLayerSpace{T}
+    nouts::AbstractParSpace{1, <:Integer}
+    acts::AbstractParSpace{1, T}
 end
-gen_nout(s::BaseLayerSpace, rng=rng_default) = rand(rng, s.nouts)
-gen_act(s::BaseLayerSpace, rng=rng_default) = rand(rng, s.acts)
+BaseLayerSpace(n::Integer, act) = BaseLayerSpace(SingletonParSpace(n), SingletonParSpace(act))
+BaseLayerSpace(n::AbstractVector{<:Integer}, act::AbstractVector{T}) where T = BaseLayerSpace(ParSpace(n), ParSpace(act))
+(s::BaseLayerSpace)(rng=rng_default) = s.nouts(rng), s.acts(rng)
+
 
 """
-    AbstractParSpace{N}
+    SingletonParSpace{N, T} <:AbstractParSpace{N, T}
 
-Abstract functor representing a seach space of `N`D parameters.
-
-Typically used for convolutional layers, examples are kernel size, strides, dilation and padding.
+Singleton search space. Has exactly one value per dimension.
 """
-abstract type AbstractParSpace{N} end
-
-"""
-    SingletonParSpace{N} <:AbstractParSpace{N}
-
-Singleton search space.
-"""
-struct SingletonParSpace{N} <:AbstractParSpace{N}
-    p::NTuple{N, <:Integer}
+struct SingletonParSpace{N, T} <:AbstractParSpace{N, T}
+    p::NTuple{N, T}
 end
-SingletonParSpace(p::Integer...) = SingletonParSpace(p)
-Singleton2DParSpace(p::Integer) = SingletonParSpace(p,p)
+SingletonParSpace(p::T...) where T = SingletonParSpace(p)
+Singleton2DParSpace(p::T) where T = SingletonParSpace(p,p)
 (s::SingletonParSpace)(rng=nothing) = s.p
-(s::SingletonParSpace{1})(rng=nothing) = s.p[1]
+(s::SingletonParSpace{1, T})(rng=nothing) where T = s.p[1]
 
 """
-    RandParSpace{N}
+    ParSpace{N}
 
-Random search space for parameters.
+Search space for parameters.
 
-Generates independent uniform random values for all `N` dimensions.
+Return independent uniform random values for all `N` dimensions from the search space when invoked.
 """
-struct RandParSpace{N} <:AbstractParSpace{N}
-    p::NTuple{N, AbstractVector{<:Integer}}
+struct ParSpace{N, T} <:AbstractParSpace{N, T}
+    p::NTuple{N, AbstractVector{T}}
 end
-RandParSpace(p::AbstractVector{<:Integer}...) = RandParSpace(p)
-Rand2DParSpace(p::AbstractVector{<:Integer}) = RandParSpace(p,p)
-(s::RandParSpace)(rng=rng_default) = rand.((rng,), s.p)
-(s::RandParSpace{1})(rng=rng_default) = rand(rng, s.p[1])
+ParSpace(p::AbstractVector{T}...) where T = ParSpace(p)
+ParSpace2D(p::AbstractVector{T}) where T = ParSpace(p,p)
+(s::ParSpace)(rng=rng_default) = rand.((rng,), s.p)
+(s::ParSpace{1, T})(rng=rng_default) where T = rand(rng, s.p[1])
 
 """
     AbstractPadSpace
@@ -83,36 +96,26 @@ function (::SamePad)(ks, dilation, rng=nothing)
 end
 
 """
-    AbstractLayerSpace
-
-Abstract functor representing a search space for layers.
-
-Generates a random layer in the search space given an input size and (optionally) a random number generator.
-"""
-abstract type AbstractLayerSpace end
-
-"""
     ConvSpace{N}
 
-Generation of basic `N`D convolutional layers.
+Search space of basic `N`D convolutional layers.
 """
 struct ConvSpace{N} <:AbstractLayerSpace
     base::BaseLayerSpace
-    kernelsize::AbstractParSpace{N}
+    kernelsize::AbstractParSpace{N, <:Integer}
     stride::AbstractParSpace
     dilation::AbstractParSpace
     padding::AbstractPadSpace
 end
 
 Conv2DSpace(base::BaseLayerSpace, ks::AbstractVector{<:Integer}) = ConvSpace(base, ks,ks)
-ConvSpace(base::BaseLayerSpace, ks::AbstractVector{<:Integer}...) = ConvSpace(base, RandParSpace(ks), SingletonParSpace(1), SingletonParSpace(1), SamePad())
+ConvSpace(base::BaseLayerSpace, ks::AbstractVector{<:Integer}...) = ConvSpace(base, ParSpace(ks), SingletonParSpace(1), SingletonParSpace(1), SamePad())
 
 function (s::ConvSpace)(insize::Integer, rng=rng_default; convfun = Conv)
     ks = s.kernelsize(rng)
     stride = s.stride(rng)
     dilation = s.dilation(rng)
     pad = s.padding(ks, dilation, rng)
-    outsize = gen_nout(s.base, rng)
-    act = gen_act(s.base, rng)
+    outsize, act = s.base(rng)
     return convfun(ks, insize=>outsize, act, pad=pad, stride=stride,dilation=dilation)
 end
