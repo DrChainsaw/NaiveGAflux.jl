@@ -21,7 +21,7 @@ using Test
     @info "Testing mutation"
     include("mutation.jl")
 
-    @info "Testing archspec"
-    include("archspec.jl")
+    @info "Testing archspace"
+    include("archspace.jl")
 
 end

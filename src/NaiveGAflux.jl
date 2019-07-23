@@ -15,17 +15,17 @@ export AbstractVertexSelection, AllVertices, FilterMutationAllowed
 # mutation types
 export AbstractMutation, MutationProbability, RecordMutation, VertexMutation, NoutMutation
 
-# architecture specifications
-export AbstractArchSpec
+# architecture spaces
+export AbstractArchSpace
 
-# architecture spec config types
-export BaseLayerSpec, AbstractParSpec, FixedNDParSpec, Fixed2DParSpec, ParNDSpec, Par2DSpec, AbstractPadSpec, SamePad, ConvSpec, Conv2DSpec
+# architecture space config types
+export BaseLayerSpace, AbstractParSpace, FixedNDParSpace, Fixed2DParSpace, ParNDSpace, Par2DSpace, AbstractPadSpace, SamePad, ConvSpace, Conv2DSpace
 
 # functions
 export mutate, allow_mutation, select
 
 include("util.jl")
 include("mutation.jl")
-include("archspec.jl")
+include("archspace.jl")
 
 end # module
