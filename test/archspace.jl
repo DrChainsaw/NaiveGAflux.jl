@@ -54,7 +54,7 @@
         space = DenseSpace(BaseLayerSpace(3, σ))
         l = space(2, rng)
         @test l.σ == σ
-        @test size(l.W) == (3,2) 
+        @test size(l.W) == (3,2)
     end
 
     @testset "ConvSpace" begin
@@ -63,6 +63,18 @@
         l = space(4, rng)
         @test size(l.weight) == (2,3,4,5)
         @test size(l(ones(5,5,4,1))) == (5,5,5,1)
+    end
+
+    @testset "BatchNormSpace" begin
+        space = BatchNormSpace(relu)
+        @test space(2).λ == relu
+        @test space(3).λ == relu
+
+        rng = SeqRng()
+        space = BatchNormSpace(relu,elu,identity)
+        @test space(2,rng).λ == relu
+        @test space(3,rng).λ == elu
+        @test space(4,rng).λ == identity
     end
 
 end

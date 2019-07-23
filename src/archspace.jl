@@ -67,6 +67,7 @@ struct ParSpace{N, T} <:AbstractParSpace{N, T}
     p::NTuple{N, AbstractVector{T}}
 end
 ParSpace(p::AbstractVector{T}...) where T = ParSpace(p)
+ParSpace1D(p...) = ParSpace(collect(p))
 ParSpace2D(p::AbstractVector{T}) where T = ParSpace(p,p)
 (s::ParSpace)(rng=rng_default) = rand.((rng,), s.p)
 (s::ParSpace{1, T})(rng=rng_default) where T = rand(rng, s.p[1])
@@ -98,7 +99,7 @@ end
 """
     DenseSpace
 
-Search space of Dense layers
+Search space of Dense layers.
 """
 struct DenseSpace <:AbstractLayerSpace
     base::BaseLayerSpace
@@ -129,3 +130,15 @@ function (s::ConvSpace)(insize::Integer, rng=rng_default; convfun = Conv)
     outsize, act = s.base(rng)
     return convfun(ks, insize=>outsize, act, pad=pad, stride=stride,dilation=dilation)
 end
+
+"""
+    BatchNormSpace{N,T}
+
+Search space of BatchNorm layers.
+"""
+struct BatchNormSpace{N,T} <:AbstractLayerSpace
+    acts::AbstractParSpace{N, T}
+end
+BatchNormSpace(act) = BatchNormSpace(SingletonParSpace(act))
+BatchNormSpace(act, acts...) = BatchNormSpace(ParSpace1D(act,acts...))
+(s::BatchNormSpace)(in::Integer, rng=rng_default) = BatchNorm(in, s.acts(rng))
