@@ -173,6 +173,8 @@ struct MaxPoolSpace{N} <: AbstractLayerSpace
 end
 (s::MaxPoolSpace)(in::Integer, rng=rng_default) = s.s(in, rng, pooltype=MaxPool)
 
+
+default_logging() = logged(level=Base.CoreLogging.Info, info=NameAndIOInfoStr())
 """
     VertexConf
 
@@ -184,12 +186,29 @@ struct VertexConf
     layerfun
     traitfun
 end
-VertexConf() = VertexConf(ActivationContribution ∘ LazyMutable, validated() ∘ logged(level=Base.CoreLogging.Info, info=NameAndIOInfoStr()))
+VertexConf() = VertexConf(ActivationContribution ∘ LazyMutable, validated() ∘ default_logging())
 
 (c::VertexConf)(in::AbstractVertex, l) = mutable(l,in,layerfun=c.layerfun, mutation=IoChange, traitfun=c.traitfun)
 (c::VertexConf)(name::String, in::AbstractVertex, l) = mutable(name, l,in,layerfun=c.layerfun, mutation=IoChange, traitfun=c.traitfun)
 
 Base.Broadcast.broadcastable(c::VertexConf) = Ref(c)
+
+"""
+    ConcConf
+
+Generic configuration template for concatenation of vertex outputs.
+"""
+struct ConcConf
+    traitfun
+end
+ConcConf() = ConcConf(validated() ∘ default_logging())
+
+(c::ConcConf)(in::AbstractVector{<:AbstractVertex}) = c(in...)
+(c::ConcConf)(in::AbstractVertex) = in
+(c::ConcConf)(ins::AbstractVertex...) = concat(ins...,mutation=IoChange, traitdecoration = c.traitfun)
+(c::ConcConf)(name::String, in::AbstractVector{<:AbstractVertex}) = c(name, in...)
+(c::ConcConf)(name::String, in::AbstractVertex) = in
+(c::ConcConf)(name::String, ins::AbstractVertex...) = concat(ins...,mutation=IoChange, traitdecoration = c.traitfun ∘ named(name))
 
 """
     VertexSpace <:AbstractArchSpace
@@ -222,7 +241,7 @@ ArchSpace(l::AbstractLayerSpace, ls::AbstractLayerSpace...;conf=VertexConf()) = 
 """
     RepeatArchSpace <:AbstractArchSpace
 
-Search space which repeats an `AbstractArchSpace`.
+Search space of repetitions of another `AbstractArchSpace`.
 
 Output of each generated candidate is input to next and the last is returned.
 
@@ -236,4 +255,22 @@ RepeatArchSpace(s::AbstractArchSpace, r::Integer) = RepeatArchSpace(s, Singleton
 RepeatArchSpace(s::AbstractArchSpace, r::AbstractVector{<:Integer}) = RepeatArchSpace(s, ParSpace(r))
 
 (s::RepeatArchSpace)(in::AbstractVertex, rng=rng_default) = foldl((next, i) -> s.s(next, rng), 1:s.r(rng), init=in)
-(s::RepeatArchSpace)(name::String, in::AbstractVertex, rng=rng_default) = foldl((next, i) -> s.s(join([name, i]), next, rng), 1:s.r(rng), init=in)
+(s::RepeatArchSpace)(name::String, in::AbstractVertex, rng=rng_default) = foldl((next, i) -> s.s(join([name,".", i]), next, rng), 1:s.r(rng), init=in)
+
+"""
+    ForkArchSpace <:AbstractArchSpace
+
+Search space of parallel paths from another `AbstractArchSpace`.
+
+Input vertex is input to a number of paths drawn from an `AbstractParSpace`. Concatenation of paths is output.
+"""
+struct ForkArchSpace <:AbstractArchSpace
+    s::AbstractArchSpace
+    p::AbstractParSpace{1, <:Integer}
+    c::ConcConf
+end
+ForkArchSpace(s::AbstractArchSpace, r::Integer; conf=ConcConf()) = ForkArchSpace(s, SingletonParSpace(r), conf)
+ForkArchSpace(s::AbstractArchSpace, r::AbstractVector{<:Integer}; conf=ConcConf()) = ForkArchSpace(s, ParSpace(r), conf)
+
+(s::ForkArchSpace)(in::AbstractVertex, rng=rng_default) = s.c(map(i -> s.s(in, rng), 1:s.p(rng)))
+(s::ForkArchSpace)(name::String, in::AbstractVertex, rng=rng_default) = s.c(name, map(i -> s.s(join([name, ".path", i]), in, rng), 1:s.p(rng)))

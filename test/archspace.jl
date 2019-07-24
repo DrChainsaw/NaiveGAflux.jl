@@ -139,7 +139,7 @@
         @test nv(CompGraph(inpt, v)) == 4
 
         v = space("test", inpt)
-        @test name.(flatten(v)) == ["in", "test1", "test2", "test3"]
+        @test name.(flatten(v)) == ["in", "test.1", "test.2", "test.3"]
 
         space = RepeatArchSpace(VertexSpace(BatchNormSpace(relu)), [2,5])
         rng = SeqRng()
@@ -148,6 +148,33 @@
 
         v = space(inpt, rng)
         @test nv(CompGraph(inpt, v)) == 6
+    end
+
+    @testset "ForkArchSpace" begin
+        # No concatenation when only one path is rolled
+        space = ForkArchSpace(VertexSpace(BatchNormSpace(relu)), 1)
+        inpt = inputvertex("in", 3, FluxDense())
+        v = space(inpt)
+        @test inputs(v) == [inpt]
+
+        space = ForkArchSpace(VertexSpace(BatchNormSpace(relu)), 3)
+        v = space(inpt)
+        @test length(inputs(v)) == 3
+
+        v = space("test", inpt)
+        # TODO: Remove after #8 is merged into NaiveNASflux
+        NaiveNASlib.name(v::NaiveNASflux.InputShapeVertex) = name(base(v))
+        # TODO Remove set after resolving NaiveNASlib issue #19
+        @test Set(name.(flatten(v))) == Set(["in", "test.path1", "test.path2", "test.path3", "test"])
+
+        space = ForkArchSpace(VertexSpace(BatchNormSpace(relu)), [2,5])
+        rng = SeqRng()
+
+        v = space(inpt, rng)
+        @test length(inputs(v)) == 2
+
+        v = space(inpt, rng)
+        @test length(inputs(v)) == 5
     end
 
 end
