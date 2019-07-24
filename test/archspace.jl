@@ -98,7 +98,7 @@
 
     @testset "VertexSpace" begin
         space = VertexSpace(DenseSpace(BaseLayerSpace(3,relu)))
-        inpt = inputvertex("in", 2, FluxDense())
+        inpt = inputvertex("in", 2)
         v = space(inpt)
         @test nin(v) == [2]
         @test nout(v) == 3
@@ -110,7 +110,7 @@
     @testset "ArchSpace" begin
         bs = BaseLayerSpace(3, elu)
         space = ArchSpace(DenseSpace(bs))
-        inpt = inputvertex("in", 2, FluxDense())
+        inpt = inputvertex("in", 2)
         v = space(inpt)
         @test nin(v) == [2]
         @test nout(v) == 3
@@ -130,6 +130,24 @@
         @test nin(v) == [2]
         @test nout(v) == 2
         @test name(v) == "bn"
+    end
+
+    @testset "RepeatArchSpace" begin
+        space = RepeatArchSpace(VertexSpace(BatchNormSpace(relu)), 3)
+        inpt = inputvertex("in", 3)
+        v = space(inpt)
+        @test nv(CompGraph(inpt, v)) == 4
+
+        v = space("test", inpt)
+        @test name.(flatten(v)) == ["in", "test1", "test2", "test3"]
+
+        space = RepeatArchSpace(VertexSpace(BatchNormSpace(relu)), [2,5])
+        rng = SeqRng()
+        v = space(inpt, rng)
+        @test nv(CompGraph(inpt, v)) == 3
+
+        v = space(inpt, rng)
+        @test nv(CompGraph(inpt, v)) == 6
     end
 
 end

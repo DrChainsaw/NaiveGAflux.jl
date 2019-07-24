@@ -208,7 +208,7 @@ VertexSpace(lspace::AbstractLayerSpace) = VertexSpace(VertexConf(), lspace)
 """
     ArchSpace <:AbstractArchSpace
 
-Search space of architecture spaces.
+Search space of `AbstractArchSpace`.
 """
 struct ArchSpace <:AbstractArchSpace
     s::AbstractParSpace{1, <:AbstractArchSpace}
@@ -218,3 +218,22 @@ ArchSpace(l::AbstractLayerSpace, ls::AbstractLayerSpace...;conf=VertexConf()) = 
 
 (s::ArchSpace)(in::AbstractVertex, rng=rng_default) = s.s(rng)(in, rng)
 (s::ArchSpace)(name::String, in::AbstractVertex, rng=rng_default) = s.s(rng)(name, in, rng)
+
+"""
+    RepeatArchSpace <:AbstractArchSpace
+
+Search space which repeats an `AbstractArchSpace`.
+
+Output of each generated candidate is input to next and the last is returned.
+
+Number of repetitions comes from an `AbstractParSpace`.
+"""
+struct RepeatArchSpace <:AbstractArchSpace
+    s::AbstractArchSpace
+    r::AbstractParSpace{1, <:Integer}
+end
+RepeatArchSpace(s::AbstractArchSpace, r::Integer) = RepeatArchSpace(s, SingletonParSpace(r))
+RepeatArchSpace(s::AbstractArchSpace, r::AbstractVector{<:Integer}) = RepeatArchSpace(s, ParSpace(r))
+
+(s::RepeatArchSpace)(in::AbstractVertex, rng=rng_default) = foldl((next, i) -> s.s(next, rng), 1:s.r(rng), init=in)
+(s::RepeatArchSpace)(name::String, in::AbstractVertex, rng=rng_default) = foldl((next, i) -> s.s(join([name, i]), next, rng), 1:s.r(rng), init=in)
