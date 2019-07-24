@@ -12,7 +12,7 @@ abstract type AbstractArchSpace end
 """
     AbstractLayerSpace
 
-Abstract functor representing a search space for layers.
+Abstract functor representing a search space of layers.
 
 Return a layer in the search space given an input size and (optionally) a random number generator.
 """
@@ -119,7 +119,7 @@ struct ConvSpace{N} <:AbstractLayerSpace
     padding::AbstractPadSpace
 end
 
-Conv2DSpace(base::BaseLayerSpace, ks::AbstractVector{<:Integer}) = ConvSpace(base, ks,ks)
+ConvSpace2D(base::BaseLayerSpace, ks::AbstractVector{<:Integer}) = ConvSpace(base, ks,ks)
 ConvSpace(base::BaseLayerSpace, ks::AbstractVector{<:Integer}...) = ConvSpace(base, ParSpace(ks), SingletonParSpace(1), SingletonParSpace(1), SamePad())
 
 function (s::ConvSpace)(insize::Integer, rng=rng_default; convfun = Conv)
@@ -139,7 +139,7 @@ Search space of BatchNorm layers.
 struct BatchNormSpace <:AbstractLayerSpace
     acts::AbstractParSpace
 end
-BatchNormSpace(act) = BatchNormSpace(SingletonParSpace(act))
+BatchNormSpace(act::Function) = BatchNormSpace(SingletonParSpace(act))
 BatchNormSpace(act, acts...) = BatchNormSpace(ParSpace1D(act,acts...))
 (s::BatchNormSpace)(in::Integer, rng=rng_default) = BatchNorm(in, s.acts(rng))
 
@@ -154,7 +154,7 @@ struct PoolSpace{N} <:AbstractLayerSpace
     pad::AbstractPadSpace
 end
 PoolSpace2D(ws::AbstractVector{<:Integer}) = PoolSpace(ws,ws)
-PoolSpace(ws::AbstractVector{<:Integer}...) = PoolSpace(ParSpace(ws), SingletonParSpace(1))
+PoolSpace(ws::AbstractVector{<:Integer}...) = PoolSpace(ParSpace(ws), ParSpace(ws))
 PoolSpace(ws::AbstractParSpace, stride::AbstractParSpace) = PoolSpace(ws,stride, SamePad())
 function (s::PoolSpace)(in::Integer, rng=rng_default;pooltype)
     ws = Tuple(s.ws(rng))
@@ -184,9 +184,12 @@ struct VertexConf
     layerfun
     traitfun
 end
-VertexConf() = VertexConf(ActivationContribution ∘ LazyMutable, validated() ∘ logged(level=Base.CoreLogging.Info))
+VertexConf() = VertexConf(ActivationContribution ∘ LazyMutable, validated() ∘ logged(level=Base.CoreLogging.Info, info=NameAndIOInfoStr()))
+
 (c::VertexConf)(in::AbstractVertex, l) = mutable(l,in,layerfun=c.layerfun, mutation=IoChange, traitfun=c.traitfun)
 (c::VertexConf)(name::String, in::AbstractVertex, l) = mutable(name, l,in,layerfun=c.layerfun, mutation=IoChange, traitfun=c.traitfun)
+
+Base.Broadcast.broadcastable(c::VertexConf) = Ref(c)
 
 """
     VertexSpace <:AbstractArchSpace
@@ -198,5 +201,20 @@ struct VertexSpace <:AbstractArchSpace
     lspace::AbstractLayerSpace
 end
 VertexSpace(lspace::AbstractLayerSpace) = VertexSpace(VertexConf(), lspace)
+
 (s::VertexSpace)(in::AbstractVertex, rng=rng_default) = s.conf(in, s.lspace(nout(in), rng))
 (s::VertexSpace)(name::String, in::AbstractVertex, rng=rng_default) = s.conf(name, in, s.lspace(nout(in), rng))
+
+"""
+    ArchSpace <:AbstractArchSpace
+
+Search space of architecture spaces.
+"""
+struct ArchSpace <:AbstractArchSpace
+    s::AbstractParSpace{1, <:AbstractArchSpace}
+end
+ArchSpace(l::AbstractLayerSpace;conf=VertexConf()) = ArchSpace(SingletonParSpace(VertexSpace(conf,l)))
+ArchSpace(l::AbstractLayerSpace, ls::AbstractLayerSpace...;conf=VertexConf()) = ArchSpace(ParSpace(VertexSpace.(conf,[l,ls...])))
+
+(s::ArchSpace)(in::AbstractVertex, rng=rng_default) = s.s(rng)(in, rng)
+(s::ArchSpace)(name::String, in::AbstractVertex, rng=rng_default) = s.s(rng)(name, in, rng)

@@ -59,7 +59,7 @@
 
     @testset "ConvSpace" begin
         rng = SeqRng()
-        space = Conv2DSpace(BaseLayerSpace(5, relu), 2:5)
+        space = ConvSpace2D(BaseLayerSpace(5, relu), 2:5)
         l = space(4, rng)
         @test size(l.weight) == (2,3,4,5)
         @test size(l(ones(5,5,4,1))) == (5,5,5,1)
@@ -86,14 +86,14 @@
 
     @testset "MaxPoolSpace" begin
         rng = SeqRng()
-        space = MaxPoolSpace(PoolSpace([1,2,3]))
+        space = MaxPoolSpace(PoolSpace(1:3))
         @test space(2, rng).k == (1,)
-        @test space(2, rng).k == (2,)
         @test space(2, rng).k == (3,)
+        @test space(2, rng).k == (2,)
 
-        space = MaxPoolSpace(PoolSpace2D([1,2,3]))
+        space = MaxPoolSpace(PoolSpace2D(1:3))
         @test space(2, rng).k == (1,2)
-        @test space(2, rng).k == (3,1)
+        @test space(2, rng).k == (2,3)
     end
 
     @testset "VertexSpace" begin
@@ -105,6 +105,31 @@
 
         v = space("v", inpt)
         @test name(v) == "v"
+    end
+
+    @testset "ArchSpace" begin
+        bs = BaseLayerSpace(3, elu)
+        space = ArchSpace(DenseSpace(bs))
+        inpt = inputvertex("in", 2, FluxDense())
+        v = space(inpt)
+        @test nin(v) == [2]
+        @test nout(v) == 3
+
+        rng = SeqRng()
+        space = ArchSpace(ConvSpace2D(bs, 2:5), BatchNormSpace(relu), MaxPoolSpace(PoolSpace2D([2])))
+
+        v = space("conv", inpt, rng)
+        @test layertype(v) == FluxConv()
+        @test nin(v) == [2]
+        @test nout(v) == 3
+        @test name(v) == "conv"
+
+        rng.ind = 1
+        v = space("bn", inpt, rng)
+        @test layertype(v) == FluxBatchNorm()
+        @test nin(v) == [2]
+        @test nout(v) == 2
+        @test name(v) == "bn"
     end
 
 end
