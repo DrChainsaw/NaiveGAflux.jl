@@ -119,7 +119,7 @@
         space = ArchSpace(ConvSpace2D(bs, 2:5), BatchNormSpace(relu), MaxPoolSpace(PoolSpace2D([2])))
 
         v = space("conv", inpt, rng)
-        @test layertype(v) == FluxConv()
+        @test layertype(v) == FluxConv{2}()
         @test nin(v) == [2]
         @test nout(v) == 3
         @test name(v) == "conv"
