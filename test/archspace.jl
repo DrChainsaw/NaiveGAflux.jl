@@ -162,10 +162,7 @@
         @test length(inputs(v)) == 3
 
         v = space("test", inpt)
-        # TODO: Remove after #8 is merged into NaiveNASflux
-        NaiveNASlib.name(v::NaiveNASflux.InputShapeVertex) = name(base(v))
-        # TODO Remove set after resolving NaiveNASlib issue #19
-        @test Set(name.(flatten(v))) == Set(["in", "test.path1", "test.path2", "test.path3", "test"])
+        @test name.(flatten(v)) == ["in", "test.path1", "test.path2", "test.path3", "test"]
 
         space = ForkArchSpace(VertexSpace(BatchNormSpace(relu)), [2,5])
         rng = SeqRng()
