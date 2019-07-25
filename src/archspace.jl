@@ -104,7 +104,7 @@ Search space of Dense layers.
 struct DenseSpace <:AbstractLayerSpace
     base::BaseLayerSpace
 end
-(s::DenseSpace)(in::Integer,rng=rng_default) = Dense(in, s.base()...)
+(s::DenseSpace)(in::Integer,rng=rng_default) = Dense(in, s.base(rng)...)
 
 """
     ConvSpace{N} <:AbstractLayerSpace
