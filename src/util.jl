@@ -30,8 +30,6 @@ Call `f` with probability `p.p` (subject to `p.rng` behaviour).
 """
 apply(f::Function, p::Probability) =  apply(p) && f()
 
-# TODO: Fix NaiveNaslib issue #18
-import NaiveNASlib: DecoratingTrait
 """
     MutationShield <: DecoratingTrait
 
