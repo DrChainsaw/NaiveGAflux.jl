@@ -11,10 +11,13 @@
     end
 
     @testset "BasicLayerSpace" begin
+        import NaiveGAflux: outsize, activation
         rng = SeqRng()
         space = BaseLayerSpace([1,2,3], [relu,σ,identity])
-        @test space(rng) == (1, σ)
-        @test space(rng) == (3, relu)
+        @test outsize(space, rng) == 1
+        @test activation(space, rng) == σ
+        @test outsize(space, rng) == 3
+        @test activation(space, rng) == relu
     end
 
     @testset "SingletonParSpace" begin
@@ -55,6 +58,9 @@
         l = space(2, rng)
         @test l.σ == σ
         @test size(l.W) == (3,2)
+        l = space(3, rng,outsize=2)
+        @test l.σ == σ
+        @test size(l.W) == (2,3)
     end
 
     @testset "ConvSpace" begin
@@ -70,6 +76,9 @@
         @test size(l.weight) == (2,3,4)
         @test size(l(ones(5,3,1))) == (5,4,1)
 
+        l = space(4, rng, outsize=3)
+        @test size(l.weight) == (3,4,3)
+        @test size(l(ones(5,4,1))) == (5,3,1)
     end
 
     @testset "BatchNormSpace" begin
@@ -115,6 +124,15 @@
         @test nin(v) == [2]
         @test nout(v) == 3
 
+        v = space(inpt, outsize = 4)
+        @test nin(v) == [2]
+        @test nout(v) == 4
+
+        v = space("v", inpt, outsize = 4)
+        @test name(v) == "v"
+        @test nin(v) == [2]
+        @test nout(v) == 4
+
         rng = SeqRng()
         space = ArchSpace(ConvSpace2D(bs, 2:5), BatchNormSpace(relu), MaxPoolSpace(PoolSpace2D([2])))
 
@@ -148,6 +166,43 @@
 
         v = space(inpt, rng)
         @test nv(CompGraph(inpt, v)) == 6
+
+        space = RepeatArchSpace(VertexSpace(DenseSpace(BaseLayerSpace(3, relu))), 2)
+        v = space(inpt, outsize=4)
+        @test nout(v) == 4
+        @test nin(v) == [4]
+
+        v = space("test", inpt, outsize=4)
+        @test name.(flatten(v)) == ["in", "test.1", "test.2"]
+        @test nout(v) == 4
+        @test nin(v) == [4]
+    end
+
+    @testset "ListArchSpace" begin
+        space = ListArchSpace(VertexSpace.(DenseSpace.(BaseLayerSpace.((2,3), relu)))...)
+        inpt = inputvertex("in", 3)
+
+        v = space(inpt)
+        @test nv(CompGraph(inpt, v)) == 3
+        @test nout(v) == 3
+        @test nin(v) == [2]
+
+        v = space("v", inpt)
+        @test name.(flatten(v)) == ["in", "v.1", "v.2"]
+        @test nv(CompGraph(inpt, v)) == 3
+        @test nout(v) == 3
+        @test nin(v) == [2]
+
+        v = space(inpt, outsize=4)
+        @test nv(CompGraph(inpt, v)) == 3
+        @test nout(v) == 4
+        @test nin(v) == [4]
+
+        v = space("v", inpt, outsize=4)
+        @test name.(flatten(v)) == ["in", "v.1", "v.2"]
+        @test nv(CompGraph(inpt, v)) == 3
+        @test nout(v) == 4
+        @test nin(v) == [4]
     end
 
     @testset "ForkArchSpace" begin
@@ -172,6 +227,33 @@
 
         v = space(inpt, rng)
         @test length(inputs(v)) == 5
+
+        space = ForkArchSpace(VertexSpace(DenseSpace(BaseLayerSpace(3, relu))), 3)
+        v = space(inpt, outsize=13)
+        @test nout(v) == 13
+        @test nin(v) == [4, 4, 5]
+
+        v = space("v", inpt, outsize=13)
+        @test name(v) == "v"
+        @test nout(v) == 13
+        @test nin(v) == [4, 4, 5]
+    end
+
+    @testset "ResidualArchSpace" begin
+        space = ResidualArchSpace(DenseSpace(BaseLayerSpace(3, relu)))
+        inpt = inputvertex("in", 4)
+
+        v = space(inpt)
+        @test nin(v) == [4, 4]
+        @test nout(v) == 4
+        @test layertype(inputs(v)[2]) == FluxDense()
+
+        v = space("v", inpt)
+        @test name.(flatten(v)) == ["in", "v.res", "v"]
+        @test nin(v) == [4, 4]
+        @test nout(v) == 4
+        @test layertype(inputs(v)[2]) == FluxDense()
+
     end
 
 end

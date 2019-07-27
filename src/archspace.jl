@@ -31,8 +31,6 @@ abstract type AbstractParSpace{N, T} end
     BaseLayerSpace
 
 Search space for basic attributes common to all layers.
-
-Return a tuple `(outsize,activation)` from the search space when invoked.
 """
 struct BaseLayerSpace{T}
     nouts::AbstractParSpace{1, <:Integer}
@@ -40,7 +38,8 @@ struct BaseLayerSpace{T}
 end
 BaseLayerSpace(n::Integer, act) = BaseLayerSpace(SingletonParSpace(n), SingletonParSpace(act))
 BaseLayerSpace(n::AbstractVector{<:Integer}, act::AbstractVector{T}) where T = BaseLayerSpace(ParSpace(n), ParSpace(act))
-(s::BaseLayerSpace)(rng=rng_default) = s.nouts(rng), s.acts(rng)
+outsize(s::BaseLayerSpace, rng=rng_default) = s.nouts(rng)
+activation(s::BaseLayerSpace, rng=rng_default) = s.acts(rng)
 
 
 """
@@ -104,7 +103,7 @@ Search space of Dense layers.
 struct DenseSpace <:AbstractLayerSpace
     base::BaseLayerSpace
 end
-(s::DenseSpace)(in::Integer,rng=rng_default) = Dense(in, s.base(rng)...)
+(s::DenseSpace)(in::Integer,rng=rng_default; outsize=outsize(s.base,rng)) = Dense(in, outsize, activation(s.base,rng))
 
 """
     ConvSpace{N} <:AbstractLayerSpace
@@ -122,12 +121,12 @@ end
 ConvSpace2D(base::BaseLayerSpace, ks::AbstractVector{<:Integer}) = ConvSpace(base, ks,ks)
 ConvSpace(base::BaseLayerSpace, ks::AbstractVector{<:Integer}...) = ConvSpace(base, ParSpace(ks), SingletonParSpace(1), SingletonParSpace(1), SamePad())
 
-function (s::ConvSpace)(insize::Integer, rng=rng_default; convfun = Conv)
+function (s::ConvSpace)(insize::Integer, rng=rng_default; outsize = outsize(s.base, rng), convfun = Conv)
     ks = Tuple(s.kernelsize(rng))
     stride = s.stride(rng)
     dilation = s.dilation(rng)
     pad = s.padding(ks, dilation, rng)
-    outsize, act = s.base(rng)
+    act = activation(s.base, rng)
     return convfun(ks, insize=>outsize, act, pad=pad, stride=stride,dilation=dilation)
 end
 
@@ -141,7 +140,7 @@ struct BatchNormSpace <:AbstractLayerSpace
 end
 BatchNormSpace(act::Function) = BatchNormSpace(SingletonParSpace(act))
 BatchNormSpace(act, acts...) = BatchNormSpace(ParSpace1D(act,acts...))
-(s::BatchNormSpace)(in::Integer, rng=rng_default) = BatchNorm(in, s.acts(rng))
+(s::BatchNormSpace)(in::Integer, rng=rng_default;outsize=nothing) = BatchNorm(in, s.acts(rng))
 
 """
     PoolSpace{N} <:AbstractLayerSpace
@@ -156,7 +155,7 @@ end
 PoolSpace2D(ws::AbstractVector{<:Integer}) = PoolSpace(ws,ws)
 PoolSpace(ws::AbstractVector{<:Integer}...) = PoolSpace(ParSpace(ws), ParSpace(ws))
 PoolSpace(ws::AbstractParSpace, stride::AbstractParSpace) = PoolSpace(ws,stride, SamePad())
-function (s::PoolSpace)(in::Integer, rng=rng_default;pooltype)
+function (s::PoolSpace)(in::Integer, rng=rng_default;outsize=nothing, pooltype)
     ws = Tuple(s.ws(rng))
     stride = s.stride(rng)
     pad = s.pad(ws, 1, rng)
@@ -171,27 +170,27 @@ Search space of `N`D max pooling layers.
 struct MaxPoolSpace{N} <: AbstractLayerSpace
     s::PoolSpace{N}
 end
-(s::MaxPoolSpace)(in::Integer, rng=rng_default) = s.s(in, rng, pooltype=MaxPool)
+(s::MaxPoolSpace)(in::Integer, rng=rng_default;outsize=nothing) = s.s(in, rng, pooltype=MaxPool)
 
 
 default_logging() = logged(level=Base.CoreLogging.Info, info=NameAndIOInfoStr())
 """
-    VertexConf
+    LayerVertexConf
 
 Generic configuration template for computation graph vertices.
 
 Intention is to make it easy to add logging, validation and pruning metrics in an uniform way.
 """
-struct VertexConf
+struct LayerVertexConf
     layerfun
     traitfun
 end
-VertexConf() = VertexConf(ActivationContribution ∘ LazyMutable, validated() ∘ default_logging())
+LayerVertexConf() = LayerVertexConf(ActivationContribution ∘ LazyMutable, validated() ∘ default_logging())
 
-(c::VertexConf)(in::AbstractVertex, l) = mutable(l,in,layerfun=c.layerfun, mutation=IoChange, traitfun=c.traitfun)
-(c::VertexConf)(name::String, in::AbstractVertex, l) = mutable(name, l,in,layerfun=c.layerfun, mutation=IoChange, traitfun=c.traitfun)
+(c::LayerVertexConf)(in::AbstractVertex, l) = mutable(l,in,layerfun=c.layerfun, mutation=IoChange, traitfun=c.traitfun)
+(c::LayerVertexConf)(name::String, in::AbstractVertex, l) = mutable(name, l,in,layerfun=c.layerfun, mutation=IoChange, traitfun=c.traitfun)
 
-Base.Broadcast.broadcastable(c::VertexConf) = Ref(c)
+Base.Broadcast.broadcastable(c::LayerVertexConf) = Ref(c)
 
 """
     ConcConf
@@ -216,13 +215,15 @@ ConcConf() = ConcConf(validated() ∘ default_logging())
 Search space of one `AbstractVertex` from one `AbstractLayerSpace`.
 """
 struct VertexSpace <:AbstractArchSpace
-    conf::VertexConf
+    conf::LayerVertexConf
     lspace::AbstractLayerSpace
 end
-VertexSpace(lspace::AbstractLayerSpace) = VertexSpace(VertexConf(), lspace)
+VertexSpace(lspace::AbstractLayerSpace) = VertexSpace(LayerVertexConf(), lspace)
 
-(s::VertexSpace)(in::AbstractVertex, rng=rng_default) = s.conf(in, s.lspace(nout(in), rng))
-(s::VertexSpace)(name::String, in::AbstractVertex, rng=rng_default) = s.conf(name, in, s.lspace(nout(in), rng))
+(s::VertexSpace)(in::AbstractVertex, rng=rng_default; outsize=missing) = s.conf(in,  create_layer(outsize, nout(in), s.lspace, rng))
+(s::VertexSpace)(name::String, in::AbstractVertex, rng=rng_default; outsize=missing) = s.conf(name, in, create_layer(outsize, nout(in), s.lspace, rng))
+create_layer(::Missing, insize::Integer, ls::AbstractLayerSpace, rng) = ls(insize, rng)
+create_layer(outsize::Integer, insize::Integer, ls::AbstractLayerSpace, rng) = ls(insize, rng, outsize=outsize)
 
 """
     ArchSpace <:AbstractArchSpace
@@ -232,11 +233,11 @@ Search space of `AbstractArchSpace`.
 struct ArchSpace <:AbstractArchSpace
     s::AbstractParSpace{1, <:AbstractArchSpace}
 end
-ArchSpace(l::AbstractLayerSpace;conf=VertexConf()) = ArchSpace(SingletonParSpace(VertexSpace(conf,l)))
-ArchSpace(l::AbstractLayerSpace, ls::AbstractLayerSpace...;conf=VertexConf()) = ArchSpace(ParSpace(VertexSpace.(conf,[l,ls...])))
+ArchSpace(l::AbstractLayerSpace;conf=LayerVertexConf()) = ArchSpace(SingletonParSpace(VertexSpace(conf,l)))
+ArchSpace(l::AbstractLayerSpace, ls::AbstractLayerSpace...;conf=LayerVertexConf()) = ArchSpace(ParSpace(VertexSpace.(conf,[l,ls...])))
 
-(s::ArchSpace)(in::AbstractVertex, rng=rng_default) = s.s(rng)(in, rng)
-(s::ArchSpace)(name::String, in::AbstractVertex, rng=rng_default) = s.s(rng)(name, in, rng)
+(s::ArchSpace)(in::AbstractVertex, rng=rng_default; outsize=missing) = s.s(rng)(in, rng, outsize=outsize)
+(s::ArchSpace)(name::String, in::AbstractVertex, rng=rng_default; outsize=missing) = s.s(rng)(name, in, rng, outsize=outsize)
 
 """
     RepeatArchSpace <:AbstractArchSpace
@@ -254,8 +255,23 @@ end
 RepeatArchSpace(s::AbstractArchSpace, r::Integer) = RepeatArchSpace(s, SingletonParSpace(r))
 RepeatArchSpace(s::AbstractArchSpace, r::AbstractVector{<:Integer}) = RepeatArchSpace(s, ParSpace(r))
 
-(s::RepeatArchSpace)(in::AbstractVertex, rng=rng_default) = foldl((next, i) -> s.s(next, rng), 1:s.r(rng), init=in)
-(s::RepeatArchSpace)(name::String, in::AbstractVertex, rng=rng_default) = foldl((next, i) -> s.s(join([name,".", i]), next, rng), 1:s.r(rng), init=in)
+(s::RepeatArchSpace)(in::AbstractVertex, rng=rng_default; outsize=missing) = foldl((next, i) -> s.s(next, rng, outsize=outsize), 1:s.r(rng), init=in)
+(s::RepeatArchSpace)(name::String, in::AbstractVertex, rng=rng_default; outsize=missing) = foldl((next, i) -> s.s(join([name,".", i]), next, rng, outsize=outsize), 1:s.r(rng), init=in)
+
+"""
+    ListArchSpace <:AbstractArchSpace
+
+Search space composed of a list of search spaces.
+
+Basically a more deterministic version of RepeatArchSpace.
+"""
+struct ListArchSpace <:AbstractArchSpace
+    s::AbstractVector{<:AbstractArchSpace}
+end
+ListArchSpace(s::AbstractArchSpace...) = ListArchSpace(collect(s))
+(s::ListArchSpace)(in::AbstractVertex, rng=rng_default; outsize=missing) = foldl((next, ss) -> ss(next, rng, outsize=outsize), s.s, init=in)
+(s::ListArchSpace)(name::String, in::AbstractVertex, rng=rng_default; outsize=missing) = foldl((next, i) -> s.s[i](join([name,".", i]), next, rng, outsize=outsize), eachindex(s.s), init=in)
+
 
 """
     ForkArchSpace <:AbstractArchSpace
@@ -272,5 +288,39 @@ end
 ForkArchSpace(s::AbstractArchSpace, r::Integer; conf=ConcConf()) = ForkArchSpace(s, SingletonParSpace(r), conf)
 ForkArchSpace(s::AbstractArchSpace, r::AbstractVector{<:Integer}; conf=ConcConf()) = ForkArchSpace(s, ParSpace(r), conf)
 
-(s::ForkArchSpace)(in::AbstractVertex, rng=rng_default) = s.c(map(i -> s.s(in, rng), 1:s.p(rng)))
-(s::ForkArchSpace)(name::String, in::AbstractVertex, rng=rng_default) = s.c(name, map(i -> s.s(join([name, ".path", i]), in, rng), 1:s.p(rng)))
+function (s::ForkArchSpace)(in::AbstractVertex, rng=rng_default; outsize=missing)
+     np=s.p(rng)
+     outsizes = eq_split(outsize, np)
+     return s.c(map(i -> s.s(in, rng, outsize=outsizes[i]), 1:np))
+ end
+function (s::ForkArchSpace)(name::String, in::AbstractVertex, rng=rng_default; outsize=missing)
+    np=s.p(rng)
+    outsizes = eq_split(outsize, np)
+    return s.c(name, map(i -> s.s(join([name, ".path", i]), in, rng,outsize=outsizes[i]), 1:np))
+end
+function eq_split(x, n)
+    rem = x
+    out = Vector(undef, n)
+    for i = 1:n
+        out[i] = rem ÷ (n-i+1)
+        rem -= out[i]
+    end
+    return out
+end
+
+"""
+    ResidualArchSpace <:AbstractArchSpace
+
+Turns the wrapped `AbstractArchSpace` into a residual.
+
+Return `x = y + in` where `y` is drawn from the wrapped `AbstractArchSpace` when invoked with `in` as input vertex.
+"""
+struct ResidualArchSpace <:AbstractArchSpace
+    s::AbstractArchSpace
+    conf::VertexConf
+end
+ResidualArchSpace(s::AbstractArchSpace) = ResidualArchSpace(s, VertexConf(IoChange, validated() ∘ default_logging()))
+ResidualArchSpace(l::AbstractLayerSpace) = ResidualArchSpace(VertexSpace(l))
+
+(s::ResidualArchSpace)(in::AbstractVertex, rng=rng_default;outsize=missing) = s.conf >> in + s.s(in, rng,outsize=nout(in))
+(s::ResidualArchSpace)(name::String, in::AbstractVertex, rng=rng_default; outsize=missing) = VertexConf(s.conf.mutation, s.conf.traitdecoration ∘ named(name)) >> in + s.s(join([name, ".res"]), in, rng,outsize=nout(in))

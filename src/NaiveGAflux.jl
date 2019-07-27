@@ -16,10 +16,10 @@ export AbstractVertexSelection, AllVertices, FilterMutationAllowed
 export AbstractMutation, MutationProbability, RecordMutation, VertexMutation, NoutMutation
 
 # architecture spaces
-export AbstractArchSpace, VertexSpace, ArchSpace, RepeatArchSpace, ForkArchSpace
+export AbstractArchSpace, VertexSpace, ArchSpace, RepeatArchSpace, ListArchSpace, ForkArchSpace, ResidualArchSpace
 
-# architecture space config types
-export BaseLayerSpace, AbstractParSpace, SingletonParSpace, Singleton2DParSpace, ParSpace, ParSpace1D, ParSpace2D, AbstractPadSpace, SamePad, DenseSpace, ConvSpace, ConvSpace2D, BatchNormSpace, PoolSpace, PoolSpace2D, MaxPoolSpace, VertexConf
+#  Other search space types
+export BaseLayerSpace, AbstractParSpace, SingletonParSpace, Singleton2DParSpace, ParSpace, ParSpace1D, ParSpace2D, AbstractPadSpace, SamePad, DenseSpace, ConvSpace, ConvSpace2D, BatchNormSpace, PoolSpace, PoolSpace2D, MaxPoolSpace, LayerVertexConf
 
 # functions
 export mutate, allow_mutation, select
