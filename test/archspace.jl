@@ -110,6 +110,12 @@
         @test space(2,rng).λ == relu
         @test space(3,rng).λ == elu
         @test space(4,rng).λ == identity
+
+        rng = SeqRng()
+        space = BatchNormSpace([relu,elu,identity])
+        @test space(2,rng).λ == relu
+        @test space(3,rng).λ == elu
+        @test space(4,rng).λ == identity
     end
 
     @testset "MaxPoolSpace" begin

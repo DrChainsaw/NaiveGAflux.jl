@@ -156,6 +156,7 @@ struct BatchNormSpace <:AbstractLayerSpace
 end
 BatchNormSpace(act::Function) = BatchNormSpace(SingletonParSpace(act))
 BatchNormSpace(act, acts...) = BatchNormSpace(ParSpace1D(act,acts...))
+BatchNormSpace(acts::AbstractVector) = BatchNormSpace(acts...) 
 (s::BatchNormSpace)(in::Integer, rng=rng_default;outsize=nothing) = BatchNorm(in, s.acts(rng))
 
 """
