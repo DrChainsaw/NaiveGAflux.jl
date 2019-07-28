@@ -95,6 +95,9 @@ function (::SamePad)(ks, dilation, rng=nothing)
     return Tuple(mapfoldl(i -> [ceil(Int, i/2), i ÷ 2], vcat, pad_amt))
 end
 
+struct NoPad <:AbstractPadSpace end
+(::NoPad)(ks, dilation, rng=nothing) = 0
+
 """
     NamedLayerSpace <:AbstractLayerSpace
 
@@ -171,7 +174,7 @@ struct PoolSpace{N} <:AbstractLayerSpace
 end
 PoolSpace2D(ws::AbstractVector{<:Integer}) = PoolSpace(ws,ws)
 PoolSpace(ws::AbstractVector{<:Integer}...) = PoolSpace(ParSpace(ws), ParSpace(ws))
-PoolSpace(ws::AbstractParSpace, stride::AbstractParSpace) = PoolSpace(ws,stride, SamePad())
+PoolSpace(ws::AbstractParSpace, stride::AbstractParSpace) = PoolSpace(ws,stride, NoPad())
 function (s::PoolSpace)(in::Integer, rng=rng_default;outsize=nothing, pooltype)
     ws = Tuple(s.ws(rng))
     stride = s.stride(rng)
