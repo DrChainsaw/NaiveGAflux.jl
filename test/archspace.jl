@@ -52,6 +52,25 @@
         @test SamePad()((3,7), (2,4)) == (2,2,12,12)
     end
 
+    @testset "NamedLayerSpace" begin
+        rng = SeqRng()
+        s1 = DenseSpace(BaseLayerSpace(2, identity))
+        s2 = NamedLayerSpace("test", s1)
+
+        @test name(s1) == ""
+        @test name(s2) == "test"
+
+        l1 = s1(3, rng)
+        l2 = s2(3, rng)
+
+        @test l1.σ == l2.σ
+        @test size(l1.W) == size(l2.W)
+
+        l1 = s1(3, rng, outsize = 4)
+        l2 = s2(3, rng, outsize = 4)
+        @test size(l1.W) == size(l2.W)
+    end
+
     @testset "DenseSpace" begin
         rng = SeqRng()
         space = DenseSpace(BaseLayerSpace(3, σ))
@@ -114,6 +133,10 @@
 
         v = space("v", inpt)
         @test name(v) == "v"
+
+        space = VertexSpace(NamedLayerSpace("dense", DenseSpace(BaseLayerSpace(3,relu))))
+        v = space("v", inpt)
+        @test name(v) == "v.dense"
     end
 
     @testset "ArchSpace" begin

@@ -96,6 +96,22 @@ function (::SamePad)(ks, dilation, rng=nothing)
 end
 
 """
+    NamedLayerSpace <:AbstractLayerSpace
+
+Adds a `name` to an `AbstractLayerSpace`
+"""
+struct NamedLayerSpace <:AbstractLayerSpace
+    name::String
+    s::AbstractLayerSpace
+end
+NaiveNASlib.name(::AbstractLayerSpace) = ""
+NaiveNASlib.name(s::NamedLayerSpace) = s.name
+function (s::NamedLayerSpace)(in::Integer,rng=rng_default; outsize=missing)
+    ismissing(outsize) && return s.s(in, rng)
+    return s.s(in, rng, outsize=outsize)
+end
+
+"""
     DenseSpace <:AbstractLayerSpace
 
 Search space of Dense layers.
@@ -221,7 +237,7 @@ end
 VertexSpace(lspace::AbstractLayerSpace) = VertexSpace(LayerVertexConf(), lspace)
 
 (s::VertexSpace)(in::AbstractVertex, rng=rng_default; outsize=missing) = s.conf(in,  create_layer(outsize, nout(in), s.lspace, rng))
-(s::VertexSpace)(name::String, in::AbstractVertex, rng=rng_default; outsize=missing) = s.conf(name, in, create_layer(outsize, nout(in), s.lspace, rng))
+(s::VertexSpace)(namestr::String, in::AbstractVertex, rng=rng_default; outsize=missing) = s.conf(join(filter(!isempty, [namestr, name(s.lspace)]), "."), in, create_layer(outsize, nout(in), s.lspace, rng))
 create_layer(::Missing, insize::Integer, ls::AbstractLayerSpace, rng) = ls(insize, rng)
 create_layer(outsize::Integer, insize::Integer, ls::AbstractLayerSpace, rng) = ls(insize, rng, outsize=outsize)
 
