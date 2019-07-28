@@ -156,7 +156,7 @@ struct BatchNormSpace <:AbstractLayerSpace
 end
 BatchNormSpace(act::Function) = BatchNormSpace(SingletonParSpace(act))
 BatchNormSpace(act, acts...) = BatchNormSpace(ParSpace1D(act,acts...))
-BatchNormSpace(acts::AbstractVector) = BatchNormSpace(acts...) 
+BatchNormSpace(acts::AbstractVector) = BatchNormSpace(acts...)
 (s::BatchNormSpace)(in::Integer, rng=rng_default;outsize=nothing) = BatchNorm(in, s.acts(rng))
 
 """
@@ -306,15 +306,18 @@ ForkArchSpace(s::AbstractArchSpace, r::Integer; conf=ConcConf()) = ForkArchSpace
 ForkArchSpace(s::AbstractArchSpace, r::AbstractVector{<:Integer}; conf=ConcConf()) = ForkArchSpace(s, ParSpace(r), conf)
 
 function (s::ForkArchSpace)(in::AbstractVertex, rng=rng_default; outsize=missing)
-     np=s.p(rng)
+     np=min_nomissing(s.p(rng), outsize)
      outsizes = eq_split(outsize, np)
      return s.c(map(i -> s.s(in, rng, outsize=outsizes[i]), 1:np))
  end
 function (s::ForkArchSpace)(name::String, in::AbstractVertex, rng=rng_default; outsize=missing)
-    np=s.p(rng)
+    np=min_nomissing(s.p(rng), outsize)
     outsizes = eq_split(outsize, np)
     return s.c(name, map(i -> s.s(join([name, ".path", i]), in, rng,outsize=outsizes[i]), 1:np))
 end
+min_nomissing(x, ::Missing) = x
+min_nomissing(x, y) = min(x,y)
+
 function eq_split(x, n)
     rem = x
     out = Vector(undef, n)

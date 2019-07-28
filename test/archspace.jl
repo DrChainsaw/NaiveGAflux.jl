@@ -266,6 +266,16 @@
         @test name(v) == "v"
         @test nout(v) == 13
         @test nin(v) == [4, 4, 5]
+
+        # Edge case: Smaller outsize than number of paths
+        v = space(inpt, outsize=2)
+        @test nout(v) == 2
+        @test nin(v) == [1, 1]
+
+        v = space("v", inpt, outsize=2)
+        @test nout(v) == 2
+        @test nin(v) == [1, 1]
+
     end
 
     @testset "ResidualArchSpace" begin
