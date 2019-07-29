@@ -246,7 +246,7 @@
         @test length(inputs(v)) == 3
 
         v = space("test", inpt)
-        @test name.(flatten(v)) == ["in", "test.path1", "test.path2", "test.path3", "test"]
+        @test name.(flatten(v)) == ["in", "test.path1", "test.path2", "test.path3", "test.cat"]
 
         space = ForkArchSpace(VertexSpace(BatchNormSpace(relu)), [2,5])
         rng = SeqRng()
@@ -263,7 +263,7 @@
         @test nin(v) == [4, 4, 5]
 
         v = space("v", inpt, outsize=13)
-        @test name(v) == "v"
+        @test name(v) == "v.cat"
         @test nout(v) == 13
         @test nin(v) == [4, 4, 5]
 
@@ -288,7 +288,7 @@
         @test layertype(inputs(v)[2]) == FluxDense()
 
         v = space("v", inpt)
-        @test name.(flatten(v)) == ["in", "v.res", "v"]
+        @test name.(flatten(v)) == ["in", "v.res", "v.add"]
         @test nin(v) == [4, 4]
         @test nout(v) == 4
         @test layertype(inputs(v)[2]) == FluxDense()

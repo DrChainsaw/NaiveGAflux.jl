@@ -71,6 +71,17 @@ ParSpace2D(p::AbstractVector{T}) where T = ParSpace(p,p)
 (s::ParSpace)(rng=rng_default) = rand.((rng,), s.p)
 (s::ParSpace{1, T})(rng=rng_default) where T = rand(rng, s.p[1])
 
+
+struct CoupledParSpace{N, T} <:AbstractParSpace{N, T}
+    p::AbstractParSpace{1, T}
+end
+CoupledParSpace(p::AbstractParSpace{1, T}, N) where T = CoupledParSpace{N}(p)
+CoupledParSpace(p::AbstractVector{T}, N) where T = CoupledParSpace{N, T}(ParSpace(p))
+function(s::CoupledParSpace{N})(rng=rng_default) where N
+    val = s.p(rng)
+    return ntuple(i -> val, N)
+end
+
 """
     AbstractPadSpace
 
@@ -138,7 +149,8 @@ struct ConvSpace{N} <:AbstractLayerSpace
 end
 
 ConvSpace2D(base::BaseLayerSpace, ks::AbstractVector{<:Integer}) = ConvSpace(base, ks,ks)
-ConvSpace(base::BaseLayerSpace, ks::AbstractVector{<:Integer}...) = ConvSpace(base, ParSpace(ks), SingletonParSpace(1), SingletonParSpace(1), SamePad())
+ConvSpace(base::BaseLayerSpace, ks::AbstractVector{<:Integer}...) = ConvSpace(base, ParSpace(ks))
+ConvSpace(base::BaseLayerSpace, ks::AbstractParSpace) = ConvSpace(base, ks, SingletonParSpace(1), SingletonParSpace(1), SamePad())
 
 function (s::ConvSpace)(insize::Integer, rng=rng_default; outsize = outsize(s.base, rng), convfun = Conv)
     ks = Tuple(s.kernelsize(rng))
@@ -316,7 +328,7 @@ function (s::ForkArchSpace)(in::AbstractVertex, rng=rng_default; outsize=missing
 function (s::ForkArchSpace)(name::String, in::AbstractVertex, rng=rng_default; outsize=missing)
     np=min_nomissing(s.p(rng), outsize)
     outsizes = eq_split(outsize, np)
-    return s.c(name, map(i -> s.s(join([name, ".path", i]), in, rng,outsize=outsizes[i]), 1:np))
+    return s.c(name * ".cat", map(i -> s.s(join([name, ".path", i]), in, rng,outsize=outsizes[i]), 1:np))
 end
 min_nomissing(x, ::Missing) = x
 min_nomissing(x, y) = min(x,y)
@@ -346,4 +358,4 @@ ResidualArchSpace(s::AbstractArchSpace) = ResidualArchSpace(s, VertexConf(IoChan
 ResidualArchSpace(l::AbstractLayerSpace) = ResidualArchSpace(VertexSpace(l))
 
 (s::ResidualArchSpace)(in::AbstractVertex, rng=rng_default;outsize=missing) = s.conf >> in + s.s(in, rng,outsize=nout(in))
-(s::ResidualArchSpace)(name::String, in::AbstractVertex, rng=rng_default; outsize=missing) = VertexConf(s.conf.mutation, s.conf.traitdecoration ∘ named(name)) >> in + s.s(join([name, ".res"]), in, rng,outsize=nout(in))
+(s::ResidualArchSpace)(name::String, in::AbstractVertex, rng=rng_default; outsize=missing) = VertexConf(s.conf.mutation, s.conf.traitdecoration ∘ named(name * ".add")) >> in + s.s(join([name, ".res"]), in, rng,outsize=nout(in))
