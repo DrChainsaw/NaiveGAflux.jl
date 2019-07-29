@@ -321,12 +321,16 @@ ForkArchSpace(s::AbstractArchSpace, r::Integer; conf=ConcConf()) = ForkArchSpace
 ForkArchSpace(s::AbstractArchSpace, r::AbstractVector{<:Integer}; conf=ConcConf()) = ForkArchSpace(s, ParSpace(r), conf)
 
 function (s::ForkArchSpace)(in::AbstractVertex, rng=rng_default; outsize=missing)
+     # Make sure there are no paths with size 0, which is what happens if np > outsize
      np=min_nomissing(s.p(rng), outsize)
+     np == 0 && return in
      outsizes = eq_split(outsize, np)
      return s.c(map(i -> s.s(in, rng, outsize=outsizes[i]), 1:np))
  end
 function (s::ForkArchSpace)(name::String, in::AbstractVertex, rng=rng_default; outsize=missing)
+    # Make sure there are no paths with size 0, which is what happens if np > outsize
     np=min_nomissing(s.p(rng), outsize)
+    np == 0 && return in
     outsizes = eq_split(outsize, np)
     return s.c(name * ".cat", map(i -> s.s(join([name, ".path", i]), in, rng,outsize=outsizes[i]), 1:np))
 end

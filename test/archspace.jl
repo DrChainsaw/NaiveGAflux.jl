@@ -205,6 +205,9 @@
         @test name.(flatten(v)) == ["in", "test.1", "test.2"]
         @test nout(v) == 4
         @test nin(v) == [4]
+
+        space = RepeatArchSpace(VertexSpace(BatchNormSpace(relu)), 0)
+        @test space(inpt) == inpt
     end
 
     @testset "ListArchSpace" begin
@@ -276,6 +279,8 @@
         @test nout(v) == 2
         @test nin(v) == [1, 1]
 
+        space = ForkArchSpace(VertexSpace(DenseSpace(BaseLayerSpace(3, relu))), 0)
+        @test space(inpt) == inpt
     end
 
     @testset "ResidualArchSpace" begin
