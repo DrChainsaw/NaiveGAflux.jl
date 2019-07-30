@@ -28,4 +28,7 @@ include("util.jl")
 include("mutation.jl")
 include("archspace.jl")
 
+include("examples/cifar10.jl")
+
+
 end # module

@@ -24,4 +24,6 @@ using Test
     @info "Testing archspace"
     include("archspace.jl")
 
+    @info "Testing CIFAR10 example"
+    include("examples/cifar10.jl")
 end
