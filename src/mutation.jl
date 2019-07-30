@@ -1,19 +1,14 @@
 """
-    AbstractMutation
+    AbstractMutation{T}
 
-Generic mutation type.
+Abstract type defining a mutation operation on entities of type `T`.
+
+Implementations are expected to be callable using an entity of type `T` as only input.
 """
 abstract type AbstractMutation{T} end
 
 """
-    mutate(m::M, t::T) where {M<:AbstractMutation, T}
-
-Mutate `t` using operation `m`.
-"""
-mutate(::M, ::T) where {M<:AbstractMutation, T} = throw(ArgumentError("$M of $T not implemented!"))
-
-"""
-    MutationProbability
+    MutationProbability{T} <:AbstractMutation{T}
 
 Applies a wrapped `AbstractMutation` with a configured probability
 """
@@ -22,14 +17,25 @@ struct MutationProbability{T} <:AbstractMutation{T}
     p::Probability
 end
 
-function mutate(m::MutationProbability{T}, e::T) where T
+function (m::MutationProbability{T})(e::T) where T
     apply(m.p) do
-        mutate(m.m, e)
+        m.m(e)
     end
 end
 
 """
-    RecordMutation
+    MutationList{T} <: AbstractMutation{T}
+
+Applies all wrapped `AbstractMutation{T}`s to each entity of type `T`.
+"""
+struct MutationList{T} <: AbstractMutation{T}
+    m::AbstractVector{<:AbstractMutation{T}}
+end
+MutationList(m::AbstractMutation{T}...) where T = MutationList(collect(m))
+(m::MutationList)(e::T) where T = foreach(mm -> mm(e), m.m)
+
+"""
+    RecordMutation{T} <:AbstractMutation{T}
 
 Records all mutated entities.
 
@@ -40,15 +46,15 @@ struct RecordMutation{T} <:AbstractMutation{T}
     mutated::AbstractVector{T}
 end
 RecordMutation(m::AbstractMutation{T}) where T = RecordMutation(m, T[])
-function mutate(m::RecordMutation{T}, e::T) where T
+function (m::RecordMutation{T})(e::T) where T
     push!(m.mutated, e)
-    mutate(m.m, e)
+    m.m(e)
 end
 
 """
-    VertexMutation
+    VertexMutation <:AbstractMutation{CompGraph}
 
-Applies a wrapped `AbstractMutation` for each selected vertex in a `CompGraph`.
+Applies a wrapped `AbstractMutation{AbstractVertex}` for each selected vertex in a `CompGraph`.
 
 Vertices to select is determined by the configured `AbstractVertexSelection`.
 """
@@ -57,14 +63,14 @@ struct VertexMutation <:AbstractMutation{CompGraph}
     s::AbstractVertexSelection
 end
 VertexMutation(m::AbstractMutation{AbstractVertex}) = VertexMutation(m, FilterMutationAllowed())
-function mutate(m::VertexMutation, g::CompGraph)
+function (m::VertexMutation)(g::CompGraph)
     for v in select(m.s, g)
-        mutate(m.m, v)
+        m.m(v)
     end
 end
 
 """
-    NoutMutation
+    NoutMutation <:AbstractMutation{AbstractVertex}
 
 Mutate the out size of a vertex.
 
@@ -74,8 +80,8 @@ struct NoutMutation <:AbstractMutation{AbstractVertex}
     maxrel::Real
     rng::AbstractRNG
 end
-NoutMutation(maxrel::Real) = NoutMutation(maxrel, Random.GLOBAL_RNG)
-function mutate(m::NoutMutation, v::AbstractVertex)
+NoutMutation(maxrel::Real) = NoutMutation(maxrel, rng_default)
+function (m::NoutMutation)(v::AbstractVertex)
     Δfactor = minΔnoutfactor(v)
     # Missing Δfactor means vertex can't be mutated, for example if it touches an immutable vertex such as an input vertex
     ismissing(Δfactor) && return

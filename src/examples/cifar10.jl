@@ -1,45 +1,9 @@
 module Cifar10
 
 using ..NaiveGAflux
+using Random
 
 export run_experiment, initial_models
-
-## Stuff to fix in NaiveNASflux
-
-function Flux.mapchildren(f, a::AbstractVector{<:AbstractVertex})
-    f.(a)
-    return a
-end
-Flux.children(v::AbstractVertex) = (base(v),)
-function Flux.mapchildren(f, v::AbstractVertex)
-    f.(Flux.children(v))
-    return v
-end
-Flux.children(g::CompGraph) = Tuple(vertices(g))
-function Flux.mapchildren(f, g::CompGraph)
-    f.(Flux.children(g))
-    return g
-end
-
-function treelike_mutable(m::Module, T, fs = fieldnames(T))
-  @eval m begin
-    Flux.children(x::$T) = ($([:(x.$f) for f in fs]...),)
-    function Flux.mapchildren(f, x::$T)
-        $([:(x.$fn = f(x.$fn)) for fn in fs]...)
-        return x
-    end
-  end
-end
-
-macro treelike_mutable(T, fs = nothing)
-  fs == nothing || isexpr(fs, :tuple) || error("@treelike_mutable T (a, b)")
-  fs = fs == nothing ? [] : [:($(map(QuoteNode, fs.args)...),)]
-  :(treelike_mutable(@__MODULE__, $(esc(T)), $(fs...)))
-end
-
-@treelike_mutable ActivationContribution
-
-## End stuff to fix in NaiveNASflux
 
 # Stop-gap solution until a real candidate/entity type is created
 struct Model
@@ -49,14 +13,23 @@ end
 (m::Model)(x) = m.g(x)
 Flux.@treelike Model
 
-function run_experiment(popsize, niters, data)
+function run_experiment(popsize, niters, data; nevolve=100, baseseed=666)
+    Random.seed!(NaiveGAflux.rng_default, baseseed)
+
     population = initial_models(popsize)
     for i in 1:niters
         @info "Begin iteration $i"
         x_train,y_train = data()
-        trainmodels!(population, (x_train, Flux.onehotbatch(y_train, 0:9)))
+        trainmodels!(population, (x_train, onehot(y_train)))
+
+        if i % nevolve == 0
+            evolvemodels!(population)
+        end
     end
 end
+
+# Workaround as losses fail with Flix.OneHotMatrix on Appveyor x86 (works everywhere else)
+onehot(y) = Float32.(Flux.onehotbatch(y, 0:9))
 
 function trainmodels!(population, data)
     data = [data |> gpu]
@@ -64,6 +37,48 @@ function trainmodels!(population, data)
         loss(x,y) = Flux.logitcrossentropy(model(x), y)
         Flux.train!(loss, params(model), data, model.opt)
     end
+end
+
+function evolvemodels!(population)
+    @info "\tEvolve population!"
+    for model in population
+        m, record = mutation()
+        m(model.g)
+        select_pars(record)
+        apply_mutation(model.g)
+    end
+end
+
+function select_pars(record)
+    for v in record.mutated
+        @info "\t\t Select params for $(name(v))"
+        ranked = sortperm(neuron_value(v))
+        Δout = nout(v) - nout_org(op(v))
+
+        if Δout < 0
+            inds = sort(ranked[-Δout:end])
+            Δnout(v, inds)
+        end
+
+        if Δout > 0
+            inds = vcat(collect(1:nout_org(op(v))), repeat([-1], Δout))
+            Δnout(v, inds)
+        end
+    end
+end
+
+function mutation()
+    increase_nout = NoutMutation(+0.1) # Max 10% increase in output size
+    decrease_nout = NoutMutation(-0.1) # Max 10% decrease in output size
+
+    # Create a shorthand alias for MutationProbability
+    mp(m,p) = MutationProbability(m, Probability(p))
+    mutate_nout = MutationList(mp(increase_nout, 0.02), mp(decrease_nout, 0.02))
+
+    # For parameter selection after mutation is completed
+    rec_mutation = RecordMutation(mutate_nout)
+
+    return VertexMutation(rec_mutation), rec_mutation
 end
 
 
@@ -138,9 +153,14 @@ end
 function rep_fork_res(s, n, min_rp=1)
     n == 0 && return s
 
+    # TODO: Wrap elem addition in ActivationContribution to it becomes possible to select params
+    # API does not currently allow this...
+    resconf = VertexConf(IoChange, MutationShield ∘ validated() ∘ NaiveGAflux.default_logging())
+    concconf = ConcConf(MutationShield ∘ validated() ∘ NaiveGAflux.default_logging())
+
     rep = RepeatArchSpace(s, min_rp:3)
-    fork = ForkArchSpace(rep, min_rp:3)
-    res = ResidualArchSpace(rep)
+    fork = ForkArchSpace(rep, min_rp:3, conf=concconf)
+    res = ResidualArchSpace(rep,resconf)
     return rep_fork_res(ArchSpace(ParSpace([rep, fork, res])), n-1, 0)
 end
 

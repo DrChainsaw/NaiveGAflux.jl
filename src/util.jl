@@ -12,8 +12,8 @@ struct Probability
          return new(p, rng)
     end
 end
-Probability(p::Real) = Probability(p, Random.GLOBAL_RNG)
-Probability(p::Integer) = Probability(p, Random.GLOBAL_RNG)
+Probability(p::Real) = Probability(p, rng_default)
+Probability(p::Integer) = Probability(p, rng_default)
 Probability(p::Integer, rng) = Probability(p / 100.0, rng)
 
 """
