@@ -1,4 +1,13 @@
 
+# Temp test to debug appveyor issue
+@testset "crossentropytest" begin
+    @test Flux.crossentropy(Float32[0.1 0.2; 0.3 0.4; 0.5 0.6], Float32[0 1; 1 0; 0 0]) ≈ 1.4067054 rtol = 1e-5
+    @test Flux.crossentropy(Float32[0.1 0.2; 0.3 0.4; 0.5 0.6], Flux.onehotbatch([2,1], 1:3)) ≈ 1.4067054 rtol = 1e-5
+    @test Flux.logitcrossentropy(Float32[0.1 0.2; 0.3 0.4; 0.5 0.6], Float32[0 1; 1 0; 0 0]) ≈ 1.2119015 rtol = 1e-5
+    @test Flux.logitcrossentropy(Float32[0.1 0.2; 0.3 0.4; 0.5 0.6], Flux.onehotbatch([2,1], 1:3)) ≈ 1.2119015 rtol = 1e-5
+end
+
+
 @testset "Smoketest" begin
     import NaiveGAflux:run_experiment
 
