@@ -1,6 +1,8 @@
+module Cifar10
 
+using ..NaiveGAflux
 
-# TODO: Create module
+export run_experiment, initial_models
 
 ## Stuff to fix in NaiveNASflux
 
@@ -18,15 +20,28 @@ function Flux.mapchildren(f, g::CompGraph)
     f.(Flux.children(g))
     return g
 end
-#Flux.isleaf(::AbstractVertex) = false
 
-function Flux.mapchildren(f, m::MutableLayer)
-    m.layer = f(m.layer)
-    return m
+function treelike_mutable(m::Module, T, fs = fieldnames(T))
+  @eval m begin
+    Flux.children(x::$T) = ($([:(x.$f) for f in fs]...),)
+    function Flux.mapchildren(f, x::$T)
+        $([:(x.$fn = f(x.$fn)) for fn in fs]...)
+        return x
+    end
+  end
 end
+
+macro treelike_mutable(T, fs = nothing)
+  fs == nothing || isexpr(fs, :tuple) || error("@treelike_mutable T (a, b)")
+  fs = fs == nothing ? [] : [:($(map(QuoteNode, fs.args)...),)]
+  :(treelike_mutable(@__MODULE__, $(esc(T)), $(fs...)))
+end
+
+@treelike_mutable ActivationContribution
 
 ## End stuff to fix in NaiveNASflux
 
+# Stop-gap solution until a real candidate/entity type is created
 struct Model
     g::CompGraph
     opt
@@ -64,10 +79,6 @@ struct GpVertex <: AbstractArchSpace end
 (s::GpVertex)(in::AbstractVertex, rng=nothing; outsize=nothing) = funvertex(globalpooling2d, in)
 (s::GpVertex)(name::String, in::AbstractVertex, rng=nothing; outsize=nothing) = funvertex(join([name,".globpool"]), globalpooling2d, in)
 
-struct SoftMaxVertex <: AbstractArchSpace end
-(s::SoftMaxVertex)(in::AbstractVertex, rng=nothing; outsize=nothing) = funvertex(softmax, in)
-(s::SoftMaxVertex)(name::String, in::AbstractVertex, rng=nothing; outsize=nothing) = funvertex(join([name,".softmax"]), softmax, in)
-
 funvertex(fun, in::AbstractVertex) = invariantvertex(fun(s), in, mutation=IoChange, traitdecoration = MutationShield ∘ validated() ∘ NaiveGAflux.default_logging())
 
 funvertex(name::String, fun, in::AbstractVertex) =
@@ -76,15 +87,8 @@ invariantvertex(fun, in, mutation=IoChange, traitdecoration = MutationShield ∘
 
 function initial_archspace()
 
-    # TODO: identity and shield is a Workaround for NaiveNASflux issue #9
-    vc_nopar = LayerVertexConf(identity, MutationShield ∘ validated() ∘ NaiveGAflux.default_logging())
-
-    layerconf = LayerVertexConf(
-    #ActivationContribution ∘ Fails on gpu :(
-    LazyMutable, validated() ∘ NaiveGAflux.default_logging())
-    outconf = LayerVertexConf(
-    #ActivationContribution ∘
-    LazyMutable, MutationShield ∘ validated() ∘ NaiveGAflux.default_logging())
+    layerconf = LayerVertexConf(ActivationContribution ∘ LazyMutable, validated() ∘ NaiveGAflux.default_logging())
+    outconf = LayerVertexConf(ActivationContribution ∘ LazyMutable, MutationShield ∘ validated() ∘ NaiveGAflux.default_logging())
 
     acts = [identity, relu, elu, selu]
 
@@ -155,3 +159,5 @@ function convspace(conf, outsizes, kernelsizes, acts)
 
     return ArchSpace(ParSpace([conv2d, convbn, bnconv]))
 end
+
+end  # module cifar10

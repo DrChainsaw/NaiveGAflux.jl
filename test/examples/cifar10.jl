@@ -9,7 +9,7 @@ end
 
 
 @testset "Smoketest" begin
-    import NaiveGAflux:run_experiment
+    using NaiveGAflux.Cifar10
 
     Random.seed!(NaiveGAflux.rng_default, 12345)
 

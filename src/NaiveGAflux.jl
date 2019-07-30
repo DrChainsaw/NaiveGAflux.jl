@@ -24,6 +24,9 @@ export BaseLayerSpace, AbstractParSpace, SingletonParSpace, Singleton2DParSpace,
 # functions
 export mutate, allow_mutation, select
 
+# Examples
+export Cifar10
+
 include("util.jl")
 include("mutation.jl")
 include("archspace.jl")
