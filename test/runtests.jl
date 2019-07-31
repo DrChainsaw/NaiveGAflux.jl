@@ -18,11 +18,11 @@ using Test
     @info "Testing util"
     include("util.jl")
 
-    @info "Testing mutation"
-    include("mutation.jl")
-
     @info "Testing archspace"
     include("archspace.jl")
+
+    @info "Testing mutation"
+    include("mutation.jl")
 
     @info "Testing CIFAR10 example"
     include("examples/cifar10.jl")

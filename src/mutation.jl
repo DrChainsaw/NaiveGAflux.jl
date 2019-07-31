@@ -9,8 +9,9 @@ abstract type AbstractMutation{T} end
 
 """
     MutationProbability{T} <:AbstractMutation{T}
+    MutationProbability(m::AbstractMutation{T}, p::Probability)
 
-Applies a wrapped `AbstractMutation` with a configured probability
+Applies a wrapped `AbstractMutation` with a configured `Probability`
 """
 struct MutationProbability{T} <:AbstractMutation{T}
     m::AbstractMutation{T}
@@ -25,6 +26,7 @@ end
 
 """
     MutationList{T} <: AbstractMutation{T}
+    MutationList(m::AbstractMutation{T}...)
 
 Applies all wrapped `AbstractMutation{T}`s to each entity of type `T`.
 """
@@ -36,6 +38,7 @@ MutationList(m::AbstractMutation{T}...) where T = MutationList(collect(m))
 
 """
     RecordMutation{T} <:AbstractMutation{T}
+    RecordMutation(m::AbstractMutation{T})
 
 Records all mutated entities.
 
@@ -53,6 +56,8 @@ end
 
 """
     VertexMutation <:AbstractMutation{CompGraph}
+    VertexMutation(m::AbstractMutation{AbstractVertex}, s::AbstractVertexSelection)
+    VertexMutation(m::AbstractMutation{AbstractVertex})
 
 Applies a wrapped `AbstractMutation{AbstractVertex}` for each selected vertex in a `CompGraph`.
 
@@ -71,10 +76,13 @@ end
 
 """
     NoutMutation <:AbstractMutation{AbstractVertex}
+    NoutMutation(l1::Real,l2::Real, rng::AbstractRNG)
+    NoutMutation(limit, rng::AbstractRNG=rng_default)
+    NoutMutation(l1,l2)
 
 Mutate the out size of a vertex.
 
-Size is changed by `x * nout(v)` quantized to closest non-zero integer of `minΔnoutfactor(v)` where `x` is drawn from `U(minrel, maxrel)`
+Size is changed by `x * nout(v)` quantized to closest non-zero integer of `minΔnoutfactor(v)` where `x` is drawn from `U(minrel, maxrel)` where `minrel` and `maxrel` are `l1` and `l2` if `l1 < l2` and `l2` and `l1` otherwise.
 """
 struct NoutMutation <:AbstractMutation{AbstractVertex}
     minrel::Real
@@ -98,3 +106,23 @@ function (m::NoutMutation)(v::AbstractVertex)
 
     Δnout(v, Δ)
 end
+
+"""
+    AddVertexMutation <:AbstractMutation{AbstractVertex}
+    AddVertexMutation(s::AbstractArchSpace, outselect::Function, rng::AbstractRNG)
+    AddVertexMutation(s, outselect::Function=identity)
+    AddVertexMutation(s, rng::AbstractRNG)
+
+Add insert a vertex from the wrapped `AbstractArchSpace` `s` after a given vertex `v`.
+
+The function `outselect` takes an `AbstractVector{AbstractVertex}` representing the output of `v` and returns an `AbstractVector{AbstractVertex}` which shall be reconnected to the vertex `v'` returned by `s`. Defaults to `identity` meaning all outputs of `v` are reconnected to `v'`.
+"""
+struct AddVertexMutation <:AbstractMutation{AbstractVertex}
+    s::AbstractArchSpace
+    outselect::Function
+    rng::AbstractRNG
+end
+AddVertexMutation(s, outselect::Function=identity) = AddVertexMutation(s, outselect, rng_default)
+AddVertexMutation(s, rng::AbstractRNG) = AddVertexMutation(s, identity, rng)
+
+(m::AddVertexMutation)(v::AbstractVertex) = insert!(v, vi -> m.s(vi, outsize=nout(vi)), m.outselect)

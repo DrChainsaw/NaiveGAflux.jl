@@ -14,7 +14,7 @@ export Probability, MutationShield
 export AbstractVertexSelection, AllVertices, FilterMutationAllowed
 
 # mutation types
-export AbstractMutation, MutationProbability, MutationList, RecordMutation, VertexMutation, NoutMutation
+export AbstractMutation, MutationProbability, MutationList, RecordMutation, VertexMutation, NoutMutation, AddVertexMutation
 
 # architecture spaces
 export AbstractArchSpace, VertexSpace, ArchSpace, RepeatArchSpace, ListArchSpace, ForkArchSpace, ResidualArchSpace
@@ -29,8 +29,8 @@ export mutate, allow_mutation, select
 export Cifar10
 
 include("util.jl")
-include("mutation.jl")
 include("archspace.jl")
+include("mutation.jl")
 
 include("examples/cifar10.jl")
 

@@ -63,4 +63,26 @@
         NoutMutation(-0.1, 0.3, rng)(v)
         @test nout(v) == 12
     end
+
+    @testset "AddVertexMutation" begin
+        inpt = inputvertex("in", 3, FluxDense())
+        v1 = dense(inpt, 5)
+
+        @test inputs(v1) == [inpt]
+
+        space = ArchSpace(DenseSpace(BaseLayerSpace(4, relu)))
+
+        AddVertexMutation(space)(inpt)
+
+        @test inputs(v1) != [inpt]
+        @test nin(v1) == [3]
+
+        v2 = dense(v1, 2)
+        v3 = dense(v1, 1)
+
+        AddVertexMutation(space, outs -> view(outs, 2))(v1)
+
+        @test inputs(v2) == [v1]
+        @test inputs(v3) != [v1]
+    end
 end
