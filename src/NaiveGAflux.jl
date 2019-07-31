@@ -14,7 +14,7 @@ export Probability, MutationShield
 export AbstractVertexSelection, AllVertices, FilterMutationAllowed
 
 # mutation types
-export AbstractMutation, MutationProbability, MutationList, RecordMutation, VertexMutation, NoutMutation, AddVertexMutation
+export AbstractMutation, MutationProbability, MutationList, RecordMutation, VertexMutation, NoutMutation, AddVertexMutation, RemoveVertexMutation
 
 # architecture spaces
 export AbstractArchSpace, VertexSpace, ArchSpace, RepeatArchSpace, ListArchSpace, ForkArchSpace, ResidualArchSpace

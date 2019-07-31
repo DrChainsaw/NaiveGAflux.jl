@@ -113,7 +113,7 @@ end
     AddVertexMutation(s, outselect::Function=identity)
     AddVertexMutation(s, rng::AbstractRNG)
 
-Add insert a vertex from the wrapped `AbstractArchSpace` `s` after a given vertex `v`.
+Insert a vertex from the wrapped `AbstractArchSpace` `s` after a given vertex `v`.
 
 The function `outselect` takes an `AbstractVector{AbstractVertex}` representing the output of `v` and returns an `AbstractVector{AbstractVertex}` which shall be reconnected to the vertex `v'` returned by `s`. Defaults to `identity` meaning all outputs of `v` are reconnected to `v'`.
 """
@@ -126,3 +126,21 @@ AddVertexMutation(s, outselect::Function=identity) = AddVertexMutation(s, outsel
 AddVertexMutation(s, rng::AbstractRNG) = AddVertexMutation(s, identity, rng)
 
 (m::AddVertexMutation)(v::AbstractVertex) = insert!(v, vi -> m.s(vi, outsize=nout(vi)), m.outselect)
+
+"""
+    RemoveVertexMutation <:AbstractMutation{AbstractVertex}
+    RemoveVertexMutation(s::RemoveStrategy)
+    RemoveVertexMutation()
+
+Remove the given vertex `v` using the configured `RemoveStrategy`.
+
+Default size align strategy is `IncreaseSmaller -> DecreaseBigger -> AlignSizeBoth -> FailAlignSizeWarn -> FailAlignSizeRevert`.
+
+Default reconnect strategy is `ConnectAll`.
+"""
+struct RemoveVertexMutation <:AbstractMutation{AbstractVertex}
+    s::RemoveStrategy
+end
+RemoveVertexMutation() = RemoveVertexMutation(RemoveStrategy(IncreaseSmaller(DecreaseBigger(AlignSizeBoth(FailAlignSizeWarn())))))
+
+(m::RemoveVertexMutation)(v::AbstractVertex) = remove!(v, m.s)

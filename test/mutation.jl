@@ -85,4 +85,14 @@
         @test inputs(v2) == [v1]
         @test inputs(v3) != [v1]
     end
+
+    @testset "RemoveVertexMutation" begin
+        inpt = inputvertex("in", 3, FluxDense())
+        v1 = dense(inpt, 5)
+        v2 = dense(v1, 3)
+
+        RemoveVertexMutation()(v1)
+
+        @test inputs(v2) == [inpt]
+    end
 end
