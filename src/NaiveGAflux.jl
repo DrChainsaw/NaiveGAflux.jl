@@ -3,6 +3,7 @@ module NaiveGAflux
 using Reexport
 @reexport using NaiveNASflux
 using Random
+using Logging
 
 const rng_default = Random.GLOBAL_RNG
 

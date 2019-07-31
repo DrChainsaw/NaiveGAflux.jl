@@ -68,17 +68,12 @@ function select_pars(record)
 end
 
 function mutation()
-    increase_nout = NoutMutation(+0.1) # Max 10% increase in output size
-    decrease_nout = NoutMutation(-0.1) # Max 10% decrease in output size
+    mutate_nout = RecordMutation(NoutMutation(-0.1, 0.1)) # Max 10% change in output size
 
     # Create a shorthand alias for MutationProbability
     mp(m,p) = MutationProbability(m, Probability(p))
-    mutate_nout = MutationList(mp(increase_nout, 0.02), mp(decrease_nout, 0.02))
 
-    # For parameter selection after mutation is completed
-    rec_mutation = RecordMutation(mutate_nout)
-
-    return VertexMutation(rec_mutation), rec_mutation
+    return VertexMutation(mp(mutate_nout, 0.05)), mutate_nout
 end
 
 
@@ -94,16 +89,16 @@ struct GpVertex <: AbstractArchSpace end
 (s::GpVertex)(in::AbstractVertex, rng=nothing; outsize=nothing) = funvertex(globalpooling2d, in)
 (s::GpVertex)(name::String, in::AbstractVertex, rng=nothing; outsize=nothing) = funvertex(join([name,".globpool"]), globalpooling2d, in)
 
-funvertex(fun, in::AbstractVertex) = invariantvertex(fun(s), in, mutation=IoChange, traitdecoration = MutationShield ∘ validated() ∘ NaiveGAflux.default_logging())
+funvertex(fun, in::AbstractVertex) = invariantvertex(fun(s), in, mutation=IoChange, traitdecoration = MutationShield ∘ NaiveGAflux.default_logging() ∘ validated())
 
 funvertex(name::String, fun, in::AbstractVertex) =
-invariantvertex(fun, in, mutation=IoChange, traitdecoration = MutationShield ∘ validated() ∘ NaiveGAflux.default_logging() ∘ named(name))
+invariantvertex(fun, in, mutation=IoChange, traitdecoration = MutationShield ∘ NaiveGAflux.default_logging() ∘ validated() ∘ named(name))
 
 
 function initial_archspace()
 
-    layerconf = LayerVertexConf(ActivationContribution ∘ LazyMutable, validated() ∘ NaiveGAflux.default_logging())
-    outconf = LayerVertexConf(ActivationContribution ∘ LazyMutable, MutationShield ∘ validated() ∘ NaiveGAflux.default_logging())
+    layerconf = LayerVertexConf(ActivationContribution ∘ LazyMutable, NaiveGAflux.default_logging() ∘ validated())
+    outconf = LayerVertexConf(ActivationContribution ∘ LazyMutable, MutationShield ∘ NaiveGAflux.default_logging() ∘ validated())
 
     acts = [identity, relu, elu, selu]
 
@@ -153,10 +148,10 @@ end
 function rep_fork_res(s, n, min_rp=1)
     n == 0 && return s
 
-    # TODO: Wrap elem addition in ActivationContribution to it becomes possible to select params
+    # TODO: Wrap elem addition in ActivationContribution so it becomes possible to select params
     # API does not currently allow this...
-    resconf = VertexConf(IoChange, MutationShield ∘ validated() ∘ NaiveGAflux.default_logging())
-    concconf = ConcConf(MutationShield ∘ validated() ∘ NaiveGAflux.default_logging())
+    resconf = VertexConf(IoChange, MutationShield ∘ NaiveGAflux.default_logging() ∘ validated())
+    concconf = ConcConf(MutationShield ∘ NaiveGAflux.default_logging() ∘ validated())
 
     rep = RepeatArchSpace(s, min_rp:3)
     fork = ForkArchSpace(rep, min_rp:3, conf=concconf)

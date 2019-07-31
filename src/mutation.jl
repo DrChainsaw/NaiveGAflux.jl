@@ -74,19 +74,27 @@ end
 
 Mutate the out size of a vertex.
 
-Size is changed by `x * nout(v)` quantized to closest non-zero integer of `minΔnoutfactor(v)` where `x` is drawn from `U(0, maxrel)` if `maxrel` is positive or U(maxrel, 0) if `maxrel` is negative.
+Size is changed by `x * nout(v)` quantized to closest non-zero integer of `minΔnoutfactor(v)` where `x` is drawn from `U(minrel, maxrel)`
 """
 struct NoutMutation <:AbstractMutation{AbstractVertex}
+    minrel::Real
     maxrel::Real
     rng::AbstractRNG
+    NoutMutation(l1,l2, rng) = l1 < l2 ? new(l1, l2, rng) : new(l2,l1, rng)
 end
-NoutMutation(maxrel::Real) = NoutMutation(maxrel, rng_default)
+NoutMutation(limit, rng::AbstractRNG=rng_default) = NoutMutation(0, limit, rng)
+NoutMutation(l1,l2) = NoutMutation(l1,l2, rng_default)
 function (m::NoutMutation)(v::AbstractVertex)
     Δfactor = minΔnoutfactor(v)
     # Missing Δfactor means vertex can't be mutated, for example if it touches an immutable vertex such as an input vertex
     ismissing(Δfactor) && return
 
-    Δ = Int(sign(m.maxrel) * max(Δfactor, (nout(v) * rand(m.rng) * abs(m.maxrel)) ÷ Δfactor * Δfactor))
+    shift = m.minrel
+    scale = m.maxrel - m.minrel
+
+    x = rand(m.rng) * scale + shift
+    xq = (nout(v) * x) ÷ Δfactor
+    Δ = Int(sign(x) * max(Δfactor, abs(xq) * Δfactor))
 
     Δnout(v, Δ)
 end

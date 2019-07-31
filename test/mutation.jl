@@ -59,5 +59,8 @@
 
         NoutMutation(0.001, rng)(v)
         @test nout(v) == 11
+
+        NoutMutation(-0.1, 0.3, rng)(v)
+        @test nout(v) == 12
     end
 end
