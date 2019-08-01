@@ -25,5 +25,5 @@ using Test
     include("mutation.jl")
 
     @info "Testing CIFAR10 example"
-    include("examples/cifar10.jl")
+    include("examples/Cifar10.jl")
 end

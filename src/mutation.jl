@@ -55,6 +55,26 @@ function (m::RecordMutation{T})(e::T) where T
 end
 
 """
+    LogMutation{T} <:AbstractMutation{T}
+    LogMutation(strfun, m::AbstractMutation{T})
+    LogMutation(strfun, level::LogLevel, m::AbstractMutation{T})
+
+Logs all mutation operations.
+
+Argument `strfun` maps the mutated entity to the logged string.
+"""
+struct LogMutation{T} <:AbstractMutation{T}
+    strfun
+    level::LogLevel
+    m::AbstractMutation{T}
+end
+LogMutation(strfun, m::AbstractMutation{T}) where T = LogMutation(strfun, Logging.Info, m)
+function (m::LogMutation{T})(e::T) where T
+    @logmsg m.level m.strfun(e)
+    m.m(e)
+end
+
+"""
     VertexMutation <:AbstractMutation{CompGraph}
     VertexMutation(m::AbstractMutation{AbstractVertex}, s::AbstractVertexSelection)
     VertexMutation(m::AbstractMutation{AbstractVertex})

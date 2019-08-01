@@ -24,6 +24,15 @@
         @test getfield.(probes, :mutated) == [[1],[1],[1]]
     end
 
+    @testset "LogMutation" begin
+        using Logging
+        probe = ProbeMutation(Int)
+        m = LogMutation(i -> "Mutate $i", probe)
+
+        @test_logs (:info, "Mutate 17") m(17)
+        @test probe.mutated == [17]
+    end
+
     dense(in, outsizes...) = foldl((next,size) -> mutable(Dense(nout(next), size), next), outsizes, init=in)
 
     @testset "VertexMutation" begin
