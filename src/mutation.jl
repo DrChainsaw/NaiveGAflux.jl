@@ -74,6 +74,7 @@ function (m::LogMutation{T})(e::T) where T
     m.m(e)
 end
 
+
 """
     VertexMutation <:AbstractMutation{CompGraph}
     VertexMutation(m::AbstractMutation{AbstractVertex}, s::AbstractVertexSelection)
@@ -164,3 +165,79 @@ end
 RemoveVertexMutation() = RemoveVertexMutation(RemoveStrategy(IncreaseSmaller(DecreaseBigger(AlignSizeBoth(FailAlignSizeWarn())))))
 
 (m::RemoveVertexMutation)(v::AbstractVertex) = remove!(v, m.s)
+
+"""
+    NeuronSelectMutation{T} <: AbstractMutation{AbstractVertex}
+    NeuronSelectMutation(m::AbstractMutation{AbstractVertex})
+    NeuronSelectMutation(rankfun, m::AbstractMutation{AbstractVertex})
+    NeuronSelectMutation(rankfun::Function, strategy, m::RecordMutation{AbstractVertex})
+
+Selects neurons of vertices mutated by the wrapped `RecordMutation`.
+
+Possible to select ranking method for neurons using `rankfun` which takes a mutated vertex as input and returns indices of neurons in ascending order (i.e last will be kept).
+
+How to select neurons depends a bit on what operation the wrapped `RecordMutation` performs. If not supplied explicitly an attempt to infer it will be made, resulting in an error if not possible.
+"""
+struct NeuronSelectMutation{T} <: AbstractMutation{AbstractVertex}
+    rankfun::Function
+    strategy::T
+    m::RecordMutation{AbstractVertex}
+end
+NeuronSelectMutation(rankfun, m::AbstractMutation{AbstractVertex}) = NeuronSelectMutation(rankfun, neuron_select_strategy(m), RecordMutation(m))
+NeuronSelectMutation(m::AbstractMutation{AbstractVertex}) = NeuronSelectMutation(sortperm ∘ neuron_value, m)
+NeuronSelectMutation(m::RecordMutation{AbstractVertex}) = NeuronSelectMutation(sortperm ∘ neuron_value, neuron_select_strategy(m.m), m)
+
+(m::NeuronSelectMutation)(v::AbstractVertex) = m.m(v)
+
+neuron_select_strategy(::T) where T <:AbstractMutation = error("Neuron select strategy not implemented for $T")
+neuron_select_strategy(::RemoveVertexMutation) = RemoveVertex()
+neuron_select_strategy(::NoutMutation) = Nout()
+
+struct Nout end
+struct RemoveVertex end
+
+function select(m::NeuronSelectMutation)
+    for v in m.m.mutated
+        select_neurons(m.strategy, v, m.rankfun)
+    end
+end
+
+
+select_neurons(::T, v::AbstractVertex, rankfun::Function) where T = error("Neuron select not implemented for $T")
+function select_neurons(::Nout, v::AbstractVertex, rankfun::Function, s=NaiveNASlib.VisitState{Vector{Int}}(v))
+    # nout_org will fail if op(v) is not IoChange
+    # This package is kinda hardcoded to use IoChange, and with some polishing of NaiveNASlib it should be the only possible option
+    Δout = nout(v) - nout_org(op(v))
+
+    # Note: Case of Δnout > 0 (size increase) does not require any neuron selection
+    if Δout < 0
+        ranked = rankfun(v)
+        inds= sort(ranked[-(Δout-1):end])
+        Δnout(v, inds, s=s)
+    end
+end
+
+function select_neurons(::RemoveVertex, v::AbstractVertex, rankfun::Function)
+    # This could be messy due to many different cases:
+    # 1: Outsize of input vertex is increased
+    # 2: Insize of output vertex is increased
+    # 3: Outsize of input vertex is decreased
+    # 4: Insize of output vertex is decreased
+    # as well as all combinations of two of the above.
+
+    # However, the only cases which needs special action are those when 3 has happened and they all warrant the same action: Select neurons from input vertex but don't touch the output vertex
+
+    # When 4 has happened it might be useful to try to select the best input neurons
+    # Can one assume that "best output neurons" from input vertex are "best input neurons" even if those "best output neurons" belong to the removed vertex?
+
+    Δins = nin(v) - nin_org(op(v))
+    for i in eachindex(Δins)
+        Δins[i] >= 0 && continue
+        vin = inputs(v)[i]
+
+        s = NaiveNASlib.VisitState{Vector{Int}}(vin)
+        NaiveNASlib.visited_in!.(s, outputs(vin))
+
+        select_neurons(Nout(), vin, rankfun, s)
+    end
+end

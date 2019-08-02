@@ -33,7 +33,7 @@
         @test probe.mutated == [17]
     end
 
-    dense(in, outsizes...) = foldl((next,size) -> mutable(Dense(nout(next), size), next), outsizes, init=in)
+    dense(in, outsizes...;layerfun = LazyMutable) = foldl((next,size) -> mutable(Dense(nout(next), size), next, layerfun=layerfun), outsizes, init=in)
 
     @testset "VertexMutation" begin
         inpt = inputvertex("in", 4, FluxDense())
@@ -103,5 +103,79 @@
         RemoveVertexMutation()(v1)
 
         @test inputs(v2) == [inpt]
+    end
+
+    @testset "NeuronSelectMutation" begin
+
+        oddfirst(v) = reverse(vcat(1:2:nout_org(op(v)), 2:2:nout_org(op(v))))
+
+        @testset "NeuronSelectMutation NoutMutation" begin
+            inpt = inputvertex("in", 3, FluxDense())
+            v1 = dense(inpt, 5)
+            v2 = mutable(BatchNorm(nout(v1)), v1)
+            v3 = dense(v2, 6)
+
+            m = NeuronSelectMutation(oddfirst, NoutMutation(-0.5, MockRng([0])))
+            m(v2)
+            select(m)
+
+            @test out_inds(op(v2)) == [1,3,5]
+            @test in_inds(op(v3)) == [[1,3,5]]
+            @test out_inds(op(v1)) == [1,3,5]
+        end
+
+        @testset "NeuronSelectMutation RemoveVertexMutation" begin
+            m = NeuronSelectMutation(oddfirst, RemoveVertexMutation())
+
+            # Increase the input size
+            inpt = inputvertex("in", 2, FluxDense())
+            v3 = dense(inpt, 7,5,3, layerfun=identity)
+
+            m(inputs(v3)[])
+            select(m)
+            @test in_inds(op(v3)) == [[1,2,3,4,5,-1,-1]]
+            @test out_inds(op(inputs(v3)[])) == 1:7
+            apply_mutation(CompGraph(inpt, v3))
+
+            # Increase the output size
+            v3 = dense(inpt, 3,5,7, layerfun=identity)
+
+            m(inputs(v3)[])
+            select(m)
+            @test in_inds(op(v3)) == [[1,2,3,4,5]]
+            @test out_inds(op(inputs(v3)[])) == [1,2,3,-1,-1]
+            apply_mutation(CompGraph(inpt, v3))
+
+            # Decrease the output size
+            m = NeuronSelectMutation(oddfirst, RemoveVertexMutation(RemoveStrategy(DecreaseBigger())))
+            v3 = dense(inpt, 7,5,3, layerfun=identity)
+
+            m(inputs(v3)[])
+            select(m)
+            @test in_inds(op(v3)) == [[1,2,3,4,5]]
+            @test out_inds(op(inputs(v3)[])) == [1,2,3,5,7]
+            apply_mutation(CompGraph(inpt, v3))
+
+            # Decrease the input size
+            v3 = dense(inpt, 3,5,7, layerfun=identity)
+
+            m(inputs(v3)[])
+            select(m)
+            @test in_inds(op(v3)) == [[1,2,3]]
+            @test out_inds(op(inputs(v3)[])) == 1:3
+            apply_mutation(CompGraph(inpt, v3))
+
+            # Decrease outsize of input and increase insize of output
+            m = NeuronSelectMutation(oddfirst, RemoveVertexMutation(RemoveStrategy(AlignSizeBoth())))
+            v3 = dense(inpt, 7,5,3, layerfun=identity)
+
+            m(inputs(v3)[])
+            select(m)
+            @test in_inds(op(v3)) == [[1,2,3,4,5,-1]]
+            @test out_inds(op(inputs(v3)[])) == [1,2,3,4,5,7]
+            apply_mutation(CompGraph(inpt, v3))
+
+        end
+
     end
 end
