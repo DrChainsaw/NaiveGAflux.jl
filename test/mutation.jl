@@ -176,56 +176,74 @@
             apply_mutation(CompGraph(inpt, v3))
         end
 
-        @testset "RemoveZeroNout" begin
-            inpt = inputvertex("in", 4, FluxDense())
-            v0 = mutable("v0", Dense(nout(inpt), 5), inpt)
-            v1 = mutable("v1", Dense(nout(v0), 5), v0)
-            v2 = mutable("v2", Dense(nout(v1), 5), v1)
+        @testset "NeuronSelect" begin
+            m1 = MutationProbability(NeuronSelectMutation(oddfirst, NoutMutation(0.5, MockRng([1]))), Probability(0.2, MockRng([0.1, 0.3])))
+            m2 = MutationProbability(NeuronSelectMutation(oddfirst, NoutMutation(-0.5, MockRng([0]))), Probability(0.2, MockRng([0.3, 0.1])))
+            m = VertexMutation(MutationList(m1, m2))
 
-            function path(bname, add=nothing)
-                p1 = mutable("$(bname)1", Dense(nout(v2), 6), v2)
-                p2pa1 = mutable("$(bname)2pa1", Dense(nout(p1), 2), p1)
-                p2pa2 = mutable("$(bname)2pa2", Dense(nout(p2pa1), 2), p2pa1)
-                p2pb1 = mutable("$(bname)2pb1", Dense(nout(p1), 1), p1)
-                p2pb2 = mutable("$(bname)2pb2", Dense(nout(p2pb1), 5), p2pb1)
-                if !isnothing(add) p2pb2 = traitconf(named("$(bname)2add")) >> p2pb2 + add end
-                p3 = concat(p2pa2,p2pb2, traitdecoration=named("$(bname)3"))
-                return mutable("$(bname)4", Dense(nout(p3), 4), p3)
-            end
+            inpt = inputvertex("in", 2, FluxDense())
+            v3 = dense(inpt, 3,5,7)
+            g = CompGraph(inpt, v3)
 
-            vert(want::String, graph::CompGraph) = vertices(graph)[name.(vertices(graph)) .== want][]
-            vert(want::String, v::AbstractVertex) = flatten(v)[name.(flatten(v)) .== want][]
+            m(g)
+            NeuronSelect()(m, g)
+            vs = vertices(g)[2:end]
 
-            for to_rm in ["pa4", "pa2pa2"]
-                for vconc_out in [nothing, "pa1", "pa2pa2", "pa3", "pa4"]
-                    for vadd_in in [nothing, v0, v1, v2]
+            @test [out_inds(op(vs[1]))] == in_inds(op(vs[2])) == [[1,2,3,-1]]
+            @test [out_inds(op(vs[2]))] == in_inds(op(vs[3])) == [[1,3,5]]
+            @test out_inds(op(vs[3])) == [1,2,3,4,5,6,7,-1,-1,-1]
+        end
+    end
 
-                        #Path to remove
-                        pa = path("pa",vadd_in)
-                        #Other path
-                        pb = path("pb")
+    @testset "RemoveZeroNout" begin
+        inpt = inputvertex("in", 4, FluxDense())
+        v0 = mutable("v0", Dense(nout(inpt), 5), inpt)
+        v1 = mutable("v1", Dense(nout(v0), 5), v0)
+        v2 = mutable("v2", Dense(nout(v1), 5), v1)
 
-                        v3 = concat(pa,pb, traitdecoration = named("v3"))
-                        v4 = mutable("v4", Dense(nout(v3), 6), v3)
-                        if !isnothing(vconc_out)
-                            v4 = concat(v4, vert(vconc_out, v4), traitdecoration = named("v4$(vconc_out)_conc"))
-                        end
-                        v5 = mutable("v5", Dense(nout(v4), 5), v4)
+        function path(bname, add=nothing)
+            p1 = mutable("$(bname)1", Dense(nout(v2), 6), v2)
+            p2pa1 = mutable("$(bname)2pa1", Dense(nout(p1), 2), p1)
+            p2pa2 = mutable("$(bname)2pa2", Dense(nout(p2pa1), 2), p2pa1)
+            p2pb1 = mutable("$(bname)2pb1", Dense(nout(p1), 1), p1)
+            p2pb2 = mutable("$(bname)2pb2", Dense(nout(p2pb1), 5), p2pb1)
+            if !isnothing(add) p2pb2 = traitconf(named("$(bname)2add")) >> p2pb2 + add end
+            p3 = concat(p2pa2,p2pb2, traitdecoration=named("$(bname)3"))
+            return mutable("$(bname)4", Dense(nout(p3), 4), p3)
+        end
 
-                        g = copy(CompGraph(inpt, v5))
-                        @test size(g(ones(4,2))) == (5,2)
+        vert(want::String, graph::CompGraph) = vertices(graph)[name.(vertices(graph)) .== want][]
+        vert(want::String, v::AbstractVertex) = flatten(v)[name.(flatten(v)) .== want][]
 
-                        to_remove = vert(to_rm, g)
-                        Δnout(to_remove, -nout(to_remove))
+        for to_rm in ["pa4", "pa2pa2"]
+            for vconc_out in [nothing, "pa1", "pa2pa2", "pa3", "pa4"]
+                for vadd_in in [nothing, v0, v1, v2]
 
-                        RemoveZeroNout()(g)
-                        apply_mutation(g)
-                        @test !in(to_remove, vertices(g))
-                        @test size(g(ones(4,2))) == (5,2)
+                    #Path to remove
+                    pa = path("pa",vadd_in)
+                    #Other path
+                    pb = path("pb")
+
+                    v3 = concat(pa,pb, traitdecoration = named("v3"))
+                    v4 = mutable("v4", Dense(nout(v3), 6), v3)
+                    if !isnothing(vconc_out)
+                        v4 = concat(v4, vert(vconc_out, v4), traitdecoration = named("v4$(vconc_out)_conc"))
                     end
+                    v5 = mutable("v5", Dense(nout(v4), 5), v4)
+
+                    g = copy(CompGraph(inpt, v5))
+                    @test size(g(ones(4,2))) == (5,2)
+
+                    to_remove = vert(to_rm, g)
+                    Δnout(to_remove, -nout(to_remove))
+
+                    RemoveZeroNout()(g)
+                    apply_mutation(g)
+                    @test !in(to_remove, vertices(g))
+                    @test size(g(ones(4,2))) == (5,2)
                 end
             end
         end
-
     end
+
 end
