@@ -196,6 +196,11 @@ neuron_select_strategy(::NoutMutation) = Nout()
 struct Nout end
 struct RemoveVertex end
 
+"""
+    select(m::NeuronSelectMutation)
+
+Select neurons for each `AbstractVertex` mutated by `m`.
+"""
 function select(m::NeuronSelectMutation)
     for v in m.m.mutated
         select_neurons(m.strategy, v, m.rankfun)
@@ -240,4 +245,95 @@ function select_neurons(::RemoveVertex, v::AbstractVertex, rankfun::Function)
 
         select_neurons(Nout(), vin, rankfun, s)
     end
+end
+
+"""
+    PostMutation{T} <: AbstractMutation{T}
+
+Performs a set of actions after a wrapped `AbstractMutation` is applied.
+"""
+struct PostMutation{T} <: AbstractMutation{T}
+    actions
+    m::AbstractMutation{T}
+end
+
+
+"""
+    NeuronSelect()
+
+Search a given `AbstractMutation` hieararchy for `NeuronSelectMutations` and invoke `select` on them
+"""
+struct NeuronSelect end
+
+(s::NeuronSelect)(m, e) = s(m)
+function (s::NeuronSelect)(m) end
+(s::NeuronSelect)(m::AbstractMutation) = foreach(fn -> s(getfield(m,s)), fieldnames(m))
+(s::NeuronSelect)(a::Union{AbstractVector, Tuple}) = foreach(ae -> s(ae), a)
+(s::NeuronSelect)(m::NeuronSelectMutation) = select(m)
+
+"""
+    RemoveZeroNout()
+    RemoveZeroNout(fallback)
+
+Search for vertices with zero output size and remove them and all of their input vertices if possible to do so witout removing an input or output vertex.
+
+Removal is only possible if a vertex is inside a parallel path which will later be concatenated.
+"""
+struct RemoveZeroNout
+    fallback
+end
+RemoveZeroNout() = RemoveZeroNout(IncreaseZeroNout())
+struct IncreaseZeroNout end
+
+(r::RemoveZeroNout)(m, e) = r(e)
+function (r::RemoveZeroNout)(g::CompGraph)
+    topoligical_order = vertices(g)
+    for v in topoligical_order
+        nout(v) == 0 || continue
+
+        # Beware! This turned out to be a lot harder than I first thought.
+        # I'm not sure the algorithm works (or realizes that it won't work) for all possible cases.
+
+        # This obviously only works if v is inside a parallel path which will later be concatenated
+
+        # To make sure it is, we look ahead in forward and backward direction.
+        # If we don't see 1) an input vertex 2) a vertex without outputs (i.e an output vertex) we are good to go
+        fseen, fpoints = findforkpoint(v, topoligical_order, inputs, outputs)
+        isempty(fpoints) && continue
+
+        bseen, bpoints = findforkpoint(v, topoligical_order, outputs, inputs)
+        isempty(bpoints) && continue
+
+        # Ok, fpoints are all vertices where forks with v in them join and bpoints are all vertices where forks with v in them begin
+
+        # If we start removing all seen vertices which are input to an fpoint until we hit a bpoint we should have removed the fork with v in it, right?
+        seen = union(fseen, bseen)
+        to_rm = intersect(vcat(inputs.(fpoints)...), seen)
+        foreach(fpoint -> remove_all_inputs(fpoint, seen, bpoints), to_rm)
+    end
+end
+
+function findforkpoint(v::AbstractVertex, topoligical_order, f1=inputs, f2=outputs, seen = vcat(v, f1(v)), points = AbstractVertex[])
+
+    if all(x -> x in seen, f1(v))
+
+        # Check if we came across a vertex which previously was thought to be a forkpoint and remove it if so
+        if v in points
+            deleteat!(points, indexin([v], points))
+        end
+        # Always visit in reverse topoligical order to mitigate chasing down paths just because we haven't explored them yet
+        nextverts = reverse(topoligical_order[unique(indexin(f2(v), topoligical_order))])
+        push!(seen, filter(v2 -> !in(v2, seen), nextverts)...)
+        foreach(v2 -> findforkpoint(v2, topoligical_order, f1, f2, seen, points), nextverts)
+    elseif !(v in points)
+        push!(points, v)
+    end
+
+    return seen, points
+end
+
+function remove_all_inputs(v, seen, stop)
+    v in stop && return
+    foreach(vrm -> remove_all_inputs(vrm, seen, stop), intersect(inputs(v), seen))
+    remove!(v, RemoveStrategy(ConnectNone(), NoSizeChange()))
 end
