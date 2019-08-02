@@ -1,5 +1,5 @@
 
-@testset "Smoketest" begin
+@testset "CIFAR10 Smoketest" begin
     using NaiveGAflux.Cifar10
 
     struct DummyData end

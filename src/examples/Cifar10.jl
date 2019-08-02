@@ -42,38 +42,43 @@ end
 function evolvemodels!(population)
     @info "\tEvolve population!"
     for model in population
-        m, record = mutation()
-        m(model.g)
-        select_pars(record)
+        mutation, neuron_selection = create_mutation()
+        mutation(model.g)
+        foreach(select, neuron_selection)
         apply_mutation(model.g)
     end
 end
 
-function select_pars(record)
-    for v in record.mutated
-        @info "\t\t Select params for $(name(v))"
-        ranked = sortperm(neuron_value(v))
-        Δout = nout(v) - nout_org(op(v))
-
-        if Δout < 0
-            inds = sort(ranked[-Δout:end])
-            Δnout(v, inds)
-        end
-
-        if Δout > 0
-            inds = vcat(collect(1:nout_org(op(v))), repeat([-1], Δout))
-            Δnout(v, inds)
-        end
-    end
+struct MapArchSpace <: AbstractArchSpace
+    f::Function
+    s::AbstractArchSpace
 end
+(s::MapArchSpace)(in::AbstractVertex, rng=NaiveGAflux.rng_default; outsize=missing) = s.f(s.s(in, rng, outsize=outsize))
+(s::MapArchSpace)(name::String, in::AbstractVertex, rng=rng_default; outsize=missing) = s.f(s.s(name, in, rng, outsize=outsize))
 
-function mutation()
-    mutate_nout = RecordMutation(NoutMutation(-0.1, 0.1)) # Max 10% change in output size
+function create_mutation()
+
+    function rankfun(v)
+        @info "\t\tSelect params for $(name(v))"
+        return sortperm(neuron_value(v))
+    end
+
+    mutate_nout = NeuronSelectMutation(rankfun, NoutMutation(-0.1, 0.1)) # Max 10% change in output size
+
+    #TODO: New layers to have identity mapping
+    addspace = rep_fork_res(convspace(default_layerconf(), 8:128, 1:2:7, [identity, relu, elu, selu]), 1)
+    add_vertex = AddVertexMutation(MapArchSpace(gpu, addspace))
+    rem_vertex = NeuronSelectMutation(rankfun, RemoveVertexMutation())
 
     # Create a shorthand alias for MutationProbability
     mp(m,p) = MutationProbability(m, Probability(p))
 
-    return VertexMutation(mp(mutate_nout, 0.05)), mutate_nout
+    mnout = mp(LogMutation(v -> "\tChange size of vertex $(name(v))", mutate_nout), 0.05)
+    maddv = mp(LogMutation(v -> "\tAdd vertex after $(name(v))", add_vertex), 0.01)
+    mremv = mp(LogMutation(v -> "\tRemove vertex $(name(v))", rem_vertex), 0.01)
+
+    # TODO: Wrap rem_vertex and mutate_nout into some FinalizeMutation which invokes select and apply_mutation
+    return VertexMutation(MutationList(mnout, maddv, mremv)), (rem_vertex, mutate_nout)
 end
 
 
@@ -94,11 +99,13 @@ funvertex(fun, in::AbstractVertex) = invariantvertex(fun(s), in, mutation=IoChan
 funvertex(name::String, fun, in::AbstractVertex) =
 invariantvertex(fun, in, mutation=IoChange, traitdecoration = MutationShield ∘ NaiveGAflux.default_logging() ∘ validated() ∘ named(name))
 
+default_layerconf() = LayerVertexConf(ActivationContribution ∘ LazyMutable, NaiveGAflux.default_logging() ∘ validated())
+
 
 function initial_archspace()
 
-    layerconf = LayerVertexConf(ActivationContribution ∘ LazyMutable, NaiveGAflux.default_logging() ∘ validated())
-    outconf = LayerVertexConf(ActivationContribution ∘ LazyMutable, MutationShield ∘ NaiveGAflux.default_logging() ∘ validated())
+    layerconf = default_layerconf()
+    outconf = LayerVertexConf(layerconf.layerfun, MutationShield ∘ layerconf.traitfun)
 
     acts = [identity, relu, elu, selu]
 
