@@ -107,13 +107,8 @@
 
     @testset "NeuronSelectMutation" begin
 
-        # Dummy neuron score function just to mix things up in a predicable way
-        function oddfirst(v)
-            score = collect(Float32, 1:nout_org(op(v)))
-            score[1:2:end] .+= nout_org(op(v))
-            score[2:2:end] = 1 ./ score[2:2:end]
-            return score
-        end
+        # Dummy neuron selection function just to mix things up in a predicable way
+        oddfirst(v) = vcat(sort(vcat(1:2:nout_org(op(v)), 2:2:nout_org(op(v)))[1:min(nout(v),end)]), -ones(Int, max(0, nout(v) - nout_org(op(v)))))
         batchnorm(inpt) = mutable(BatchNorm(nout(inpt)), inpt)
 
         @testset "NeuronSelectMutation NoutMutation" begin
@@ -216,8 +211,8 @@
             pa2 = concat(pa1pa1, pa1pb1)
             v4 = concat(pa2, pb1, pc1, pd1)
 
-            scorefun(v) = 1:nout_org(op(v))
-            m = NeuronSelectMutation(scorefun , NoutMutation(0.5))
+            rankfun(v) = NaiveGAflux.selectvalidouts(v, v->1:nout_org(op(v)))
+            m = NeuronSelectMutation(rankfun , NoutMutation(0.5))
             push!(m.m.mutated, v4)
 
             g = CompGraph(inpt, v4)

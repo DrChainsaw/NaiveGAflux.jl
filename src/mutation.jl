@@ -174,7 +174,7 @@ RemoveVertexMutation() = RemoveVertexMutation(RemoveStrategy(IncreaseSmaller(Dec
 
 Selects neurons of vertices mutated by the wrapped `RecordMutation`.
 
-Possible to select ranking method for neurons using `rankfun` which takes a mutated vertex as input and returns indices of neurons in ascending order (i.e last will be kept).
+Possible to select ranking method for neurons using `rankfun` which takes a mutated vertex as input and returns indices of selected neurons.
 
 How to select neurons depends a bit on what operation the wrapped `RecordMutation` performs. If not supplied explicitly an attempt to infer it will be made, resulting in an error if not possible.
 """
@@ -184,8 +184,8 @@ struct NeuronSelectMutation{T} <: AbstractMutation{AbstractVertex}
     m::RecordMutation{AbstractVertex}
 end
 NeuronSelectMutation(rankfun, m::AbstractMutation{AbstractVertex}) = NeuronSelectMutation(rankfun, neuron_select_strategy(m), RecordMutation(m))
-NeuronSelectMutation(m::AbstractMutation{AbstractVertex}) = NeuronSelectMutation(neuron_value, m)
-NeuronSelectMutation(m::RecordMutation{AbstractVertex}) = NeuronSelectMutation(neuron_value, neuron_select_strategy(m.m), m)
+NeuronSelectMutation(m::AbstractMutation{AbstractVertex}) = NeuronSelectMutation(default_neuronselect, m)
+NeuronSelectMutation(m::RecordMutation{AbstractVertex}) = NeuronSelectMutation(default_neuronselect, neuron_select_strategy(m.m), m)
 
 (m::NeuronSelectMutation)(v::AbstractVertex) = m.m(v)
 
@@ -207,6 +207,7 @@ function select(m::NeuronSelectMutation)
     end
 end
 
+default_neuronselect(v) = selectvalidouts(v, neuron_value)
 
 select_neurons(::T, v::AbstractVertex, rankfun::Function) where T = error("Neuron select not implemented for $T")
 function select_neurons(::Nout, v::AbstractVertex, rankfun::Function, s=NaiveNASlib.VisitState{Vector{Int}}(v))
@@ -216,7 +217,7 @@ function select_neurons(::Nout, v::AbstractVertex, rankfun::Function, s=NaiveNAS
 
     # Note: Case of Δnout > 0 (size increase) not implemented yet
     if Δout != 0
-        inds= selectvalidouts(v, rankfun)
+        inds= rankfun(v)
         Δnout(v, inds, s=s)
     end
 end
