@@ -71,6 +71,11 @@
         NoutMutation(0.4)(inpt)
         @test nout(inpt) == 3
 
+        # Can't mutate due to too small size
+        v = dense(inpt, 1)
+        NoutMutation(-0.8, -1.0)(v)
+        @test nout(v) == 1
+
         rng = MockRng([0.5])
         v = dense(inpt, 11)
 

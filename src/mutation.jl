@@ -125,6 +125,7 @@ function (m::NoutMutation)(v::AbstractVertex)
     xq = (nout(v) * x) ÷ Δfactor
     Δ = Int(sign(x) * max(Δfactor, abs(xq) * Δfactor))
 
+    nout(v) + Δ == 0 && return 
     Δnout(v, Δ)
 end
 

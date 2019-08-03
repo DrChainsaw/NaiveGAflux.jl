@@ -17,6 +17,7 @@ function run_experiment(popsize, niters, data; nevolve=100, baseseed=666)
     Random.seed!(NaiveGAflux.rng_default, baseseed)
 
     population = initial_models(popsize)
+
     for i in 1:niters
         @info "Begin iteration $i"
         x_train,y_train = data()
@@ -28,7 +29,7 @@ function run_experiment(popsize, niters, data; nevolve=100, baseseed=666)
     end
 end
 
-# Workaround as losses fail with Flix.OneHotMatrix on Appveyor x86 (works everywhere else)
+# Workaround as losses fail with Flux.OneHotMatrix on Appveyor x86 (works everywhere else)
 onehot(y) = Float32.(Flux.onehotbatch(y, 0:9))
 
 function trainmodels!(population, data)
@@ -42,10 +43,8 @@ end
 function evolvemodels!(population)
     @info "\tEvolve population!"
     for model in population
-        mutation, neuron_selection = create_mutation()
+        mutation = create_mutation()
         mutation(model.g)
-        foreach(select, neuron_selection)
-        apply_mutation(model.g)
     end
 end
 
@@ -60,7 +59,7 @@ function create_mutation()
 
     function rankfun(v)
         @info "\t\tSelect params for $(name(v))"
-        return sortperm(neuron_value(v))
+        return NaiveGAflux.default_neuronselect(v)
     end
 
     mutate_nout = NeuronSelectMutation(rankfun, NoutMutation(-0.1, 0.1)) # Max 10% change in output size
@@ -78,7 +77,7 @@ function create_mutation()
     mremv = mp(LogMutation(v -> "\tRemove vertex $(name(v))", rem_vertex), 0.01)
 
     # TODO: Wrap rem_vertex and mutate_nout into some FinalizeMutation which invokes select and apply_mutation
-    return VertexMutation(MutationList(mnout, maddv, mremv)), (rem_vertex, mutate_nout)
+    return PostMutation(VertexMutation(MutationList(mnout, maddv, mremv)), NeuronSelect(), RemoveZeroNout(), (m,g) -> apply_mutation(g))
 end
 
 
