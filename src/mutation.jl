@@ -184,8 +184,8 @@ struct NeuronSelectMutation{T} <: AbstractMutation{AbstractVertex}
     m::RecordMutation{AbstractVertex}
 end
 NeuronSelectMutation(rankfun, m::AbstractMutation{AbstractVertex}) = NeuronSelectMutation(rankfun, neuron_select_strategy(m), RecordMutation(m))
-NeuronSelectMutation(m::AbstractMutation{AbstractVertex}) = NeuronSelectMutation(sortperm ∘ neuron_value, m)
-NeuronSelectMutation(m::RecordMutation{AbstractVertex}) = NeuronSelectMutation(sortperm ∘ neuron_value, neuron_select_strategy(m.m), m)
+NeuronSelectMutation(m::AbstractMutation{AbstractVertex}) = NeuronSelectMutation(neuron_value, m)
+NeuronSelectMutation(m::RecordMutation{AbstractVertex}) = NeuronSelectMutation(neuron_value, neuron_select_strategy(m.m), m)
 
 (m::NeuronSelectMutation)(v::AbstractVertex) = m.m(v)
 
@@ -214,10 +214,9 @@ function select_neurons(::Nout, v::AbstractVertex, rankfun::Function, s=NaiveNAS
     # This package is kinda hardcoded to use IoChange, and with some polishing of NaiveNASlib it should be the only possible option
     Δout = nout(v) - nout_org(op(v))
 
-    # Note: Case of Δnout > 0 (size increase) does not require any neuron selection
+    # Note: Case of Δnout > 0 (size increase) not implemented yet
     if Δout < 0
-        ranked = rankfun(v)
-        inds= sort(ranked[-(Δout-1):end])
+        inds= selectvalidouts(v, rankfun)
         Δnout(v, inds, s=s)
     end
 end
@@ -245,6 +244,38 @@ function select_neurons(::RemoveVertex, v::AbstractVertex, rankfun::Function)
 
         select_neurons(Nout(), vin, rankfun, s)
     end
+end
+
+function selectvalidouts(v::AbstractVertex, scorefun::Function)
+    score = scorefun(v)
+    valouts = NaiveGAflux.validouts(v)
+
+     selected = Int[]
+     for (vi, mi) in valouts
+        bestrows = sortperm(vec(sum(score[mi], dims=2)), lt = >)
+        append!(selected, vec(mi[bestrows[1:nout(vi)], :]))
+     end
+     return sort(selected)
+end
+
+validouts(v::AbstractVertex, offs=0, dd=Dict()) = validouts(trait(v), v, offs, dd)
+validouts(t::DecoratingTrait, v, offs, dd) = validouts(base(t), v, offs, dd)
+function validouts(::SizeStack, v, offs, dd)
+    for vin in inputs(v)
+        validouts(vin, offs, dd)
+        offs += nout_org(op(vin))
+    end
+    return dd
+end
+function validouts(::SizeInvariant, v, offs, dd)
+    foreach(vin -> validouts(vin, offs, dd), inputs(v))
+    return dd
+end
+function validouts(::SizeAbsorb, v, offs, dd)
+    orgsize = nout_org(op(v))
+    selectfrom = hcat(get(() -> zeros(Int, orgsize, 0), dd, v), (1:orgsize) .+ offs)
+    dd[v] = selectfrom
+    return dd
 end
 
 """

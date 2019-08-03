@@ -107,7 +107,13 @@
 
     @testset "NeuronSelectMutation" begin
 
-        oddfirst(v) = reverse(vcat(1:2:nout_org(op(v)), 2:2:nout_org(op(v))))
+        # Dummy neuron score function just to mix things up in a predicable way
+        function oddfirst(v)
+            score = collect(Float32, 1:nout_org(op(v)))
+            score[1:2:end] .+= nout_org(op(v))
+            score[2:2:end] = 1 ./ score[2:2:end]
+            return score
+        end
         batchnorm(inpt) = mutable(BatchNorm(nout(inpt)), inpt)
 
         @testset "NeuronSelectMutation NoutMutation" begin
@@ -197,25 +203,6 @@
 
         @testset "NeuronSelectMutation deep transparent" begin
 
-            sizeinfo(v::AbstractVertex, offs=0, dd=Dict()) = sizeinfo(trait(v), v, offs, dd)
-            sizeinfo(t::DecoratingTrait, v, offs, dd) = sizeinfo(base(t), v, offs, dd)
-            function sizeinfo(::SizeStack, v, offs, dd)
-                for vin in inputs(v)
-                    sizeinfo(vin, offs, dd)
-                    offs += nout_org(op(vin))
-                end
-                return dd
-            end
-            function sizeinfo(::SizeInvariant, v, offs, dd)
-                foreach(vin -> sizeinfo(vin, offs, dd), inputs(v))
-                return dd
-            end
-            function sizeinfo(::SizeAbsorb, v, offs, dd)
-                orgsize = nout_org(op(v))
-                selectfrom = hcat(get(() -> zeros(Int, orgsize, 0), dd, v), (1:orgsize) .+ offs)
-                dd[v] = selectfrom
-            end
-
             inpt = inputvertex("in", 3, FluxDense())
             v1 = dense(inpt, 8)
             v2 = dense(inpt, 4)
@@ -240,13 +227,11 @@
             @test nout(v2) == 4
             @test nout(pd1) == 1
 
-            #m = NeuronSelectMutation(v -> collect(1:nout(v)), NoutMutation(0.5))
-            #push!(m.m.mutated, v4)
-            #select(m)
-            dd = sizeinfo(v4)
-            sel = sort(vcat(vec(dd[v1][1:7,:]), vec(dd[v2][1:nout(v2),:]), vec(dd[pd1][nout(pd1),:])))
-            Δnout(v4, sel)
+            scorefun(v) = 1:nout_org(op(v))
+            m = NeuronSelectMutation(scorefun , NoutMutation(0.5))
+            push!(m.m.mutated, v4)
 
+            select(m)
             apply_mutation(g)
 
             @test nout(v1) == 7
@@ -254,7 +239,6 @@
             @test nout(pd1) == 1
 
             @test size(g(ones(3,2))) == (noutv4, 2)
-
         end
     end
 
