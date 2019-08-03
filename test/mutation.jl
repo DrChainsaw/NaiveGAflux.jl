@@ -216,8 +216,12 @@
             pa2 = concat(pa1pa1, pa1pb1)
             v4 = concat(pa2, pb1, pc1, pd1)
 
+            scorefun(v) = 1:nout_org(op(v))
+            m = NeuronSelectMutation(scorefun , NoutMutation(0.5))
+            push!(m.m.mutated, v4)
+
             g = CompGraph(inpt, v4)
-            @test size(g(ones(3,2))) == (nout(v4), 2)
+            @test size(g(ones(Float32, 3,2))) == (nout(v4), 2)
 
             @test minΔnoutfactor(v4) == 4
             Δnout(v4, -8)
@@ -227,10 +231,6 @@
             @test nout(v2) == 4
             @test nout(pd1) == 1
 
-            scorefun(v) = 1:nout_org(op(v))
-            m = NeuronSelectMutation(scorefun , NoutMutation(0.5))
-            push!(m.m.mutated, v4)
-
             select(m)
             apply_mutation(g)
 
@@ -238,7 +238,51 @@
             @test nout(v2) == 4
             @test nout(pd1) == 1
 
-            @test size(g(ones(3,2))) == (noutv4, 2)
+            @test size(g(ones(Float32, 3,2))) == (noutv4, 2)
+
+            Δnout(v4, +24)
+            Δnout(v1, -5)
+            noutv4 = nout(v4)
+
+            @test nout(v1) == 5
+            @test nout(v2) == 6
+            @test nout(pd1) == 5
+
+            select(m)
+
+            @test nout(v1) == 5
+            @test nout(v2) == 6
+            @test nout(pd1) == 5
+
+            # This is a sucky almost-reimplement-the-alg-in-a-different-way kinda test
+            # I just can't think of a better test since there are many ways to get this wrong without messing up the sizes and the only way to spot it is worse performance when mutating a trained model
+            indsv4 = out_inds(op(v4))
+            indsv1 = out_inds(op(v1))
+            indsv2 = out_inds(op(v2))
+            indspd1 = out_inds(op(pd1))
+
+            shift_nonneg(v, n, o) = map(x -> x < 0 ? x : x + n * length(v)+n+o, v)
+
+            reps = minΔnoutfactor(v4)
+            offs = 0
+            # Concatentated activations from v1 and v2 are interleaved in the graph like this:
+            # [a1, a2, a1, a2, a1, a2] where a1 is activation from v1 and a2 is activation from v2
+            for r in 1:reps
+                inds = (1:nout(v1)) .+ offs
+                @test indsv4[inds] == shift_nonneg(indsv1, r-1, (r-1) * nout(v1))
+                offs = inds[end]
+
+                inds = (1:nout(v2)) .+ offs
+                @test indsv4[inds] == shift_nonneg(indsv2, r-1, (r-1) * nout_org(op(v2)) + nout_org(op(v1)))
+                offs = inds[end]
+            end
+
+            inds = (1:nout(pd1)) .+ offs
+            @test indsv4[inds] == [45, -1, -1, -1, -1]
+
+            apply_mutation(g)
+
+            @test size(g(ones(Float32, 3,2))) == (noutv4, 2)
         end
     end
 

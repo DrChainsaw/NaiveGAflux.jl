@@ -215,7 +215,7 @@ function select_neurons(::Nout, v::AbstractVertex, rankfun::Function, s=NaiveNAS
     Δout = nout(v) - nout_org(op(v))
 
     # Note: Case of Δnout > 0 (size increase) not implemented yet
-    if Δout < 0
+    if Δout != 0
         inds= selectvalidouts(v, rankfun)
         Δnout(v, inds, s=s)
     end
@@ -250,12 +250,29 @@ function selectvalidouts(v::AbstractVertex, scorefun::Function)
     score = scorefun(v)
     valouts = NaiveGAflux.validouts(v)
 
-     selected = Int[]
-     for (vi, mi) in valouts
-        bestrows = sortperm(vec(sum(score[mi], dims=2)), lt = >)
-        append!(selected, vec(mi[bestrows[1:nout(vi)], :]))
+    selected = nothing
+    for (vi, mi) in valouts
+        Δout = nout(vi) - size(mi, 1)
+        # Case 1: Size has decreased, we need to select a subset of the outputs based on the score
+        if Δout < 0
+            # Step 1: The constraint is that we must pick all values in a row of mi for neuron selection to be consistent. Matrix mi has more than one column if activations from vi is input (possibly through an arbitrary number of size transparent layers such as BatchNorm) to v more than once.
+            bestrows = sortperm(vec(sum(score[mi], dims=2)), lt = >)
+             # Step 2: Due to negative values being used to indicate insertion of neurons, we must do this:
+             # Add each column from mi to selected as a separate array (selected is an array of arrays)
+             # Each columns array in selected individually sorted here to keep unnecessary shuffling of neurons to a minimum.
+            toadd = [sort(vec(mi[bestrows[1:nout(vi)], i])) for i in 1:size(mi, 2)]
+            isnothing(selected) ? selected = toadd : append!(selected, toadd)
+        # Case 2: Size has not decreased,
+        # We want to insert -1s to show where new columns are to be added
+        else
+            # This is the reason for selected being an array of arrays: Activations from multiple repeated inputs might be interleaved and we must retain the original neuron ordering without moving the negative values around.
+            toadd =  [vec(vcat(mi[:,i], -ones(Int,Δout, 1))) for i in 1:size(mi, 2)]
+            isnothing(selected) ? selected = toadd : append!(selected, toadd)
+        end
      end
-     return sort(selected)
+
+     # Now concatenate all column arrays in selected. Sort them by their first element which due to the above is always the smallest. Note that due to how validouts works, we can always assume that all nonnegative numbers in a column array in selected are either strictly greater than or strictly less than all nonnegative numbers of all other column arrays.
+     return foldl(vcat, sort(selected, by = v -> v[1]))
 end
 
 validouts(v::AbstractVertex, offs=0, dd=Dict()) = validouts(trait(v), v, offs, dd)
