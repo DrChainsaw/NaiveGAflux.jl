@@ -247,6 +247,8 @@ function select_neurons(::RemoveVertex, v::AbstractVertex, rankfun::Function)
     end
 end
 
+# TODO: This method and validouts shall go to NaiveNASlib once they have proven themselves some more
+
 function selectvalidouts(v::AbstractVertex, scorefun::Function)
     score = scorefun(v)
     valouts = NaiveGAflux.validouts(v)
@@ -298,12 +300,22 @@ end
 
 """
     PostMutation{T} <: AbstractMutation{T}
+    PostMutation(actions, m::AbstractMutation{T})
+    PostMutation(m::AbstractMutation{T}, actions...)
 
 Performs a set of actions after a wrapped `AbstractMutation` is applied.
+
+Actions will be invoked with arguments (m::PostMutation{T}, e::T) where m is the enclosing `PostMutation` and `e` is the mutated entity of type `T`.
 """
 struct PostMutation{T} <: AbstractMutation{T}
     actions
     m::AbstractMutation{T}
+end
+PostMutation(m::AbstractMutation{T}, actions...) where T = PostMutation(actions, m)
+PostMutation(action::Function, m::AbstractMutation{T}) where T = PostMutation(m, action)
+function (m::PostMutation{T})(e::T) where T
+    m.m(e)
+    foreach(a -> a(m, e), m.actions)
 end
 
 
