@@ -261,14 +261,14 @@
             Δnout(v1, -5)
             noutv4 = nout(v4)
 
-            @test nout(v1) == 5
-            @test nout(v2) == 6
+            @test nout(v1) == 6
+            @test nout(v2) == 5
             @test nout(pd1) == 5
 
             select(m)
 
-            @test nout(v1) == 5
-            @test nout(v2) == 6
+            @test nout(v1) == 6
+            @test nout(v2) == 5
             @test nout(pd1) == 5
 
             # This is a sucky almost-reimplement-the-alg-in-a-different-way kinda test
@@ -286,11 +286,11 @@
             # [a1, a2, a1, a2, a1, a2] where a1 is activation from v1 and a2 is activation from v2
             for r in 1:reps
                 inds = (1:nout(v1)) .+ offs
-                @test indsv4[inds] == shift_nonneg(indsv1, r-1, (r-1) * nout(v1))
+                @test indsv4[inds] == shift_nonneg(indsv1, r-1, (r-1) * (nout(v1) - 2))
                 offs = inds[end]
 
                 inds = (1:nout(v2)) .+ offs
-                @test indsv4[inds] == shift_nonneg(indsv2, r-1, (r-1) * nout_org(op(v2)) + nout_org(op(v1)))
+                @test indsv4[inds] == shift_nonneg(indsv2, r-1, (r-1) * (nout_org(op(v2)) + 1) + nout_org(op(v1)))
                 offs = inds[end]
             end
 
