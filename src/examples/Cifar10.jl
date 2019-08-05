@@ -154,9 +154,9 @@ end
 function rep_fork_res(s, n, min_rp=1)
     n == 0 && return s
 
+    resconf = traitconf(MutationShield ∘ NaiveGAflux.default_logging() ∘ validated())
     # TODO: Wrap elem addition in ActivationContribution so it becomes possible to select params
     # API does not currently allow this...
-    resconf = VertexConf(IoChange, MutationShield ∘ NaiveGAflux.default_logging() ∘ validated())
     concconf = ConcConf(MutationShield ∘ NaiveGAflux.default_logging() ∘ validated())
 
     rep = RepeatArchSpace(s, min_rp:3)

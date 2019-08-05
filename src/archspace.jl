@@ -358,8 +358,8 @@ struct ResidualArchSpace <:AbstractArchSpace
     s::AbstractArchSpace
     conf::VertexConf
 end
-ResidualArchSpace(s::AbstractArchSpace) = ResidualArchSpace(s, VertexConf(IoChange, validated() ∘ default_logging()))
+ResidualArchSpace(s::AbstractArchSpace) = ResidualArchSpace(s, traitconf(validated() ∘ default_logging()))
 ResidualArchSpace(l::AbstractLayerSpace) = ResidualArchSpace(VertexSpace(l))
 
 (s::ResidualArchSpace)(in::AbstractVertex, rng=rng_default;outsize=missing) = s.conf >> in + s.s(in, rng,outsize=nout(in))
-(s::ResidualArchSpace)(name::String, in::AbstractVertex, rng=rng_default; outsize=missing) = VertexConf(s.conf.mutation, s.conf.traitdecoration ∘ named(name * ".add")) >> in + s.s(join([name, ".res"]), in, rng,outsize=nout(in))
+(s::ResidualArchSpace)(name::String, in::AbstractVertex, rng=rng_default; outsize=missing) = VertexConf(s.conf.mutation, s.conf.traitdecoration ∘ named(name * ".add"), s.conf.outwrap) >> in + s.s(join([name, ".res"]), in, rng,outsize=nout(in))
