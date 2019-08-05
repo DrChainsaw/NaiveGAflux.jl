@@ -50,7 +50,7 @@
         @test expect_e == 11
     end
 
-    dense(in, outsizes...;layerfun = LazyMutable) = foldl((next,size) -> mutable(Dense(nout(next), size), next, layerfun=layerfun), outsizes, init=in)
+    dense(in, outsizes...;layerfun = LazyMutable, name="dense") = foldl((next,size) -> mutable(name, Dense(nout(next), size), next, layerfun=layerfun), outsizes, init=in)
 
     @testset "VertexMutation" begin
         inpt = inputvertex("in", 4, FluxDense())
@@ -131,7 +131,7 @@
 
         # Dummy neuron selection function just to mix things up in a predicable way
         oddfirst(v) = vcat(sort(vcat(1:2:nout_org(op(v)), 2:2:nout_org(op(v)))[1:min(nout(v),end)]), -ones(Int, max(0, nout(v) - nout_org(op(v)))))
-        batchnorm(inpt) = mutable(BatchNorm(nout(inpt)), inpt)
+        batchnorm(inpt; name="bn") = mutable(name, BatchNorm(nout(inpt)), inpt)
 
         @testset "NeuronSelectMutation NoutMutation" begin
             inpt = inputvertex("in", 3, FluxDense())
@@ -221,17 +221,17 @@
         @testset "NeuronSelectMutation deep transparent" begin
 
             inpt = inputvertex("in", 3, FluxDense())
-            v1 = dense(inpt, 8)
-            v2 = dense(inpt, 4)
-            v3 = concat(v1,v2)
-            pa1 = batchnorm(v3)
-            pb1 = batchnorm(v3)
-            pc1 = batchnorm(v3)
-            pd1 = dense(v3, 5)
-            pa1pa1 = batchnorm(pa1)
-            pa1pb1 = batchnorm(pa1)
-            pa2 = concat(pa1pa1, pa1pb1)
-            v4 = concat(pa2, pb1, pc1, pd1)
+            v1 = dense(inpt, 8, name="v1")
+            v2 = dense(inpt, 4, name="v2")
+            v3 = concat(v1,v2, traitdecoration=named("v3"))
+            pa1 = batchnorm(v3, name="pa1")
+            pb1 = batchnorm(v3, name="pb1")
+            pc1 = batchnorm(v3, name="pc1")
+            pd1 = dense(v3, 5, name="pd1")
+            pa1pa1 = batchnorm(pa1, name="pa1pa1")
+            pa1pb1 = batchnorm(pa1, name="pa1pb1")
+            pa2 = concat(pa1pa1, pa1pb1, traitdecoration=named("pa2"))
+            v4 = concat(pa2, pb1, pc1, pd1, traitdecoration=named("v4"))
 
             rankfun(v) = NaiveGAflux.selectvalidouts(v, v->1:nout_org(op(v)))
             m = NeuronSelectMutation(rankfun , NoutMutation(0.5))
@@ -300,6 +300,37 @@
             apply_mutation(g)
 
             @test size(g(ones(Float32, 3,2))) == (noutv4, 2)
+        end
+
+        @testset "NeuronSelectMutation residual" begin
+
+            inpt = inputvertex("in", 3, FluxDense())
+            v1 = dense(inpt, 8, name="v1")
+            v2 = dense(inpt, 4, name="v2")
+            v3 = concat(v1,v2, traitdecoration=named("v3"))
+            v4 = dense(v3, nout(v3), name="v4")
+            v5 = traitconf(named("v5")) >> v3 + v4
+            v6 = dense(v5, 2, name="v6")
+
+            rankfun(v) = NaiveGAflux.selectvalidouts(v, v->1:nout_org(op(v)))
+            m = NeuronSelectMutation(rankfun , NoutMutation(0.5))
+            push!(m.m.mutated, v4)
+
+            g = CompGraph(inpt, v5)
+            @test size(g(ones(Float32, 3,2))) == (nout(v5), 2)
+
+            Δnout(v4, -6)
+
+            @test nout(v1) == 4
+            @test nout(v2) == 2
+
+            select(m)
+            apply_mutation(g)
+
+            @test nout(v1) == 4
+            @test nout(v2) == 2
+
+            @test size(g(ones(Float32, 3,2))) == (nout(v5), 2)
         end
     end
 
