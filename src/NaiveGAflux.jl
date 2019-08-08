@@ -5,6 +5,12 @@ using Reexport
 using Random
 using Logging
 
+# For solving pesky entangled neuron select problems. To be moved to NaiveNASlib if things work out
+import JuMP
+import JuMP: @variable, @constraint, @objective, MOI, MOI.INFEASIBLE, MOI.FEASIBLE_POINT
+using Cbc
+
+
 const rng_default = Random.GLOBAL_RNG
 
 # misc types
@@ -34,6 +40,7 @@ export Cifar10
 include("util.jl")
 include("archspace.jl")
 include("mutation.jl")
+include("selection.jl")
 
 include("examples/Cifar10.jl")
 

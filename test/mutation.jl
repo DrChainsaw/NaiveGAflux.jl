@@ -332,6 +332,35 @@
 
             @test size(g(ones(Float32, 3,2))) == (nout(v5), 2)
         end
+
+        @testset "NeuronSelectMutation entangled SizeStack" begin
+            inpt = inputvertex("in", 3, FluxDense())
+            v1 = dense(inpt, 5, name="v1")
+            v2 = dense(inpt, 4, name="v2")
+            v3 = dense(inpt, 3, name="v3")
+            v4 = dense(inpt, 6, name="v4")
+
+            v5 = concat(v1, v2, traitdecoration=named("v5"))
+            v6 = concat(v2, v3, traitdecoration=named("v6"))
+            v7 = concat(v3, v4, traitdecoration=named("v7"))
+
+            v8 = concat(v5, v6, traitdecoration=named("v8"))
+            v9 = concat(v6, v7, traitdecoration=named("v9"))
+
+            v10 = dense(inpt, nout(v9), name="v10")
+            add = traitconf(named("add")) >> v8 + v9# + v10
+
+            rankfun(v) = NaiveGAflux.selectvalidouts(v, v->1:nout_org(op(v)))
+            m = NeuronSelectMutation(rankfun , NoutMutation(0.5))
+            push!(m.m.mutated, v10)
+
+            g = CompGraph(inpt, add)
+            @test size(g(ones(Float32, 3,2))) == (nout(add), 2)
+
+            @test minΔnoutfactor(add) == 2
+            Δnout(add, -4)
+
+        end
     end
 
     @testset "RemoveZeroNout" begin

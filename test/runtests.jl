@@ -24,6 +24,10 @@ using Test
     @info "Testing mutation"
     include("mutation.jl")
 
+    @info "Testing selection"
+    include("selection.jl")
+
     @info "Testing CIFAR10 example"
     include("examples/Cifar10.jl")
+
 end
