@@ -26,6 +26,30 @@
         @test size(g(ones(3, 1))) == (nout(v2), 1)
     end
 
+    @testset "Absorb 2 Absorb revert" begin
+        inpt = iv(3)
+        v1 = av(inpt, 5, "v1")
+        v2 = av(v1, 4, "v2")
+
+        Δnout(v1, -2)
+        NaiveGAflux.select_outputs(NaiveGAflux.NoutRevert(), v1, 1:nout_org(op(v1)))
+
+        @test out_inds(op(v1)) == in_inds(op(v2))[] == [1,2,3,4,5]
+        g = CompGraph(inpt, v2)
+        apply_mutation(g)
+
+        @test size(g(ones(3, 1))) == (nout(v2), 1)
+    end
+
+    @testset "Absorb 2 Absorb fail" begin
+        inpt = iv(3)
+        v1 = av(inpt, 5, "v1")
+        v2 = av(v1, 4, "v2")
+
+        Δnout(v1, -2)
+        @test_throws ErrorException NaiveGAflux.select_outputs(NaiveGAflux.SelectionFail(), v1, 1:nout_org(op(v1)))
+    end
+
     @testset "SizeStack duplicate" begin
         inpt = iv(3)
         v1 = av(inpt, 7, "v1")
@@ -105,7 +129,7 @@
         @test nout(v3) == 8
         @test nout(v4) == 3
 
-        NaiveGAflux.select_outputs(v7, 1:nout_org(op(v7)))
+        @test_logs (:warn, "Selection for vertex v7 failed! Relaxing size constraint...")  match_mode=:any NaiveGAflux.select_outputs(v7, 1:nout_org(op(v7)))
         apply_mutation(g)
 
         @test nout(v1) == 5
@@ -114,7 +138,6 @@
         @test nout(v4) == 3
 
         @test size(g(ones(3,1))) == (nout(v7), 1)
-
     end
 
 

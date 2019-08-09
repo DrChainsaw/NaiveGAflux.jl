@@ -2,6 +2,88 @@
 
 # Methods to help select or add a number of outputs given a new size as this problem apparently belongs to the class of FU-complete problems. And yes, I curse the day I conceived the idea for this project right now...
 
+"""
+    AbstractSelectionStrategy
+
+Base type for how to select the exact inputs/outputs indices from a vertex given a size change.
+"""
+abstract type AbstractSelectionStrategy end
+
+"""
+    LogSelection <: AbstractSelectionStrategy
+    LogSelection(msgfun::Function, andthen)
+    LogSelection(level, msgfun::Function, andthen)
+
+Logs output from function `msgfun` at LogLevel `level` and executes `AbstractSelectionStrategy andthen`.
+"""
+struct LogSelection <: AbstractSelectionStrategy
+    level::Logging.LogLevel
+    msgfun
+    andthen::AbstractSelectionStrategy
+end
+LogSelection(msgfun::Function, andthen) = LogSelection(Logging.Info, msgfun, andthen)
+LogSelectionFallback(nextstr, andthen; level=Logging.Warn) = LogSelection(level, v -> "Selection for vertex $(name(v)) failed! $nextstr", andthen)
+
+"""
+    SelectionFail <: AbstractSelectionStrategy
+
+Throws an error.
+"""
+struct SelectionFail <: AbstractSelectionStrategy end
+
+"""
+    NoutRevert <: AbstractSelectionStrategy
+    NoutRevert()
+
+Reverts output size change for a vertex.
+"""
+struct NoutRevert <: AbstractSelectionStrategy end
+
+"""
+    AbstractJuMPSelectionStrategy
+
+Base type for how to select the exact inputs/outputs indices from a vertex given a size change using JuMP to handle the constraints.
+"""
+abstract type AbstractJuMPSelectionStrategy <: AbstractSelectionStrategy end
+
+fallback(::AbstractJuMPSelectionStrategy) = SelectionFail()
+
+"""
+    NoutExact <: AbstractSelectionStrategy
+    NoutExact()
+    NoutExact(fallbackstrategy)
+
+Selects output indices from a vertex with the constraint that `nout(v)` for all `v` which needs to change as a result of the selection are unchanged.
+
+Possible to set a fallbackstrategy should it be impossible to select indices according to the strategy.
+"""
+struct NoutExact <: AbstractJuMPSelectionStrategy
+    fallback::AbstractSelectionStrategy
+end
+NoutExact() = NoutExact(LogSelectionFallback("Relaxing size constraint...", NoutRelaxSize()))
+fallback(s::NoutExact) = s.fallback
+
+"""
+    NoutRelaxSize <: AbstractSelectionStrategy
+    NoutRelaxSize()
+    NoutRelaxSize(lower, upper)
+    NoutRelaxSize(fallbackstrategy)
+    NoutRelaxSize(lower, upper, fallbackstrategy)
+
+Selects output indices from a vertex with the constraint that `nout(v)` for all vertices `v` which needs to change as a result of the selection is in the range `max(1, lower * noutv) <= nout(v) <= upper * noutv` where `noutv` is the result of `nout(v)` before selecting indices.
+
+Possible to set a fallbackstrategy should it be impossible to select indices according to the strategy.
+"""
+struct NoutRelaxSize <: AbstractJuMPSelectionStrategy
+    lower::Real
+    upper::Real
+    fallback::AbstractSelectionStrategy
+end
+NoutRelaxSize(fallback=LogSelectionFallback("Reverting...", NoutRevert())) = NoutRelaxSize(0.7, 1, NoutRelaxSize(0.5, 1, NoutRelaxSize(0.3, 1.5, NoutRelaxSize(0.2, 2, fallback))))
+NoutRelaxSize(lower::Real, upper::Real) = NoutRelaxSize(lower, upper, NoutRevert())
+fallback(s::NoutRelaxSize) = s.fallback
+
+
 function selectvalidouts(v::AbstractVertex, scorefun::Function)
     score = scorefun(v)
     valouts = validouts(v)
@@ -84,38 +166,51 @@ function has_visited!(visited, x)
 end
 
 
-function select_outputs(v, values)
-    valouts = validouts(v)
-    noutsfun(v) = min(nout(v), nout_org(op(v)))
-    model, selected = select_outputs(v, values, valouts, noutsfun)
+select_outputs(v::AbstractVertex, values) = select_outputs(NoutExact(), v, values)
 
-    if (JuMP.termination_status(model) == MOI.INFEASIBLE) || (JuMP.primal_status(model) != MOI.FEASIBLE_POINT)
-        # Relax size changes
-        sizefun(v) = minΔnoutfactor(v), max(1, noutsfun(v) ÷ 2), noutsfun(v)
-        model, selected = select_outputs(v, values, valouts, sizefun)
+function select_outputs(s::AbstractSelectionStrategy, v, values)
+    execute, selected = select_outputs(s, v, values, validouts(v))
+
+    if execute
+        #TODO: Need to also handle neuron insertion, similar to how it is done in select_neurons above
+        Δnout(v, selected)
     end
-
-    Δnout(v, selected)
 end
 
-function select_outputs(vselect, values, cdict, sizefun)
-    model, mainvar = mainmodel(values)
+function select_outputs(s::LogSelection, v, values, cdict)
+    @logmsg s.level s.msgfun(v)
+    return select_outputs(s.andthen, v, values, cdict)
+end
+
+select_outputs(s::SelectionFail, v, values, cdict) = error("Selection failed for vertex $(name(v))")
+
+function select_outputs(s::NoutRevert, v, values, cdict)
+    Δ = nout_org(op(v)) - nout(v)
+    Δnout(v, Δ)
+    return false, 1:nout(v)
+end
+
+function select_outputs(s::AbstractJuMPSelectionStrategy, v, values, cdict)
+    model, mainvar = mainmodel(s, values)
 
     # Wouldn't mind being able to relax the size constraint, but that requires MISOCP and only commercial solvers seem to do that
     #@objective(model, Min, 10*(sum(mainvar) - nout(vselect))^2)
-    sizeconstraint(model, mainvar, sizefun(vselect)...)
+    sizeconstraint(s, v, model, mainvar)
 
     for (vi, mi) in cdict
-        select_i = rowconstraint(model, mainvar, mi)
-        sizeconstraint(model, select_i, sizefun(vi)...)
+        select_i = rowconstraint(s, model, mainvar, mi)
+        sizeconstraint(s, vi, model, select_i)
     end
 
     JuMP.optimize!(model)
 
-    return model, findall(xi -> xi > 0, JuMP.value.(mainvar))
+    !accept(s, model) && return select_outputs(fallback(s), v, values, cdict)
+    return true, findall(xi -> xi > 0, JuMP.value.(mainvar))
 end
 
-function mainmodel(values)
+accept(::AbstractJuMPSelectionStrategy, model::JuMP.Model) = JuMP.termination_status(model) != MOI.INFEASIBLE && JuMP.primal_status(model) == MOI.FEASIBLE_POINT # Beware: primal_status seems unreliable for Cbc. See MathOptInterface issue #822
+
+function mainmodel(::AbstractJuMPSelectionStrategy, values)
 
     model = JuMP.Model(JuMP.with_optimizer(Cbc.Optimizer, loglevel=0))
 
@@ -125,13 +220,21 @@ function mainmodel(values)
     return model, x
 end
 
-function rowconstraint(model, x, indmat)
+function rowconstraint(::AbstractJuMPSelectionStrategy, model, x, indmat)
     var = @variable(model, [1:size(indmat,1)], Bin)
     @constraint(model, size(indmat,2) .* var .- sum(x[indmat], dims=2) .== 0)
     return var
 end
 
-sizeconstraint(model, var, nselect) = @constraint(model, sum(var) == nselect)
+nselect_out(v) = min(nout(v), nout_org(op(v)))
+sizeconstraint(::NoutExact, v, model, var) = @constraint(model, sum(var) == nselect_out(v))
+function sizeconstraint(s::NoutRelaxSize, v, model, var)
+    f = minΔnoutfactor(v)
+    nmin = max(1, s.lower * nselect_out(v))
+    nmax =  s.upper * nselect_out(v)
+    return sizeconstraint(model, var, f, nmin, nmax)
+end
+
 function sizeconstraint(model, var, f, nmin, nmax)
     @constraint(model, nmin <= sum(var) <= nmax)
     # minΔfactor constraint:
