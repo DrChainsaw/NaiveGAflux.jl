@@ -239,20 +239,16 @@ function select_outputs(s::NoutRevert, v, values, cdict)
 end
 
 function select_outputs(s::AbstractJuMPSelectionStrategy, v, values, cdict)
-    model = mainmodel(s, v, values)
+    model = optmodel(s, v, values)
 
     # variable for selecting a subset of the existing outputs.
-    selectvar = @variable(model, x[1:length(values)], Bin)
+    selectvar = @variable(model, selectvar[1:length(values)], Bin)
     # Variable for deciding at what positions to insert new outputs.
-    insertvar = @variable(model, y[1:nout(v)], Bin)
-
-    # Wouldn't mind being able to relax the size constraint, but that requires MISOCP and only commercial solvers seem to do that
-    #@objective(model, Min, 10*(sum(selectvar) - nout(v))^2)
-    sizeconstraint(s, v, model, selectvar)
+    insertvar = @variable(model, insertvar[1:nout(v)], Bin)
 
     # Check if size shall be increased
     if length(insertvar) > length(selectvar)
-        #insertvar needs to be tied to actual size for cases then size is relaxed
+        #insertvar needs to be tied to selectvar for cases when size is relaxed
         @constraint(model, sum(insertvar) == length(insertvar) - sum(selectvar))
     end
 
@@ -261,18 +257,18 @@ function select_outputs(s::AbstractJuMPSelectionStrategy, v, values, cdict)
     insertlast = @expression(model, 0)
 
     for (vi, mi) in cdict
-
         select_i = rowconstraint(s, model, selectvar, mi.current)
         sizeconstraint(s, vi, model, select_i)
 
         if length(insertvar) > length(selectvar)
             insmat = mi.after
+
             insert_i = rowconstraint(s, model, insertvar, insmat)
             @constraint(model, size(insmat, 2) * sum(insert_i) == sum(insertvar[insmat]))
 
             @constraint(model, insert_i[1] == 0) # Or else it won't be possible to know where to split
 
-            # Isn't this needed? Might be redundant due to constraint on sum and rowconstraint on insertvar
+            #Isn't this needed? Might be redundant due to constraint on sum and rowconstraint on insertvar
             #@constraint(model, sum(insert_i) == length(insert_i) - sum(select_i))
 
             last_i = min(length(select_i), length(insert_i))
@@ -280,8 +276,7 @@ function select_outputs(s::AbstractJuMPSelectionStrategy, v, values, cdict)
         end
     end
 
-    # - sum(y[1:min(length(y), length(x)]) means "try to insert new neurons at the end".
-    @objective(model, Max, values' * x - insertlast) # - sum(y[1:min(length(y), length(x))]))
+    @objective(model, Max, values' * selectvar - insertlast)
 
     JuMP.optimize!(model)
 
@@ -307,7 +302,7 @@ end
 
 accept(::AbstractJuMPSelectionStrategy, model::JuMP.Model) = JuMP.termination_status(model) != MOI.INFEASIBLE && JuMP.primal_status(model) == MOI.FEASIBLE_POINT # Beware: primal_status seems unreliable for Cbc. See MathOptInterface issue #822
 
-mainmodel(::AbstractJuMPSelectionStrategy, v, values) = JuMP.Model(JuMP.with_optimizer(Cbc.Optimizer, loglevel=0))
+optmodel(::AbstractJuMPSelectionStrategy, v, values) = JuMP.Model(JuMP.with_optimizer(Cbc.Optimizer, loglevel=0))
 
 function rowconstraint(::AbstractJuMPSelectionStrategy, model, x, indmat)
     var = @variable(model, [1:size(indmat,1)], Bin)
@@ -324,6 +319,9 @@ function sizeconstraint(s::NoutRelaxSize, v, model, var)
     return sizeconstraint(model, var, f, nmin, nmax)
 end
 
+# Wouldn't mind being able to relax the size constraint like this:
+#@objective(model, Min, 10*(sum(selectvar) - nout(v))^2)
+# but that requires MISOCP and only commercial solvers seem to do that
 function sizeconstraint(model, var, f, nmin, nmax)
     @constraint(model, nmin <= sum(var) <= nmax)
     # minΔfactor constraint:
