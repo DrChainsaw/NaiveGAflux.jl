@@ -143,6 +143,21 @@
         @test nout(v3) == 1
 
         @test size(g(ones(3,1))) == (nout(v6), 1)
+
+        Δnout(v6, 6)
+
+        @test nout(v1) == 8
+        @test nout(v2) == 5
+        @test nout(v3) == 3
+
+        select_outputs_and_change(v6, 1:nout_org(op(v6)))
+        apply_mutation(g)
+
+        @test nout(v1) == 8
+        @test nout(v2) == 5
+        @test nout(v3) == 3
+
+        @test size(g(ones(3,1))) == (nout(v6), 1)
     end
 
     @testset "SizeInvariant exact infeasible" begin
@@ -177,7 +192,23 @@
         @test nout(v4) == 3
 
         @test size(g(ones(3,1))) == (nout(v7), 1)
+
+        Δnout(v7, 14)
+
+        @test nout(v1) == 10
+        @test nout(v2) == 6
+        @test nout(v3) == 12
+        @test nout(v4) == 6
+
+        # Works on the first try this time around
+        select_outputs_and_change(v7, 1:nout_org(op(v7)))
+        apply_mutation(g)
+
+        @test nout(v1) == 10
+        @test nout(v2) == 6
+        @test nout(v3) == 12
+        @test nout(v4) == 6
+
+        @test size(g(ones(3,1))) == (nout(v7), 1)
     end
-
-
 end
