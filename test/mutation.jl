@@ -130,7 +130,7 @@
     @testset "NeuronSelectMutation" begin
 
         # Dummy neuron selection function just to mix things up in a predicable way
-        oddfirst(v) = vcat(sort(vcat(1:2:nout_org(op(v)), 2:2:nout_org(op(v)))[1:min(nout(v),end)]), -ones(Int, max(0, nout(v) - nout_org(op(v)))))
+        oddfirst(v) = true, vcat(sort(vcat(1:2:nout_org(op(v)), 2:2:nout_org(op(v)))[1:min(nout(v),end)]), -ones(Int, max(0, nout(v) - nout_org(op(v)))))
         batchnorm(inpt; name="bn") = mutable(name, BatchNorm(nout(inpt)), inpt)
 
         @testset "NeuronSelectMutation NoutMutation" begin

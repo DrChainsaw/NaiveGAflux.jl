@@ -84,38 +84,56 @@ NoutRelaxSize(lower::Real, upper::Real) = NoutRelaxSize(lower, upper, NoutRevert
 fallback(s::NoutRelaxSize) = s.fallback
 
 
-function selectvalidouts(v::AbstractVertex, scorefun::Function)
-    score = scorefun(v)
-    valouts = validouts(v)
+# TODO: Remove and replace calls with select_outputs
+selectvalidouts(v::AbstractVertex, scorefun::Function) = select_outputs(v, scorefun(v))
 
-    selected = nothing
-    for (vi, mi) in valouts
-        Δout = nout(vi) - size(mi, 1)
-        if Δout < 0
-            # Case 1: Size has decreased, we need to select a subset of the outputs based on the score
 
-            # Step 1: The constraint is that we must pick all values in a row of mi for neuron selection to be consistent. Matrix mi has more than one column if activations from vi is input (possibly through an arbitrary number of size transparent layers such as BatchNorm) to v more than once.
-            bestrows = sortperm(vec(sum(score[mi], dims=2)), lt = >)
-            # Step 2: Due to negative values being used to indicate insertion of neurons, we must do this:
-            # Add each column from mi to selected as a separate array (selected is an array of arrays)
-            # Each columns array in selected individually sorted here to keep unnecessary shuffling of neurons to a minimum.
-            toadd = [sort(vec(mi[bestrows[1:nout(vi)], i])) for i in 1:size(mi, 2)]
-            isnothing(selected) ? selected = toadd : append!(selected, toadd)
-        else
-            # Case 2: Size has not decreased,
-            # We want to insert -1s to show where new columns are to be added
+"""
+    validouts(v::AbstractVertex)
 
-            # This is the reason for selected being an array of arrays: Activations from multiple repeated inputs might be interleaved and we must retain the original neuron ordering without moving the negative values around.
-            toadd =  [vec(vcat(mi[:,i], -ones(Int,Δout, 1))) for i in 1:size(mi, 2)]
-            isnothing(selected) ? selected = toadd : append!(selected, toadd)
-        end
-    end
+Return a `Dict` mapping vertices `vi` seen from `v`s output direction to matrices `mi` of output indices as seen from `v`.
 
-     # Now concatenate all column arrays in selected. Sort them by their first element which due to the above is always the smallest. Note that due to how validouts works, we can always assume that all nonnegative numbers in a column array in selected are either strictly greater than or strictly less than all nonnegative numbers of all other column arrays.
-     return foldl(vcat, sort(selected, by = v -> v[1]))
-end
+For output selection to be consistent, either all or none of the indices in a row in `mi` must be selected.
 
-validouts(v::AbstractVertex, offs=0, dd=Dict(), visited = [], out=true) = validouts(trait(v), v, offs, dd, visited, out)
+ Matrix `mi` has more than one column if activations from `vi` is input (possibly through an arbitrary number of size transparent layers such as BatchNorm) to `v` more than once.
+
+ Furthermore, in the presense of `SizeInvariant` vertices, an indices may be present in more than one `mi`, making selection of indices non-trivial at best in the general case.
+
+ # Examples
+ ```julia-repl
+julia> iv = inputvertex("in", 2, FluxDense());
+
+julia> v1 = mutable("v1", Dense(2, 3), iv);
+
+julia> v2 = mutable("v2", Dense(2, 5), iv);
+
+julia> v = concat(v1,v2,v1,v2);
+
+julia> cdict = validouts(v);
+
+julia> nout(v)
+16
+
+julia> for (vi, mi) in cdict
+       @show name(vi)
+       display(mi)
+       end
+name(vi) = "v2"
+5×2 Array{Int64,2}:
+ 4  12
+ 5  13
+ 6  14
+ 7  15
+ 8  16
+name(vi) = "v1"
+3×2 Array{Int64,2}:
+ 1   9
+ 2  10
+ 3  11
+```
+
+"""
+validouts(v::AbstractVertex, offs=(0, 0), dd=Dict(), visited = [], out=true) = validouts(trait(v), v, offs, dd, visited, out)
 validouts(t::DecoratingTrait, v, offs, dd, visited, out) = validouts(base(t), v, offs, dd, visited, out)
 function validouts(::SizeStack, v, offs, dd, visited, out)
     !out && return dd
@@ -123,7 +141,7 @@ function validouts(::SizeStack, v, offs, dd, visited, out)
 
     for vin in inputs(v)
         validouts(vin, offs, dd, visited, true)
-        offs += nout_org(op(vin))
+        offs = offs .+ (nout_org(op(vin)), nout(vin))
     end
     return dd
 end
@@ -146,14 +164,18 @@ function validouts(::SizeAbsorb, v, offs, dd, visited, out)
     # If it is, we need to propagate the call instead of adding indices as the outputs of v might take us to a SizeInvariant vertex which in turn might take us to a SizeStack vertex
     if !initial
         orgsize = nout_org(op(v))
-        selectfrom = hcat(get(() -> zeros(Int, orgsize, 0), dd, v), (1:orgsize) .+ offs)
-        dd[v] = selectfrom
+        newsize = nout(v)
+        s,n = get(() -> (zeros(Int, orgsize, 0), zeros(Int, newsize, 0) ), dd, v)
+
+        selectfrom = hcat(s, (1:orgsize) .+ offs[1])
+        afterselection = hcat(n, (1:newsize) .+ offs[2])
+        dd[v] = (current=selectfrom, after=afterselection)
     end
     foreach(vout -> validouts(vout, offs, dd, visited, false), outputs(v))
 
     # This is true if all outputs of v also are (or lead to) size absorb types and we shall indeed populate dd with the indices of this vertex
     if initial && isempty(dd)
-        dd[v] = (1:nout_org(op(v))) .+ offs
+        dd[v] = (current=(1:nout_org(op(v))) .+ offs[1] , after=(1:nout(op(v))) .+ offs[2])
     end
 
     return dd
@@ -165,17 +187,43 @@ function has_visited!(visited, x)
     return false
 end
 
-
-select_outputs(v::AbstractVertex, values) = select_outputs(NoutExact(), v, values)
-
-function select_outputs(s::AbstractSelectionStrategy, v, values)
-    execute, selected = select_outputs(s, v, values, validouts(v))
-
-    if execute
-        #TODO: Need to also handle neuron insertion, similar to how it is done in select_neurons above
-        Δnout(v, selected)
-    end
+function process_selected_outputs(v, cdict::Dict, selected::AbstractVector)
+    select_insert = insert_new_outputs(cdict, selected)
+    Δnout(v, select_insert)
 end
+
+function insert_new_outputs(cdict, selected::AbstractVector{T}) where T<:Integer
+    # Due to negative values being used to indicate insertion of neurons, we might end up in situations like this:
+    #   v = concat(v1, v2, v1)
+    #   v1 shall increase by 2 and v2 shall increase by 3
+    #   To make this happen, we need to call Δnout(v, a) where
+    #   a = [1,2,...,nout(v1), -1,-1, nout(v1)+1, ..., nout(v1) + nout(v2), -1, -1, -1, nout(v1) + nout(v2) +1, ...,nout(v), -1, -1].
+    # Furthermore, for some involved vertices the size has decreased and we might need to select a subset of the outputs. Uhg...
+
+    # Here is how we'll try to tackle it:
+    # Add each column from mi to sel_ins as a separate array (selected is an array of arrays).
+    # We only pick indices which are part of selected as it represents the solution to the much harder (?) problem to select a subset of indices for those vertices for which the size shall decrease.
+
+    sel_ins = Array{T,1}[]
+    for (vi, mi) in cdict
+        Δinsert = max(0, nout(vi) - size(mi[1], 1))
+
+        # This is the reason for sel_ins being an array of arrays: Repeated inputs might be interleaved and we must retain the original ordering without moving the negative values around.
+        toadd =  [vec(vcat(filter(mii -> mii in selected, mi[1][:,i]), -ones(T,Δinsert))) for i in 1:size(mi[1], 2)]
+        @show toadd
+        append!(sel_ins, toadd)
+    end
+
+     # Now concatenate all column arrays in selected. Sort them by their first element which due to the above is always the smallest. Note that due to how validouts works, we can always assume that all nonnegative numbers in a column array in selected are either strictly greater than or strictly less than all nonnegative numbers of all other column arrays.
+     @show sel_ins
+     @show selected
+     return foldl(vcat, sort(filter(!isempty, sel_ins), by = v -> v[1]), init=T[])
+
+end
+
+# Step 1: Select which outputs to use given possible constraints described by validouts. Since this might be infeasible to do (in special cases) we get the execute flag which is true if we shall proceed with the selection
+select_outputs(v::AbstractVertex, values) = select_outputs(NoutExact(), v, values)
+select_outputs(s::AbstractSelectionStrategy, v, values) = select_outputs(s, v, values, validouts(v))
 
 function select_outputs(s::LogSelection, v, values, cdict)
     @logmsg s.level s.msgfun(v)
@@ -191,34 +239,75 @@ function select_outputs(s::NoutRevert, v, values, cdict)
 end
 
 function select_outputs(s::AbstractJuMPSelectionStrategy, v, values, cdict)
-    model, mainvar = mainmodel(s, values)
+    model = mainmodel(s, v, values)
+
+    # variable for selecting a subset of the existing outputs.
+    selectvar = @variable(model, x[1:length(values)], Bin)
+    # Variable for deciding at what positions to insert new outputs.
+    insertvar = @variable(model, y[1:nout(v)], Bin)
 
     # Wouldn't mind being able to relax the size constraint, but that requires MISOCP and only commercial solvers seem to do that
-    #@objective(model, Min, 10*(sum(mainvar) - nout(vselect))^2)
-    sizeconstraint(s, v, model, mainvar)
+    #@objective(model, Min, 10*(sum(selectvar) - nout(v))^2)
+    sizeconstraint(s, v, model, selectvar)
+
+    # Check if size shall be increased
+    if length(insertvar) > length(selectvar)
+        #insertvar needs to be tied to actual size for cases then size is relaxed
+        @constraint(model, sum(insertvar) == length(insertvar) - sum(selectvar))
+    end
+
+    # Will be added to objective to try to insert new neurons last
+    # Should not really matter whether it does that or not, but makes things a bit easier to debug
+    insertlast = @expression(model, 0)
 
     for (vi, mi) in cdict
-        select_i = rowconstraint(s, model, mainvar, mi)
+
+        select_i = rowconstraint(s, model, selectvar, mi.current)
         sizeconstraint(s, vi, model, select_i)
+
+        if length(insertvar) > length(selectvar)
+            insmat = mi.after
+            insert_i = rowconstraint(s, model, insertvar, insmat)
+            @constraint(model, size(insmat, 2) * sum(insert_i) == sum(insertvar[insmat]))
+
+            @constraint(model, insert_i[1] == 0) # Or else it won't be possible to know where to split
+
+            # Isn't this needed? Might be redundant due to constraint on sum and rowconstraint on insertvar
+            #@constraint(model, sum(insert_i) == length(insert_i) - sum(select_i))
+
+            last_i = min(length(select_i), length(insert_i))
+            insertlast = @expression(model, insertlast + sum(insert_i[1:last_i]))
+        end
     end
+
+    # - sum(y[1:min(length(y), length(x)]) means "try to insert new neurons at the end".
+    @objective(model, Max, values' * x - insertlast) # - sum(y[1:min(length(y), length(x))]))
 
     JuMP.optimize!(model)
 
     !accept(s, model) && return select_outputs(fallback(s), v, values, cdict)
-    return true, findall(xi -> xi > 0, JuMP.value.(mainvar))
+
+    # insertvar is 1.0 at indices where a new output shall be added and 0.0 where an existing one shall be selected
+    result = -Int.(JuMP.value.(insertvar))
+    selected = findall(xi -> xi > 0, JuMP.value.(selectvar))
+
+    # TODO: Needs investigation
+    sum(result) == 0 && return true, selected
+
+    j = 1
+    for i in eachindex(result)
+        if result[i] == 0
+            result[i] = selected[j]
+            j += 1
+        end
+    end
+
+    return true, result
 end
 
 accept(::AbstractJuMPSelectionStrategy, model::JuMP.Model) = JuMP.termination_status(model) != MOI.INFEASIBLE && JuMP.primal_status(model) == MOI.FEASIBLE_POINT # Beware: primal_status seems unreliable for Cbc. See MathOptInterface issue #822
 
-function mainmodel(::AbstractJuMPSelectionStrategy, values)
-
-    model = JuMP.Model(JuMP.with_optimizer(Cbc.Optimizer, loglevel=0))
-
-    x = @variable(model, x[1:length(values)], Bin)
-    @objective(model, Max, values' * x)
-
-    return model, x
-end
+mainmodel(::AbstractJuMPSelectionStrategy, v, values) = JuMP.Model(JuMP.with_optimizer(Cbc.Optimizer, loglevel=0))
 
 function rowconstraint(::AbstractJuMPSelectionStrategy, model, x, indmat)
     var = @variable(model, [1:size(indmat,1)], Bin)

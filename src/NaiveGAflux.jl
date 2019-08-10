@@ -7,7 +7,7 @@ using Logging
 
 # For solving pesky entangled neuron select problems. To be moved to NaiveNASlib if things work out
 import JuMP
-import JuMP: @variable, @constraint, @objective, MOI, MOI.INFEASIBLE, MOI.FEASIBLE_POINT
+import JuMP: @variable, @constraint, @objective, @expression, MOI, MOI.INFEASIBLE, MOI.FEASIBLE_POINT
 using Cbc
 
 

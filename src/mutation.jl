@@ -216,10 +216,11 @@ function select_neurons(::Nout, v::AbstractVertex, rankfun::Function, s=NaiveNAS
     # This package is kinda hardcoded to use IoChange, and with some polishing of NaiveNASlib it should be the only possible option
     Δout = nout(v) - nout_org(op(v))
 
-    # Note: Case of Δnout > 0 (size increase) not implemented yet
     if Δout != 0
-        inds= rankfun(v)
-        Δnout(v, inds, s=s)
+        execute, inds = rankfun(v)
+        if execute
+            Δnout(v, inds, s=s)
+        end
     end
 end
 
@@ -231,11 +232,7 @@ function select_neurons(::RemoveVertex, v::AbstractVertex, rankfun::Function)
     # 4: Insize of output vertex is decreased
     # as well as all combinations of two of the above.
 
-    # However, the only cases which needs special action are those when 3 has happened and they all warrant the same action: Select neurons from input vertex but don't touch the output vertex
-
-    # When 4 has happened it might be useful to try to select the best input neurons
-    # Can one assume that "best output neurons" from input vertex are "best input neurons" even if those "best output neurons" belong to the removed vertex?
-
+    # Handle cases when 3 has happened
     Δins = nin(v) - nin_org(op(v))
     for i in eachindex(Δins)
         Δins[i] >= 0 && continue

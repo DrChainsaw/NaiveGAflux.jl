@@ -10,17 +10,33 @@
     cc(ins...; name) = concat(ins...; traitdecoration=named(name) ∘ NaiveGAflux.default_logging())
     nc(name) = traitconf(named(name))
 
+    select_outputs_and_change(v, values) = select_outputs_and_change(NaiveGAflux.NoutExact(), v, values)
+    function select_outputs_and_change(s, v, values)
+        execute, selected = NaiveGAflux.select_outputs(s, v, values)
+        if execute
+            Δnout(v, selected)
+        end
+    end
+
     @testset "Absorb 2 Absorb" begin
         inpt = iv(3)
         v1 = av(inpt, 5, "v1")
         v2 = av(v1, 4, "v2")
 
+        g = CompGraph(inpt, v2)
+
         Δnout(v1, -2)
-        NaiveGAflux.select_outputs(v1, 1:nout_org(op(v1)))
+        select_outputs_and_change(v1, 1:nout_org(op(v1)))
 
         @test out_inds(op(v1)) == in_inds(op(v2))[] == [3,4,5]
+        apply_mutation(g)
 
-        g = CompGraph(inpt, v2)
+        @test size(g(ones(3, 1))) == (nout(v2), 1)
+
+        Δnout(v1, 3)
+        select_outputs_and_change(v1, 1:nout_org(op(v1)))
+
+        @test out_inds(op(v1)) == in_inds(op(v2))[] == [1,2,3,-1,-1,-1]
         apply_mutation(g)
 
         @test size(g(ones(3, 1))) == (nout(v2), 1)
@@ -31,11 +47,21 @@
         v1 = av(inpt, 5, "v1")
         v2 = av(v1, 4, "v2")
 
+        g = CompGraph(inpt, v2)
+
         Δnout(v1, -2)
-        NaiveGAflux.select_outputs(NaiveGAflux.NoutRevert(), v1, 1:nout_org(op(v1)))
+        select_outputs_and_change(NaiveGAflux.NoutRevert(), v1, 1:nout_org(op(v1)))
 
         @test out_inds(op(v1)) == in_inds(op(v2))[] == [1,2,3,4,5]
-        g = CompGraph(inpt, v2)
+        apply_mutation(g)
+
+        @test size(g(ones(3, 1))) == (nout(v2), 1)
+
+        Δnout(v1, +3)
+
+        select_outputs_and_change(NaiveGAflux.NoutRevert(), v1, 1:nout_org(op(v1)))
+
+        @test out_inds(op(v1)) == in_inds(op(v2))[] == [1,2,3,4,5]
         apply_mutation(g)
 
         @test size(g(ones(3, 1))) == (nout(v2), 1)
@@ -47,7 +73,7 @@
         v2 = av(v1, 4, "v2")
 
         Δnout(v1, -2)
-        @test_throws ErrorException NaiveGAflux.select_outputs(NaiveGAflux.SelectionFail(), v1, 1:nout_org(op(v1)))
+        @test_throws ErrorException select_outputs_and_change(NaiveGAflux.SelectionFail(), v1, 1:nout_org(op(v1)))
     end
 
     @testset "SizeStack duplicate" begin
@@ -66,11 +92,24 @@
         @test nout(v1) == 5
         @test nout(v2) == 3
 
-        NaiveGAflux.select_outputs(v4, 1:nout_org(op(v4)))
+        select_outputs_and_change(v4, 1:nout_org(op(v4)))
         apply_mutation(g)
 
         @test nout(v1) == 5
         @test nout(v2) == 3
+
+        @test size(g(ones(3,1))) == (nout(v4), 1)
+
+        Δnout(v4, 6)
+
+        @test nout(v1) == 9
+        @test nout(v2) == 4
+
+        select_outputs_and_change(v4, 1:nout_org(op(v4)))
+        apply_mutation(g)
+
+        @test nout(v1) == 9
+        @test nout(v2) == 4
 
         @test size(g(ones(3,1))) == (nout(v4), 1)
     end
@@ -96,7 +135,7 @@
         @test nout(v2) == 3
         @test nout(v3) == 1
 
-        NaiveGAflux.select_outputs(v6, 1:nout_org(op(v6)))
+        select_outputs_and_change(v6, 1:nout_org(op(v6)))
         apply_mutation(g)
 
         @test nout(v1) == 4
@@ -129,7 +168,7 @@
         @test nout(v3) == 8
         @test nout(v4) == 3
 
-        @test_logs (:warn, "Selection for vertex v7 failed! Relaxing size constraint...")  match_mode=:any NaiveGAflux.select_outputs(v7, 1:nout_org(op(v7)))
+        @test_logs (:warn, "Selection for vertex v7 failed! Relaxing size constraint...")  match_mode=:any select_outputs_and_change(v7, 1:nout_org(op(v7)))
         apply_mutation(g)
 
         @test nout(v1) == 5
