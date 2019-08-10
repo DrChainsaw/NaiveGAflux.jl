@@ -233,7 +233,7 @@
             pa2 = concat(pa1pa1, pa1pb1, traitdecoration=named("pa2"))
             v4 = concat(pa2, pb1, pc1, pd1, traitdecoration=named("v4"))
 
-            rankfun(v) = NaiveGAflux.selectvalidouts(v, v->1:nout_org(op(v)))
+            rankfun(v) = NaiveGAflux.select_outputs(v, 1:nout_org(op(v)))
             m = NeuronSelectMutation(rankfun , NoutMutation(0.5))
             push!(m.m.mutated, v4)
 
@@ -312,7 +312,7 @@
             v5 = traitconf(named("v5")) >> v3 + v4
             v6 = dense(v5, 2, name="v6")
 
-            rankfun(v) = NaiveGAflux.selectvalidouts(v, v->1:nout_org(op(v)))
+            rankfun(v) = NaiveGAflux.select_outputs(v, 1:nout_org(op(v)))
             m = NeuronSelectMutation(rankfun , NoutMutation(0.5))
             push!(m.m.mutated, v4)
 
@@ -350,7 +350,7 @@
             v10 = dense(inpt, nout(v9), name="v10")
             add = traitconf(named("add")) >> v8 + v9# + v10
 
-            rankfun(v) = NaiveGAflux.selectvalidouts(v, v->1:nout_org(op(v)))
+            rankfun(v) = NaiveGAflux.select_outputs(v, 1:nout_org(op(v)))
             m = NeuronSelectMutation(rankfun , NoutMutation(0.5))
             push!(m.m.mutated, v10)
 

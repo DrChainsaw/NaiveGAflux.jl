@@ -208,7 +208,7 @@ function select(m::NeuronSelectMutation)
     end
 end
 
-default_neuronselect(v) = selectvalidouts(v, neuron_value)
+default_neuronselect(v) = select_outputs(v, neuron_value(v))
 
 select_neurons(::T, v::AbstractVertex, rankfun::Function) where T = error("Neuron select not implemented for $T")
 function select_neurons(::Nout, v::AbstractVertex, rankfun::Function, s=NaiveNASlib.VisitState{Vector{Int}}(v))

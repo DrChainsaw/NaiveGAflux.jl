@@ -84,16 +84,14 @@ NoutRelaxSize(lower::Real, upper::Real) = NoutRelaxSize(lower, upper, NoutRevert
 fallback(s::NoutRelaxSize) = s.fallback
 
 
-# TODO: Remove and replace calls with select_outputs
-selectvalidouts(v::AbstractVertex, scorefun::Function) = select_outputs(v, scorefun(v))
-
-
 """
     validouts(v::AbstractVertex)
 
-Return a `Dict` mapping vertices `vi` seen from `v`s output direction to matrices `mi` of output indices as seen from `v`.
+Return a `Dict` mapping vertices `vi` seen from `v`s output direction to matrices `mi.current` and `mi.after` of output indices as seen from `v`.
 
-For output selection to be consistent, either all or none of the indices in a row in `mi` must be selected.
+For output selection to be consistent, either all or none of the indices in a row in `mi.current` must be selected.
+
+For output insertion to be consistent, either all or none of the indices in a row in `mi.after` must be chosen.
 
  Matrix `mi` has more than one column if activations from `vi` is input (possibly through an arbitrary number of size transparent layers such as BatchNorm) to `v` more than once.
 
@@ -116,7 +114,7 @@ julia> nout(v)
 
 julia> for (vi, mi) in cdict
        @show name(vi)
-       display(mi)
+       display(mi.current)
        end
 name(vi) = "v2"
 5×2 Array{Int64,2}:
@@ -187,41 +185,47 @@ function has_visited!(visited, x)
     return false
 end
 
-function process_selected_outputs(v, cdict::Dict, selected::AbstractVector)
-    select_insert = insert_new_outputs(cdict, selected)
-    Δnout(v, select_insert)
-end
-
-function insert_new_outputs(cdict, selected::AbstractVector{T}) where T<:Integer
-    # Due to negative values being used to indicate insertion of neurons, we might end up in situations like this:
-    #   v = concat(v1, v2, v1)
-    #   v1 shall increase by 2 and v2 shall increase by 3
-    #   To make this happen, we need to call Δnout(v, a) where
-    #   a = [1,2,...,nout(v1), -1,-1, nout(v1)+1, ..., nout(v1) + nout(v2), -1, -1, -1, nout(v1) + nout(v2) +1, ...,nout(v), -1, -1].
-    # Furthermore, for some involved vertices the size has decreased and we might need to select a subset of the outputs. Uhg...
-
-    # Here is how we'll try to tackle it:
-    # Add each column from mi to sel_ins as a separate array (selected is an array of arrays).
-    # We only pick indices which are part of selected as it represents the solution to the much harder (?) problem to select a subset of indices for those vertices for which the size shall decrease.
-
-    sel_ins = Array{T,1}[]
-    for (vi, mi) in cdict
-        Δinsert = max(0, nout(vi) - size(mi[1], 1))
-
-        # This is the reason for sel_ins being an array of arrays: Repeated inputs might be interleaved and we must retain the original ordering without moving the negative values around.
-        toadd =  [vec(vcat(filter(mii -> mii in selected, mi[1][:,i]), -ones(T,Δinsert))) for i in 1:size(mi[1], 2)]
-        @show toadd
-        append!(sel_ins, toadd)
-    end
-
-     # Now concatenate all column arrays in selected. Sort them by their first element which due to the above is always the smallest. Note that due to how validouts works, we can always assume that all nonnegative numbers in a column array in selected are either strictly greater than or strictly less than all nonnegative numbers of all other column arrays.
-     @show sel_ins
-     @show selected
-     return foldl(vcat, sort(filter(!isempty, sel_ins), by = v -> v[1]), init=T[])
-
-end
-
 # Step 1: Select which outputs to use given possible constraints described by validouts. Since this might be infeasible to do (in special cases) we get the execute flag which is true if we shall proceed with the selection
+"""
+    select_outputs(v::AbstractVertex, values)
+    select_outputs(s::AbstractSelectionStrategy, v, values)
+
+Returns a tuple `(success, result)` where `result` is a vector so that `Δnout(v, result)` selects outputs for `v` in a way which is consistent with (or as close as possible to) current output size for all vertices visible in the out direction of `v`.
+
+The function generally tries to maximize the `sum(values[selected])` where `selected` is all elements in `results` larger than 0 (negative values in `result` indicates a new output shall be inserted at that position). This however is up to the implementation of the `AbstractSelectionStrategy s`.
+
+Since selection of outputs is not guaranteed to work in all cases, a flag `success` is also returned. If `success` is `false` then calling `Δnout(v, result)` might fail.
+
+See [`validouts`](@ref) for a description of the constraints which may cause the selection to fail.
+
+# Examples
+```julia-repl
+julia> iv = inputvertex("in", 2, FluxDense());
+
+julia> v1 = mutable("v1", Dense(2, 3), iv);
+
+julia> v2 = mutable("v2", Dense(2, 5), iv);
+
+julia> v = concat(v1,v2,v1,v2);
+
+julia> Δnout(v, -2);
+
+julia> nout(v1)
+3
+
+julia> nout(v2)
+4
+
+julia> NaiveGAflux.select_outputs(v, 1:nout_org(op(v))) # Dummy values, prefer the higher indices
+(true, [1, 2, 3, 5, 6, 7, 8, 9, 10, 11, 13, 14, 15, 16])
+
+julia> Δnout(v1, 3);
+
+julia> NaiveGAflux.select_outputs(v, 1:nout_org(op(v)))
+(true, [1, 2, 3, -1, -1, -1, 5, 6, 7, 8, 9, 10, 11, -1, -1, -1, 13, 14, 15, 16])
+```
+
+"""
 select_outputs(v::AbstractVertex, values) = select_outputs(NoutExact(), v, values)
 select_outputs(s::AbstractSelectionStrategy, v, values) = select_outputs(s, v, values, validouts(v))
 
