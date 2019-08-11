@@ -250,12 +250,6 @@ function select_outputs(s::AbstractJuMPSelectionStrategy, v, values, cdict)
     # Variable for deciding at what positions to insert new outputs.
     insertvar = @variable(model, insertvar[1:nout(v)], Bin)
 
-    # Check if size shall be increased
-    if length(insertvar) > length(selectvar)
-        #insertvar needs to be tied to selectvar for cases when size is relaxed
-        @constraint(model, sum(insertvar) == length(insertvar) - sum(selectvar))
-    end
-
     # Will be added to objective to try to insert new neurons last
     # Should not really matter whether it does that or not, but makes things a bit easier to debug
     insertlast = @expression(model, 0)
@@ -264,19 +258,25 @@ function select_outputs(s::AbstractJuMPSelectionStrategy, v, values, cdict)
         select_i = rowconstraint(s, model, selectvar, mi.current)
         sizeconstraint(s, vi, model, select_i)
 
+        # Check if size shall be increased
         if length(insertvar) > length(selectvar)
-            insmat = mi.after
-
-            insert_i = rowconstraint(s, model, insertvar, insmat)
-            @constraint(model, size(insmat, 2) * sum(insert_i) == sum(insertvar[insmat]))
+            # This is a bit unfortunate as it basically makes it impossible to relax
+            # Root issue is that mi.after is calculated under an the assumption that current nout(vi) will be the size after selection as well. Maybe some other formulation does not have this restricion, but I can't come up with one which is guaranteed to either work or know it has failed.
+            insert_i = rowconstraint(s, model, insertvar, mi.after)
 
             @constraint(model, insert_i[1] == 0) # Or else it won't be possible to know where to split
+            Δfactorconstraint(s, model, minΔnoutfactor(vi), select_i, insert_i)
 
-            #Isn't this needed? Might be redundant due to constraint on sum and rowconstraint on insertvar
-            #@constraint(model, sum(insert_i) == length(insert_i) - sum(select_i))
+            # This will make sure that we are consistent to what mi.after prescribes
+            # Note that this basically prevents relaxation of size constraint, but this is needed because mi.after is calculated assuming nout(vi) is the result after selection.
+            # It does offer the flexibility to trade an existing output for a new one should that help resolving something.
+            @constraint(model, sum(insert_i) == length(insert_i) - sum(select_i))
 
             last_i = min(length(select_i), length(insert_i))
             insertlast = @expression(model, insertlast + sum(insert_i[1:last_i]))
+
+        else
+            Δfactorconstraint(s, model, minΔnoutfactor(vi), select_i)
         end
     end
 
@@ -287,7 +287,7 @@ function select_outputs(s::AbstractJuMPSelectionStrategy, v, values, cdict)
     !accept(s, model) && return select_outputs(fallback(s), v, values, cdict)
 
     # insertvar is 1.0 at indices where a new output shall be added and 0.0 where an existing one shall be selected
-    result = -Int.(JuMP.value.(insertvar))
+    result = -round.(Int, JuMP.value.(insertvar))
     selected = findall(xi -> xi > 0, JuMP.value.(selectvar))
 
     # TODO: Needs investigation
@@ -315,21 +315,20 @@ function rowconstraint(::AbstractJuMPSelectionStrategy, model, x, indmat)
 end
 
 nselect_out(v) = min(nout(v), nout_org(op(v)))
+limits(s::NoutRelaxSize, n) =  (max(1, s.lower * n), s.upper * n)
+
 sizeconstraint(::NoutExact, v, model, var) = @constraint(model, sum(var) == nselect_out(v))
 function sizeconstraint(s::NoutRelaxSize, v, model, var)
-    f = minΔnoutfactor(v)
-    nmin = max(1, s.lower * nselect_out(v))
-    nmax =  s.upper * nselect_out(v)
-    return sizeconstraint(model, var, f, nmin, nmax)
+    # Wouldn't mind being able to relax the size constraint like this:
+    #@objective(model, Min, 10*(sum(selectvar) - nout(v))^2)
+    # but that requires MISOCP and only commercial solvers seem to do that
+    nmin, nmax = limits(s, nselect_out(v))
+    @constraint(model, nmin <= sum(var) <= nmax)
 end
 
-# Wouldn't mind being able to relax the size constraint like this:
-#@objective(model, Min, 10*(sum(selectvar) - nout(v))^2)
-# but that requires MISOCP and only commercial solvers seem to do that
-function sizeconstraint(model, var, f, nmin, nmax)
-    @constraint(model, nmin <= sum(var) <= nmax)
-    # minΔfactor constraint:
+function Δfactorconstraint(::AbstractJuMPSelectionStrategy, model, f, vars...)
+    # Δfactor constraint:
     #  - Constraint that answer shall result in an integer multiple of f being not selected
     fv = @variable(model, integer=true)
-    @constraint(model, f * fv == sum(var) - length(var))
+    @constraint(model, f * fv == sum(sum.(vars)) - sum(length.(vars)))
 end

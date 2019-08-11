@@ -8,7 +8,7 @@
 
 
     cc(ins...; name) = concat(ins...; traitdecoration=named(name) ∘ NaiveGAflux.default_logging())
-    nc(name) = traitconf(named(name))
+    nc(name) = traitconf(named(name) ∘ NaiveGAflux.default_logging())
 
     select_outputs_and_change(v, values) = select_outputs_and_change(NaiveGAflux.NoutExact(), v, values)
     function select_outputs_and_change(s, v, values)
@@ -208,6 +208,41 @@
         @test nout(v2) == 6
         @test nout(v3) == 12
         @test nout(v4) == 6
+
+        @test size(g(ones(3,1))) == (nout(v7), 1)
+    end
+
+    @testset "SizeInvariant increase exact infeasible" begin
+        inpt = iv(3)
+        v1 = av(inpt, 3, "v1")
+        v2 = av(inpt, 4, "v2")
+        v3 = av(inpt, 4, "v3")
+        v4 = av(inpt, 5, "v4")
+
+        v5 = cc(v1, v2, v4, name="v5")
+        v6 = cc(v3, v4, v1, name="v6")
+
+        v7 = nc("v7") >> v5 + v6
+
+        g = CompGraph(inpt, v7)
+        @test size(g(ones(3,1))) == (nout(v7), 1)
+
+        @test minΔnoutfactor(v7) == 1
+        Δnout(v7, 5)
+
+        @test nout(v1) == 4
+        @test nout(v2) == 5
+        @test nout(v3) == 5
+        @test nout(v4) == 8
+
+        @test_logs (:warn, "Selection for vertex v7 failed! Relaxing size constraint...")  match_mode=:any select_outputs_and_change(v7, 1:nout_org(op(v7)))
+        apply_mutation(g)
+
+        # Sizes can't change when increasing, even if problem is relaxed :(
+        @test nout(v1) == 4
+        @test nout(v2) == 5
+        @test nout(v3) == 5
+        @test nout(v4) == 8
 
         @test size(g(ones(3,1))) == (nout(v7), 1)
     end
