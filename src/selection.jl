@@ -257,16 +257,16 @@ function select_outputs(s::AbstractJuMPSelectionStrategy, v, values, cdict)
     for (vi, mi) in cdict
         select_i = rowconstraint(s, model, selectvar, mi.current)
         sizeconstraint(s, vi, model, select_i)
+        Δsizeexp = @expression(model, length(select_i) - sum(select_i))
 
         # Check if size shall be increased
         if length(insertvar) > length(selectvar)
             # This is a bit unfortunate as it basically makes it impossible to relax
             # Root issue is that mi.after is calculated under an the assumption that current nout(vi) will be the size after selection as well. Maybe some other formulation does not have this restricion, but I can't come up with one which is guaranteed to either work or know it has failed.
             insert_i = rowconstraint(s, model, insertvar, mi.after)
+            Δsizeexp = @expression(model, Δsizeexp + sum(insert_i))
 
             @constraint(model, insert_i[1] == 0) # Or else it won't be possible to know where to split
-            Δfactorconstraint(s, model, minΔnoutfactor(vi), select_i, insert_i)
-
             # This will make sure that we are consistent to what mi.after prescribes
             # Note that this basically prevents relaxation of size constraint, but this is needed because mi.after is calculated assuming nout(vi) is the result after selection.
             # It does offer the flexibility to trade an existing output for a new one should that help resolving something.
@@ -274,10 +274,10 @@ function select_outputs(s::AbstractJuMPSelectionStrategy, v, values, cdict)
 
             last_i = min(length(select_i), length(insert_i))
             insertlast = @expression(model, insertlast + sum(insert_i[1:last_i]))
-
-        else
-            Δfactorconstraint(s, model, minΔnoutfactor(vi), select_i)
         end
+
+        Δfactorconstraint(s, model, minΔnoutfactor(vi), Δsizeexp)
+
     end
 
     @objective(model, Max, values' * selectvar - insertlast)
@@ -326,9 +326,9 @@ function sizeconstraint(s::NoutRelaxSize, v, model, var)
     @constraint(model, nmin <= sum(var) <= nmax)
 end
 
-function Δfactorconstraint(::AbstractJuMPSelectionStrategy, model, f, vars...)
+function Δfactorconstraint(::AbstractJuMPSelectionStrategy, model, f, Δsizeexp)
     # Δfactor constraint:
     #  - Constraint that answer shall result in an integer multiple of f being not selected
     fv = @variable(model, integer=true)
-    @constraint(model, f * fv == sum(sum.(vars)) - sum(length.(vars)))
+    @constraint(model, f * fv == Δsizeexp)
 end

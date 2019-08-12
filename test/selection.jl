@@ -4,11 +4,10 @@
     #In order to be easily portable to NaiveNASlib
     iv(size, name="in") = inputvertex(name, size, FluxDense())
 
-    av(in, outsize, name) = mutable(name, Dense(nout(in), outsize), in, traitfun = NaiveGAflux.default_logging())
+    av(in, outsize, name) = mutable(name, Dense(nout(in), outsize), in)
 
-
-    cc(ins...; name) = concat(ins...; traitdecoration=named(name) ∘ NaiveGAflux.default_logging())
-    nc(name) = traitconf(named(name) ∘ NaiveGAflux.default_logging())
+    cc(ins...; name) = concat(ins...; traitdecoration=named(name))
+    nc(name) = traitconf(named(name))
 
     select_outputs_and_change(v, values) = select_outputs_and_change(NaiveGAflux.NoutExact(), v, values)
     function select_outputs_and_change(s, v, values)

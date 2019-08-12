@@ -50,7 +50,8 @@
         @test expect_e == 11
     end
 
-    dense(in, outsizes...;layerfun = LazyMutable, name="dense") = foldl((next,size) -> mutable(name, Dense(nout(next), size), next, layerfun=layerfun), outsizes, init=in)
+    dense(in, outsize;layerfun = LazyMutable, name="dense") = mutable(name, Dense(nout(in), outsize), in, layerfun=layerfun)
+    dense(in, outsizes...;layerfun = LazyMutable, name="dense") = foldl((next,i) -> dense(next, outsizes[i], name=join([name, i]), layerfun=layerfun), 1:length(outsizes), init=in)
 
     @testset "VertexMutation" begin
         inpt = inputvertex("in", 4, FluxDense())
@@ -185,7 +186,7 @@
 
             m(inputs(v3)[])
             select(m)
-            @test in_inds(op(v3)) == [[1,2,3]]
+            @test in_inds(op(v3)) == [[1,3,5]]
             @test out_inds(op(inputs(v3)[])) == 1:3
             apply_mutation(CompGraph(inpt, v3))
 
@@ -196,7 +197,7 @@
             m(inputs(v3)[])
             select(m)
             @test in_inds(op(v3)) == [[1,2,3,4,5,-1]]
-            @test out_inds(op(inputs(v3)[])) == [1,2,3,4,5,7]
+            @test out_inds(op(inputs(v3)[])) == [1,2,3,4,5,6] # 6 and not 7 because we hack the mutation metadata and this affects oddfirst
             apply_mutation(CompGraph(inpt, v3))
         end
 
@@ -360,6 +361,46 @@
             @test minΔnoutfactor(add) == 2
             Δnout(add, -4)
 
+            @test nout(add) == 12
+
+            select(m)
+            apply_mutation(g)
+
+            @test nout(add) == 12
+
+            @test size(g(ones(Float32, 3,2))) == (nout(add), 2)
+        end
+
+        @testset "NeuronSelectMutation remove SizeStack input" begin
+            inpt = inputvertex("in", 3, FluxDense())
+            v0 = dense(inpt, 4, name="v0")
+            v1 = dense(v0, 2, name="v1")
+            v2 = dense(v0, 3, name="v2")
+            v3 = dense(v0, 4, name="v3")
+
+            v4 = concat(v1,v2,v1,v3, traitdecoration=named("v4"))
+            v5 = dense(v4, 3, name="v5")
+
+            g = CompGraph(inpt, v4)
+            @test size(g(ones(Float32, 3,2))) == (nout(v4), 2)
+
+            rankfun(v) = NaiveGAflux.select_outputs(v, 1:nout_org(op(v)))
+            m = NeuronSelectMutation(rankfun , RemoveVertexMutation())
+
+            Δnout(v1, 1)
+            m(v1)
+
+            @test nout(v4) == nin(v5)[] == 15
+
+            select(m)
+            @test out_inds(op(v4)) == [1, 2, -1, -1, 3, 4, 5, 4, 5, -4, -4, 3, 4, 5, 6]
+            @test out_inds(op(v0)) == [1,2,3,4]
+
+            apply_mutation(g)
+
+            @test nout(v4) == nin(v5)[] == 15
+
+            @test size(g(ones(Float32, 3,2))) == (nout(v4), 2)
         end
     end
 

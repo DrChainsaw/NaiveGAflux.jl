@@ -165,7 +165,28 @@ struct RemoveVertexMutation <:AbstractMutation{AbstractVertex}
 end
 RemoveVertexMutation() = RemoveVertexMutation(RemoveStrategy(IncreaseSmaller(DecreaseBigger(AlignSizeBoth(FailAlignSizeWarn())))))
 
-(m::RemoveVertexMutation)(v::AbstractVertex) = remove!(v, m.s)
+function (m::RemoveVertexMutation)(v::AbstractVertex)
+
+    op_rem = op(v)
+    Δout_pre = op_rem.outΔ
+
+    remove!(v, m.s)
+
+    # Hack the mutation metadata so that NeuronSelectMutation makes the right changes
+    # TODO: Do this in NaiveNASlib instead?
+    new_ins = unique(mapfoldl(vo -> filter(voi -> voi in inputs(v), inputs(vo)), vcat, outputs(v)))
+
+    foreach(vi -> fakeΔnout(vi, op_rem.outΔ - Δout_pre), new_ins)
+end
+
+fakeΔnout(v::AbstractVertex, Δ) = fakeΔnout(trait(v), v, Δ)
+fakeΔnout(t::DecoratingTrait, v, Δ) = fakeΔnout(base(t), v, Δ)
+function fakeΔnout(::Immutable, v, Δ) end
+function fakeΔnout(::MutationSizeTrait, v, Δ)
+    opv = op(v)
+    opv.outΔ += Δ
+    opv.size.nout -= Δ
+end
 
 """
     NeuronSelectMutation{T} <: AbstractMutation{AbstractVertex}
@@ -232,16 +253,36 @@ function select_neurons(::RemoveVertex, v::AbstractVertex, rankfun::Function)
     # 4: Insize of output vertex is decreased
     # as well as all combinations of two of the above.
 
-    # Handle cases when 3 has happened
+    # Handle cases when 1 or 3 has happened
+
     Δins = nin(v) - nin_org(op(v))
     for i in eachindex(Δins)
-        Δins[i] >= 0 && continue
+        Δins[i] == 0 && continue
         vin = inputs(v)[i]
 
         s = NaiveNASlib.VisitState{Vector{Int}}(vin)
         NaiveNASlib.visited_in!.(s, outputs(vin))
 
         select_neurons(Nout(), vin, rankfun, s)
+    end
+
+    # Handle cases when 2 or 4 has happened
+    if nout(v) - nout_org(op(v)) != 0
+        for vout in outputs(v)
+
+            s = NaiveNASlib.VisitState{Vector{Int}}(vout)
+            NaiveNASlib.visited_out!.(s, inputs(vout))
+
+            Δ = map(enumerate(inputs(vout))) do (i, voi)
+                valid, inds = rankfun(voi)
+                # TODO: This and the below is a temporary hack until I have figured this out a bit better.
+                inds[inds .> nin_org(op(vout))[i]] .= -1
+                inds = vcat(inds, -ones(eltype(inds), max(0, nout(voi) - length(inds))))
+                return valid ? inds : missing
+            end
+
+            Δnin(vout, Δ..., s=s)
+        end
     end
 end
 
