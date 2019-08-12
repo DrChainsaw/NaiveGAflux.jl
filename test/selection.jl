@@ -159,6 +159,29 @@
         @test size(g(ones(3,1))) == (nout(v6), 1)
     end
 
+    @testset "SizeStack one immutable" begin
+        inpt = iv(3)
+        v1 = av(inpt, 5, "v1")
+        v2 = cc(inpt, v1, name="v2")
+
+        g = CompGraph(inpt, v2)
+        @test size(g(ones(3,1))) == (nout(v2), 1)
+
+        Δnout(v1, -3)
+
+        @test nin(v2) == [nout(inpt), nout(v1)] == [3, 2]
+        @test nout(v2) == 5
+
+        # "Tempt" optimizer to not select inputs from inpt
+        select_outputs_and_change(NaiveGAflux.NoutRelaxSize(0.5, 1), v2, -nout(inpt):nout_org(op(v1))-1)
+        apply_mutation(g)
+
+        @test nin(v2) == [nout(inpt), nout(v1)] == [3, 2]
+        @test nout(v2) == 5
+
+        @test size(g(ones(3,1))) == (nout(v2), 1)
+    end
+
     @testset "SizeInvariant exact infeasible" begin
         inpt = iv(3)
         v1 = av(inpt, 10, "v1")

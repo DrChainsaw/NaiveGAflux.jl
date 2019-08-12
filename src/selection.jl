@@ -2,6 +2,8 @@
 
 # Methods to help select or add a number of outputs given a new size as this problem apparently belongs to the class of FU-complete problems. And yes, I curse the day I conceived the idea for this project right now...
 
+NaiveNASlib.Δnout(::Immutable, v::AbstractVertex, Δ::T; s) where T<:AbstractArray{<:Integer} = !NaiveNASlib.has_visited_out(s, v) && Δ != 1:nout(v) && error("Tried to change nout of immutable $v to $Δ")
+
 """
     AbstractSelectionStrategy
 
@@ -84,18 +86,27 @@ NoutRelaxSize(lower::Real, upper::Real) = NoutRelaxSize(lower, upper, NoutRevert
 fallback(s::NoutRelaxSize) = s.fallback
 
 
+struct ValidOutsInfo{I <:Integer, T <: MutationTrait}
+    current::Matrix{I}
+    after::Matrix{I}
+    trait::T
+end
+ValidOutsInfo(currsize::I, aftersize::I, trait::T) where {T<:MutationTrait,I<:Integer} = ValidOutsInfo(zeros(I, currsize, 0), zeros(I, aftersize, 0), trait)
+addinds(v::ValidOutsInfo{I, T}, c::Integer, a::Integer) where {I,T} = ValidOutsInfo([v.current range(c, length=size(v.current,1))], [v.after range(a, length=size(v.after,1))], v.trait)
+
+
 """
     validouts(v::AbstractVertex)
 
-Return a `Dict` mapping vertices `vi` seen from `v`s output direction to matrices `mi.current` and `mi.after` of output indices as seen from `v`.
+Return a `Dict` mapping vertices `vi` seen from `v`s output direction to `ValidOutsInfo mi`.
 
 For output selection to be consistent, either all or none of the indices in a row in `mi.current` must be selected.
 
 For output insertion to be consistent, either all or none of the indices in a row in `mi.after` must be chosen.
 
- Matrix `mi` has more than one column if activations from `vi` is input (possibly through an arbitrary number of size transparent layers such as BatchNorm) to `v` more than once.
+ Matrices in `mi` have more than one column if activations from `vi` is input (possibly through an arbitrary number of size transparent layers such as BatchNorm) to `v` more than once.
 
- Furthermore, in the presense of `SizeInvariant` vertices, an indices may be present in more than one `mi`, making selection of indices non-trivial at best in the general case.
+ Furthermore, in the presense of `SizeInvariant` vertices, some indices may be present in more than one `mi`, making selection of indices non-trivial at best in the general case.
 
  # Examples
  ```julia-repl
@@ -131,7 +142,7 @@ name(vi) = "v1"
 ```
 
 """
-validouts(v::AbstractVertex, offs=(0, 0), dd=Dict(), visited = [], out=true) = validouts(trait(v), v, offs, dd, visited, out)
+validouts(v::AbstractVertex, offs=(1, 1), dd=Dict{AbstractVertex, ValidOutsInfo}(), visited = [], out=true) = validouts(trait(v), v, offs, dd, visited, out)
 validouts(t::DecoratingTrait, v, offs, dd, visited, out) = validouts(base(t), v, offs, dd, visited, out)
 function validouts(::SizeStack, v, offs, dd, visited, out)
     !out && return dd
@@ -139,7 +150,7 @@ function validouts(::SizeStack, v, offs, dd, visited, out)
 
     for vin in inputs(v)
         validouts(vin, offs, dd, visited, true)
-        offs = offs .+ (nout_org(op(vin)), nout(vin))
+        offs = offs .+ (nout_org(vin), nout(vin))
     end
     return dd
 end
@@ -152,7 +163,10 @@ function validouts(::SizeInvariant, v, offs, dd, visited, out)
     return dd
 end
 
-function validouts(::SizeAbsorb, v, offs, dd, visited, out)
+validouts(t::SizeAbsorb, v, offs, dd, visited, out) = addvalidouts(t, v, offs, dd, visited, out)
+validouts(t::Immutable, v, offs, dd, visited, out) = addvalidouts(t, v, offs, dd, visited, out)
+
+function addvalidouts(t::MutationTrait, v, offs, dd, visited, out)
     !out && return dd
     has_visited!(visited, (offs, v)) && return dd
 
@@ -160,20 +174,17 @@ function validouts(::SizeAbsorb, v, offs, dd, visited, out)
 
     # length(visited) > 1 is only false if the first vertex we call validouts for is of type SizeAbsorb
     # If it is, we need to propagate the call instead of adding indices as the outputs of v might take us to a SizeInvariant vertex which in turn might take us to a SizeStack vertex
+    orgsize = nout_org(v)
+    newsize = nout(v)
     if !initial
-        orgsize = nout_org(op(v))
-        newsize = nout(v)
-        s,n = get(() -> (zeros(Int, orgsize, 0), zeros(Int, newsize, 0) ), dd, v)
-
-        selectfrom = hcat(s, (1:orgsize) .+ offs[1])
-        afterselection = hcat(n, (1:newsize) .+ offs[2])
-        dd[v] = (current=selectfrom, after=afterselection)
+        info = get(() -> ValidOutsInfo(orgsize, newsize, t), dd, v)
+        dd[v] = addinds(info, offs...)
     end
     foreach(vout -> validouts(vout, offs, dd, visited, false), outputs(v))
 
     # This is true if all outputs of v also are (or lead to) size absorb types and we shall indeed populate dd with the indices of this vertex
     if initial && isempty(dd)
-        dd[v] = (current=(1:nout_org(op(v))) .+ offs[1] , after=(1:nout(op(v))) .+ offs[2])
+        dd[v] = addinds(ValidOutsInfo(orgsize, newsize, t), offs...)
     end
 
     return dd
@@ -184,6 +195,11 @@ function has_visited!(visited, x)
     push!(visited, x)
     return false
 end
+
+nout_org(v::AbstractVertex) = nout_org(trait(v), v)
+nout_org(t::DecoratingTrait, v) = nout_org(base(t), v)
+nout_org(::MutationSizeTrait, v::MutationVertex) = nout_org(op(v))
+nout_org(::Immutable, v) = nout(v)
 
 # Step 1: Select which outputs to use given possible constraints described by validouts. Since this might be infeasible to do (in special cases) we get the execute flag which is true if we shall proceed with the selection
 """
@@ -237,7 +253,7 @@ end
 select_outputs(s::SelectionFail, v, values, cdict) = error("Selection failed for vertex $(name(v))")
 
 function select_outputs(s::NoutRevert, v, values, cdict)
-    Δ = nout_org(op(v)) - nout(v)
+    Δ = nout_org(v) - nout(v)
     Δnout(v, Δ)
     return false, 1:nout(v)
 end
@@ -256,7 +272,7 @@ function select_outputs(s::AbstractJuMPSelectionStrategy, v, values, cdict)
 
     for (vi, mi) in cdict
         select_i = rowconstraint(s, model, selectvar, mi.current)
-        sizeconstraint(s, vi, model, select_i)
+        sizeconstraint(s, mi.trait, vi, model, select_i)
         Δsizeexp = @expression(model, length(select_i) - sum(select_i))
 
         # Check if size shall be increased
@@ -314,11 +330,12 @@ function rowconstraint(::AbstractJuMPSelectionStrategy, model, x, indmat)
     return var
 end
 
-nselect_out(v) = min(nout(v), nout_org(op(v)))
+nselect_out(v) = min(nout(v), nout_org(v))
 limits(s::NoutRelaxSize, n) =  (max(1, s.lower * n), s.upper * n)
 
-sizeconstraint(::NoutExact, v, model, var) = @constraint(model, sum(var) == nselect_out(v))
-function sizeconstraint(s::NoutRelaxSize, v, model, var)
+sizeconstraint(::NoutExact, t, v, model, var) = @constraint(model, sum(var) == nselect_out(v))
+sizeconstraint(s::NoutRelaxSize, ::Immutable, v, model, var) = @constraint(model, sum(var) == nselect_out(v))
+function sizeconstraint(s::NoutRelaxSize, t, v, model, var)
     # Wouldn't mind being able to relax the size constraint like this:
     #@objective(model, Min, 10*(sum(selectvar) - nout(v))^2)
     # but that requires MISOCP and only commercial solvers seem to do that
@@ -326,6 +343,7 @@ function sizeconstraint(s::NoutRelaxSize, v, model, var)
     @constraint(model, nmin <= sum(var) <= nmax)
 end
 
+function Δfactorconstraint(::AbstractJuMPSelectionStrategy, model, ::Missing, Δsizeexp) end
 function Δfactorconstraint(::AbstractJuMPSelectionStrategy, model, f, Δsizeexp)
     # Δfactor constraint:
     #  - Constraint that answer shall result in an integer multiple of f being not selected
