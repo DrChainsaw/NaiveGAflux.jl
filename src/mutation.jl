@@ -150,6 +150,17 @@ AddVertexMutation(s, rng::AbstractRNG) = AddVertexMutation(s, identity, rng)
 
 (m::AddVertexMutation)(v::AbstractVertex) = insert!(v, vi -> m.s(vi, outsize=nout(vi)), m.outselect)
 
+# TODO: Belongs in NaiveNASlib
+struct CheckAligned <:AbstractAlignSizeStrategy
+    ifnot
+end
+CheckAligned() = CheckAligned(IncreaseSmaller())
+function NaiveNASlib.prealignsizes(s::CheckAligned, vin, vout, will_rm)
+    nout(vin) == NaiveNASlib.tot_nin(vout) && return true
+    return NaiveNASlib.prealignsizes(s.ifnot, vin, vout, will_rm)
+end
+
+
 """
     RemoveVertexMutation <:AbstractMutation{AbstractVertex}
     RemoveVertexMutation(s::RemoveStrategy)
@@ -164,7 +175,7 @@ Default reconnect strategy is `ConnectAll`.
 struct RemoveVertexMutation <:AbstractMutation{AbstractVertex}
     s::RemoveStrategy
 end
-RemoveVertexMutation() = RemoveVertexMutation(RemoveStrategy(IncreaseSmaller(DecreaseBigger(AlignSizeBoth(FailAlignSizeWarn())))))
+RemoveVertexMutation() = RemoveVertexMutation(RemoveStrategy(CheckAligned(IncreaseSmaller(DecreaseBigger(AlignSizeBoth(FailAlignSizeWarn()))))))
 
 function (m::RemoveVertexMutation)(v::AbstractVertex)
 
@@ -230,7 +241,10 @@ function select(m::NeuronSelectMutation)
     end
 end
 
-default_neuronselect(v) = select_outputs(v, neuron_value(v))
+default_neuronselect(v) = default_neuronselect(trait(v), v)
+default_neuronselect(t::DecoratingTrait, v) = default_neuronselect(base(t), v)
+default_neuronselect(t::Immutable, v) = false, 1:nout(v)
+default_neuronselect(t::MutationSizeTrait, v::MutationVertex) = select_outputs(v, neuron_value(v))
 
 select_neurons(::T, v::AbstractVertex, rankfun::Function) where T = error("Neuron select not implemented for $T")
 function select_neurons(::Nout, v::AbstractVertex, rankfun::Function, s=NaiveNASlib.VisitState{Vector{Int}}(v))
@@ -276,13 +290,15 @@ function select_neurons(::RemoveVertex, v::AbstractVertex, rankfun::Function)
 
             Δ = map(enumerate(inputs(vout))) do (i, voi)
                 valid, inds = rankfun(voi)
+                valid || return missing
                 # TODO: This and the below is a temporary hack until I have figured this out a bit better.
                 inds[inds .> nin_org(op(vout))[i]] .= -1
                 inds = vcat(inds, -ones(eltype(inds), max(0, nout(voi) - length(inds))))
-                return valid ? inds : missing
+                return inds
             end
-
-            Δnin(vout, Δ..., s=s)
+            if !all(ismissing.(Δ))
+                Δnin(vout, Δ..., s=s)
+            end
         end
     end
 end

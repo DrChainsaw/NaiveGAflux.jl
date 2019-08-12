@@ -253,8 +253,10 @@ end
 select_outputs(s::SelectionFail, v, values, cdict) = error("Selection failed for vertex $(name(v))")
 
 function select_outputs(s::NoutRevert, v, values, cdict)
-    Δ = nout_org(v) - nout(v)
-    Δnout(v, Δ)
+    if !ismissing(minΔnoutfactor(v))
+        Δ = nout_org(v) - nout(v)
+        Δnout(v, Δ)
+    end
     return false, 1:nout(v)
 end
 
@@ -325,16 +327,20 @@ accept(::AbstractJuMPSelectionStrategy, model::JuMP.Model) = JuMP.termination_st
 optmodel(::AbstractJuMPSelectionStrategy, v, values) = JuMP.Model(JuMP.with_optimizer(Cbc.Optimizer, loglevel=0))
 
 function rowconstraint(::AbstractJuMPSelectionStrategy, model, x, indmat)
-    var = @variable(model, [1:size(indmat,1)], Bin)
-    @constraint(model, size(indmat,2) .* var .- sum(x[indmat], dims=2) .== 0)
+    # Valid rows don't include all rows when vertex to select from has not_org < nout_org of a vertex in cdict.
+    # This typically happens when resizing vertex to select from due to removal of its output vertex
+    # TODO: See if this can be handled by avoiding/blocking vertices in validouts instead?
+    validrows = [i for i in 1:size(indmat, 1) if all(indmat[i,:] .<= length(x))]
+    var = @variable(model, [1:length(validrows)], Bin)
+    @constraint(model, size(indmat,2) .* var .- sum(x[indmat[validrows,:]], dims=2) .== 0)
     return var
 end
 
 nselect_out(v) = min(nout(v), nout_org(v))
 limits(s::NoutRelaxSize, n) =  (max(1, s.lower * n), s.upper * n)
 
-sizeconstraint(::NoutExact, t, v, model, var) = @constraint(model, sum(var) == nselect_out(v))
-sizeconstraint(s::NoutRelaxSize, ::Immutable, v, model, var) = @constraint(model, sum(var) == nselect_out(v))
+sizeconstraint(::NoutExact, t, v, model, var) = @constraint(model, sum(var) == min(length(var), nselect_out(v)))
+sizeconstraint(s::NoutRelaxSize, ::Immutable, v, model, var) = @constraint(model, sum(var) == min(length(var),nselect_out(v)))
 function sizeconstraint(s::NoutRelaxSize, t, v, model, var)
     # Wouldn't mind being able to relax the size constraint like this:
     #@objective(model, Min, 10*(sum(selectvar) - nout(v))^2)
