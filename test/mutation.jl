@@ -94,6 +94,15 @@
 
         NoutMutation(-0.1, 0.3, rng)(v)
         @test nout(v) == 12
+
+        # "Hidden" size 1 vertex
+        v0 = dense(inpt,1, name="v0")
+        v1 = dense(inpt,1, name="v1")
+        v2 = concat(v0, v1, traitdecoration=named("v2") ∘ NaiveGAflux.default_logging())
+
+        NoutMutation(-1, rng)(v2)
+        @test nout(v2) == 2
+        @test nin(v2) == [nout(v0), nout(v1)] == [1, 1]
     end
 
     @testset "AddVertexMutation" begin
