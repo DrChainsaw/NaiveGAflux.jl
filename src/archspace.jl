@@ -230,16 +230,17 @@ Base.Broadcast.broadcastable(c::LayerVertexConf) = Ref(c)
 Generic configuration template for concatenation of vertex outputs.
 """
 struct ConcConf
+    layerfun
     traitfun
 end
-ConcConf() = ConcConf(validated() ∘ default_logging())
+ConcConf() = ConcConf(ActivationContribution, validated() ∘ default_logging())
 
 (c::ConcConf)(in::AbstractVector{<:AbstractVertex}) = c(in...)
 (c::ConcConf)(in::AbstractVertex) = in
-(c::ConcConf)(ins::AbstractVertex...) = concat(ins...,mutation=IoChange, traitdecoration = c.traitfun)
+(c::ConcConf)(ins::AbstractVertex...) = concat(ins...,mutation=IoChange, traitfun = c.traitfun, layerfun=c.layerfun)
 (c::ConcConf)(name::String, in::AbstractVector{<:AbstractVertex}) = c(name, in...)
 (c::ConcConf)(name::String, in::AbstractVertex) = in
-(c::ConcConf)(name::String, ins::AbstractVertex...) = concat(ins...,mutation=IoChange, traitdecoration = c.traitfun ∘ named(name))
+(c::ConcConf)(name::String, ins::AbstractVertex...) = concat(ins...,mutation=IoChange, traitfun = c.traitfun ∘ named(name), layerfun=c.layerfun)
 
 """
     VertexSpace <:AbstractArchSpace
@@ -358,7 +359,7 @@ struct ResidualArchSpace <:AbstractArchSpace
     s::AbstractArchSpace
     conf::VertexConf
 end
-ResidualArchSpace(s::AbstractArchSpace) = ResidualArchSpace(s, traitconf(validated() ∘ default_logging()))
+ResidualArchSpace(s::AbstractArchSpace) = ResidualArchSpace(s, VertexConf(traitdecoration = validated() ∘ default_logging(), outwrap = ActivationContribution))
 ResidualArchSpace(l::AbstractLayerSpace) = ResidualArchSpace(VertexSpace(l))
 
 (s::ResidualArchSpace)(in::AbstractVertex, rng=rng_default;outsize=missing) = s.conf >> in + s.s(in, rng,outsize=nout(in))

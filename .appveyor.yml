@@ -4,11 +4,13 @@ environment:
   - julia_version: 1.1
   - julia_version: nightly
 platform:
-  - x86
   - x64
+  - x86
 matrix:
+  fast_finish: true
   allow_failures:
     - julia_version: nightly
+    - platform: x86
 branches:
   only:
     - master

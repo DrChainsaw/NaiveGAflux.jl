@@ -5,6 +5,10 @@ using Random
 
 export run_experiment, initial_models
 
+# TODO: Need to handle this somehow...
+NaiveNASlib.minΔninfactor(::ActivationContribution) = 1
+NaiveNASlib.minΔnoutfactor(::ActivationContribution) = 1
+
 # Stop-gap solution until a real candidate/entity type is created
 struct Model
     g::CompGraph
@@ -27,6 +31,7 @@ function run_experiment(popsize, niters, data; nevolve=100, baseseed=666)
             evolvemodels!(population)
         end
     end
+    return population
 end
 
 # Workaround as losses fail with Flux.OneHotMatrix on Appveyor x86 (works everywhere else)
@@ -34,18 +39,26 @@ onehot(y) = Float32.(Flux.onehotbatch(y, 0:9))
 
 function trainmodels!(population, data)
     data = [data |> gpu]
+    nptot = 0
     for model in population
+        np = sum(map(ppp -> prod(size(ppp)), params(model.g).order))
+        nptot += np
+        @info "Train model $(name(model.g.inputs[])) nv: $(nv(model.g)) np: $np"
         loss(x,y) = Flux.logitcrossentropy(model(x), y)
         Flux.train!(loss, params(model), data, model.opt)
     end
+    @info "nptot: $nptot"
+    sleep(1)
 end
 
 function evolvemodels!(population)
     @info "\tEvolve population!"
+
     for model in population
         mutation = create_mutation()
         mutation(model.g)
     end
+    @info "\tDone evolving!"
 end
 
 struct MapArchSpace <: AbstractArchSpace
@@ -76,8 +89,7 @@ function create_mutation()
     maddv = mp(LogMutation(v -> "\tAdd vertex after $(name(v))", add_vertex), 0.01)
     mremv = mp(LogMutation(v -> "\tRemove vertex $(name(v))", rem_vertex), 0.01)
 
-    # TODO: Wrap rem_vertex and mutate_nout into some FinalizeMutation which invokes select and apply_mutation
-    return PostMutation(VertexMutation(MutationList(mnout, maddv, mremv)), NeuronSelect(), RemoveZeroNout(), (m,g) -> apply_mutation(g))
+    return LogMutation(g -> "Mutate model $(name(g.inputs[]))", PostMutation(VertexMutation(MutationList(maddv, mremv, mnout)), NeuronSelect(), RemoveZeroNout(), (m,g) -> apply_mutation(g)))
 end
 
 
@@ -93,10 +105,10 @@ struct GpVertex <: AbstractArchSpace end
 (s::GpVertex)(in::AbstractVertex, rng=nothing; outsize=nothing) = funvertex(globalpooling2d, in)
 (s::GpVertex)(name::String, in::AbstractVertex, rng=nothing; outsize=nothing) = funvertex(join([name,".globpool"]), globalpooling2d, in)
 
-funvertex(fun, in::AbstractVertex) = invariantvertex(fun(s), in, mutation=IoChange, traitdecoration = MutationShield ∘ NaiveGAflux.default_logging() ∘ validated())
+funvertex(fun, in::AbstractVertex) = invariantvertex(ActivationContribution(fun), in, mutation=IoChange, traitdecoration = MutationShield ∘ NaiveGAflux.default_logging() ∘ validated())
 
 funvertex(name::String, fun, in::AbstractVertex) =
-invariantvertex(fun, in, mutation=IoChange, traitdecoration = MutationShield ∘ NaiveGAflux.default_logging() ∘ validated() ∘ named(name))
+invariantvertex(ActivationContribution(fun), in, mutation=IoChange, traitdecoration = MutationShield ∘ NaiveGAflux.default_logging() ∘ validated() ∘ named(name))
 
 default_layerconf() = LayerVertexConf(ActivationContribution ∘ LazyMutable, NaiveGAflux.default_logging() ∘ validated())
 
@@ -154,14 +166,12 @@ end
 function rep_fork_res(s, n, min_rp=1)
     n == 0 && return s
 
-    resconf = traitconf(MutationShield ∘ NaiveGAflux.default_logging() ∘ validated())
-    # TODO: Wrap elem addition in ActivationContribution so it becomes possible to select params
-    # API does not currently allow this...
-    concconf = ConcConf(MutationShield ∘ NaiveGAflux.default_logging() ∘ validated())
+    resconf = VertexConf(outwrap = ActivationContribution, traitdecoration = MutationShield ∘ NaiveGAflux.default_logging() ∘ validated())
+    concconf = ConcConf(ActivationContribution,  MutationShield ∘ NaiveGAflux.default_logging() ∘ validated())
 
     rep = RepeatArchSpace(s, min_rp:3)
     fork = ForkArchSpace(rep, min_rp:3, conf=concconf)
-    res = ResidualArchSpace(rep,resconf)
+    res = ResidualArchSpace(rep, resconf)
     return rep_fork_res(ArchSpace(ParSpace([rep, fork, res])), n-1, 0)
 end
 

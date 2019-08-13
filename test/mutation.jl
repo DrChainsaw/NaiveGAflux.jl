@@ -98,7 +98,7 @@
         # "Hidden" size 1 vertex
         v0 = dense(inpt,1, name="v0")
         v1 = dense(inpt,1, name="v1")
-        v2 = concat(v0, v1, traitdecoration=named("v2") ∘ NaiveGAflux.default_logging())
+        v2 = concat(v0, v1, traitfun=named("v2"))
 
         NoutMutation(-1, rng)(v2)
         @test nout(v2) == 2
@@ -233,15 +233,15 @@
             inpt = inputvertex("in", 3, FluxDense())
             v1 = dense(inpt, 8, name="v1")
             v2 = dense(inpt, 4, name="v2")
-            v3 = concat(v1,v2, traitdecoration=named("v3"))
+            v3 = concat(v1,v2, traitfun=named("v3"))
             pa1 = batchnorm(v3, name="pa1")
             pb1 = batchnorm(v3, name="pb1")
             pc1 = batchnorm(v3, name="pc1")
             pd1 = dense(v3, 5, name="pd1")
             pa1pa1 = batchnorm(pa1, name="pa1pa1")
             pa1pb1 = batchnorm(pa1, name="pa1pb1")
-            pa2 = concat(pa1pa1, pa1pb1, traitdecoration=named("pa2"))
-            v4 = concat(pa2, pb1, pc1, pd1, traitdecoration=named("v4"))
+            pa2 = concat(pa1pa1, pa1pb1, traitfun=named("pa2"))
+            v4 = concat(pa2, pb1, pc1, pd1, traitfun=named("v4"))
 
             rankfun(v) = NaiveGAflux.select_outputs(v, 1:nout_org(op(v)))
             m = NeuronSelectMutation(rankfun , NoutMutation(0.5))
@@ -317,7 +317,7 @@
             inpt = inputvertex("in", 3, FluxDense())
             v1 = dense(inpt, 8, name="v1")
             v2 = dense(inpt, 4, name="v2")
-            v3 = concat(v1,v2, traitdecoration=named("v3"))
+            v3 = concat(v1,v2, traitfun=named("v3"))
             v4 = dense(v3, nout(v3), name="v4")
             v5 = traitconf(named("v5")) >> v3 + v4
             v6 = dense(v5, 2, name="v6")
@@ -350,12 +350,12 @@
             v3 = dense(inpt, 3, name="v3")
             v4 = dense(inpt, 6, name="v4")
 
-            v5 = concat(v1, v2, traitdecoration=named("v5"))
-            v6 = concat(v2, v3, traitdecoration=named("v6"))
-            v7 = concat(v3, v4, traitdecoration=named("v7"))
+            v5 = concat(v1, v2, traitfun=named("v5"))
+            v6 = concat(v2, v3, traitfun=named("v6"))
+            v7 = concat(v3, v4, traitfun=named("v7"))
 
-            v8 = concat(v5, v6, traitdecoration=named("v8"))
-            v9 = concat(v6, v7, traitdecoration=named("v9"))
+            v8 = concat(v5, v6, traitfun=named("v8"))
+            v9 = concat(v6, v7, traitfun=named("v9"))
 
             v10 = dense(inpt, nout(v9), name="v10")
             add = traitconf(named("add")) >> v8 + v9# + v10
@@ -387,7 +387,7 @@
             v2 = dense(v0, 3, name="v2")
             v3 = dense(v0, 4, name="v3")
 
-            v4 = concat(v1,v2,v1,v3, traitdecoration=named("v4"))
+            v4 = concat(v1,v2,v1,v3, traitfun=named("v4"))
             v5 = dense(v4, 3, name="v5")
 
             g = CompGraph(inpt, v4)
@@ -426,7 +426,7 @@
             p2pb1 = mutable("$(bname)2pb1", Dense(nout(p1), 1), p1)
             p2pb2 = mutable("$(bname)2pb2", Dense(nout(p2pb1), 5), p2pb1)
             if !isnothing(add) p2pb2 = traitconf(named("$(bname)2add")) >> p2pb2 + add end
-            p3 = concat(p2pa2,p2pb2, traitdecoration=named("$(bname)3"))
+            p3 = concat(p2pa2,p2pb2, traitfun=named("$(bname)3"))
             return mutable("$(bname)4", Dense(nout(p3), 4), p3)
         end
 
@@ -442,10 +442,10 @@
                     #Other path
                     pb = path("pb")
 
-                    v3 = concat(pa,pb, traitdecoration = named("v3"))
+                    v3 = concat(pa,pb, traitfun = named("v3"))
                     v4 = mutable("v4", Dense(nout(v3), 6), v3)
                     if !isnothing(vconc_out)
-                        v4 = concat(v4, vert(vconc_out, v4), traitdecoration = named("v4$(vconc_out)_conc"))
+                        v4 = concat(v4, vert(vconc_out, v4), traitfun = named("v4$(vconc_out)_conc"))
                     end
                     v5 = mutable("v5", Dense(nout(v4), 5), v4)
 

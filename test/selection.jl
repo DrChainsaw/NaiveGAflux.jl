@@ -6,7 +6,7 @@
 
     av(in, outsize, name) = mutable(name, Dense(nout(in), outsize), in)
 
-    cc(ins...; name) = concat(ins...; traitdecoration=named(name))
+    cc(ins...; name) = concat(ins...; traitfun=named(name))
     nc(name) = traitconf(named(name))
 
     select_outputs_and_change(v, values) = select_outputs_and_change(NaiveGAflux.NoutExact(), v, values)
@@ -130,31 +130,31 @@
         @test minΔnoutfactor(v6) == 2
         Δnout(v6, -4)
 
-        @test nout(v1) == 4
-        @test nout(v2) == 3
-        @test nout(v3) == 1
+        @test nout(v1) == 5
+        @test nout(v2) == 2
+        @test nout(v3) == 3
 
         select_outputs_and_change(v6, 1:nout_org(op(v6)))
         apply_mutation(g)
 
-        @test nout(v1) == 4
-        @test nout(v2) == 3
-        @test nout(v3) == 1
+        @test nout(v1) == 5
+        @test nout(v2) == 2
+        @test nout(v3) == 3
 
         @test size(g(ones(3,1))) == (nout(v6), 1)
 
         Δnout(v6, 6)
 
-        @test nout(v1) == 8
-        @test nout(v2) == 5
-        @test nout(v3) == 3
+        @test nout(v1) == 9
+        @test nout(v2) == 4
+        @test nout(v3) == 5
 
         select_outputs_and_change(v6, 1:nout_org(op(v6)))
         apply_mutation(g)
 
-        @test nout(v1) == 8
-        @test nout(v2) == 5
-        @test nout(v3) == 3
+        @test nout(v1) == 9
+        @test nout(v2) == 4
+        @test nout(v3) == 5
 
         @test size(g(ones(3,1))) == (nout(v6), 1)
     end
@@ -185,9 +185,9 @@
     @testset "SizeInvariant exact infeasible" begin
         inpt = iv(3)
         v1 = av(inpt, 10, "v1")
-        v2 = av(inpt, 6, "v2")
+        v2 = av(inpt, 5, "v2")
         v3 = av(inpt, 10, "v3")
-        v4 = av(inpt, 4, "v4")
+        v4 = av(inpt, 5, "v4")
 
         v5 = cc(v1, v2, v3, name="v5")
         v6 = cc(v2, v1, v2, v4, name="v6")
@@ -200,7 +200,7 @@
         @test minΔnoutfactor(v7) == 2
         Δnout(v7, -4)
 
-        @test nout(v1) == 9
+        @test nout(v1) == 8
         @test nout(v2) == 5
         @test nout(v3) == 8
         @test nout(v4) == 3
@@ -208,28 +208,28 @@
         @test_logs (:warn, "Selection for vertex v7 failed! Relaxing size constraint...")  match_mode=:any select_outputs_and_change(v7, 1:nout_org(op(v7)))
         apply_mutation(g)
 
-        @test nout(v1) == 5
+        @test nout(v1) == 6
         @test nout(v2) == 3
         @test nout(v3) == 6
         @test nout(v4) == 3
 
         @test size(g(ones(3,1))) == (nout(v7), 1)
 
-        Δnout(v7, 14)
+        Δnout(v7, 20)
 
-        @test nout(v1) == 10
-        @test nout(v2) == 6
-        @test nout(v3) == 12
-        @test nout(v4) == 6
+        @test nout(v1) == 14
+        @test nout(v2) == 7
+        @test nout(v3) == 14
+        @test nout(v4) == 7
 
         # Works on the first try this time around
         select_outputs_and_change(v7, 1:nout_org(op(v7)))
         apply_mutation(g)
 
-        @test nout(v1) == 10
-        @test nout(v2) == 6
-        @test nout(v3) == 12
-        @test nout(v4) == 6
+        @test nout(v1) == 14
+        @test nout(v2) == 7
+        @test nout(v3) == 14
+        @test nout(v4) == 7
 
         @test size(g(ones(3,1))) == (nout(v7), 1)
     end

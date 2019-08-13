@@ -248,6 +248,7 @@ default_neuronselect(t::MutationSizeTrait, v::MutationVertex) = select_outputs(v
 
 select_neurons(::T, v::AbstractVertex, rankfun::Function) where T = error("Neuron select not implemented for $T")
 function select_neurons(::Nout, v::AbstractVertex, rankfun::Function, s=NaiveNASlib.VisitState{Vector{Int}}(v))
+    v in vcat(outputs.(inputs(v))...) || return # if vertex was removed
     # nout_org will fail if op(v) is not IoChange
     # This package is kinda hardcoded to use IoChange, and with some polishing of NaiveNASlib it should be the only possible option
     Δout = nout(v) - nout_org(op(v))
