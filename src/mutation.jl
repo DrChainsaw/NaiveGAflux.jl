@@ -160,7 +160,6 @@ function NaiveNASlib.prealignsizes(s::CheckAligned, vin, vout, will_rm)
     return NaiveNASlib.prealignsizes(s.ifnot, vin, vout, will_rm)
 end
 
-
 """
     RemoveVertexMutation <:AbstractMutation{AbstractVertex}
     RemoveVertexMutation(s::RemoveStrategy)
@@ -177,28 +176,7 @@ struct RemoveVertexMutation <:AbstractMutation{AbstractVertex}
 end
 RemoveVertexMutation() = RemoveVertexMutation(RemoveStrategy(CheckAligned(IncreaseSmaller(DecreaseBigger(AlignSizeBoth(FailAlignSizeWarn()))))))
 
-function (m::RemoveVertexMutation)(v::AbstractVertex)
-
-    op_rem = op(v)
-    Δout_pre = op_rem.outΔ
-
-    remove!(v, m.s)
-
-    # Hack the mutation metadata so that NeuronSelectMutation makes the right changes
-    # TODO: Do this in NaiveNASlib instead?
-    new_ins = unique(mapfoldl(vo -> filter(voi -> voi in inputs(v), inputs(vo)), vcat, outputs(v)))
-
-    foreach(vi -> fakeΔnout(vi, op_rem.outΔ - Δout_pre), new_ins)
-end
-
-fakeΔnout(v::AbstractVertex, Δ) = fakeΔnout(trait(v), v, Δ)
-fakeΔnout(t::DecoratingTrait, v, Δ) = fakeΔnout(base(t), v, Δ)
-function fakeΔnout(::Immutable, v, Δ) end
-function fakeΔnout(::MutationSizeTrait, v, Δ)
-    opv = op(v)
-    opv.outΔ += Δ
-    opv.size.nout -= Δ
-end
+(m::RemoveVertexMutation)(v::AbstractVertex) = remove!(v, m.s)
 
 """
     NeuronSelectMutation{T} <: AbstractMutation{AbstractVertex}
@@ -241,10 +219,14 @@ function select(m::NeuronSelectMutation)
     end
 end
 
-default_neuronselect(v) = default_neuronselect(trait(v), v)
-default_neuronselect(t::DecoratingTrait, v) = default_neuronselect(base(t), v)
-default_neuronselect(t::Immutable, v) = false, 1:nout(v)
-default_neuronselect(t::MutationSizeTrait, v::MutationVertex) = select_outputs(v, neuron_value(v))
+default_neuronselect(vsel, vvals) = default_neuronselect(trait(vsel), vsel, vvals)
+default_neuronselect(t::DecoratingTrait, v, vvals) = default_neuronselect(base(t), v, vvals)
+default_neuronselect(t::Immutable, v, vvals) = false, collect(1:nout(v))
+default_neuronselect(t::MutationSizeTrait, v::MutationVertex, vvals) = select_outputs(v, neuron_value(trait(vvals), vvals))
+
+NaiveNASflux.neuron_value(t::DecoratingTrait, v) = neuron_value(base(t), v)
+NaiveNASflux.neuron_value(::Immutable, v) = ones(nout(v))
+NaiveNASflux.neuron_value(::MutationSizeTrait, v) = neuron_value(v)
 
 select_neurons(::T, v::AbstractVertex, rankfun::Function) where T = error("Neuron select not implemented for $T")
 function select_neurons(::Nout, v::AbstractVertex, rankfun::Function, s=NaiveNASlib.VisitState{Vector{Int}}(v))
@@ -254,7 +236,7 @@ function select_neurons(::Nout, v::AbstractVertex, rankfun::Function, s=NaiveNAS
     Δout = nout(v) - nout_org(op(v))
 
     if Δout != 0
-        execute, inds = rankfun(v)
+        execute, inds = rankfun(v, v)
         if execute
             Δnout(v, inds, s=s)
         end
@@ -269,39 +251,58 @@ function select_neurons(::RemoveVertex, v::AbstractVertex, rankfun::Function)
     # 4: Insize of output vertex is decreased
     # as well as all combinations of two of the above.
 
-    # Handle cases when 1 or 3 has happened
+    # Handle cases when 1 or 3 has happened:
+    # This is easy as it is equivalent to handling a normal Nout change except we pretend that outputs have already been visited when propagating selected indices.
 
-    Δins = nin(v) - nin_org(op(v))
+    Δins = nin(v) - nin_org(v)
     for i in eachindex(Δins)
         Δins[i] == 0 && continue
         vin = inputs(v)[i]
 
+        # Don't want to change anything (what was) outputs to (now removed) vertex v
         s = NaiveNASlib.VisitState{Vector{Int}}(vin)
         NaiveNASlib.visited_in!.(s, outputs(vin))
 
         select_neurons(Nout(), vin, rankfun, s)
     end
 
-    # Handle cases when 2 or 4 has happened
-    if nout(v) - nout_org(op(v)) != 0
+    # Cases 2 and 4 are a bit trickier as it is now the input size which has changed.
+    # Reason its trickier is because there is no helper method for it (yet).
+    # Therefore the strategy is to select outputs from the input vertices instead
+    # Challenge with that approach is that sizes where not aligned to begin with, so if no special action is taken one will end up with tasks like "select 100 unique values out of these 50 values".
+
+    # Handle cases when 2 and 4 has happened:
+    if nout(v) - nout_org(v) != 0
         for vout in outputs(v)
 
+            # Don't want to change anything (what was) inputs to (now removed) vertex v
             s = NaiveNASlib.VisitState{Vector{Int}}(vout)
             NaiveNASlib.visited_out!.(s, inputs(vout))
 
             Δ = map(enumerate(inputs(vout))) do (i, voi)
-                valid, inds = rankfun(voi)
-                valid || return missing
-                # TODO: This and the below is a temporary hack until I have figured this out a bit better.
-                inds[inds .> nin_org(op(vout))[i]] .= -1
-                inds = vcat(inds, -ones(eltype(inds), max(0, nout(voi) - length(inds))))
-                return inds
+                voi in inputs(v) || return missing
+
+                # Step 1: "hack" the metadata so it looks like sizes where aligned to begin with
+                fakeΔnout(voi, nout_org(voi) - nin_org(vout)[i])
+
+                # Step 2: Consider v when selecting indices
+                valid, inds = rankfun(voi, voi in inputs(v) ? v : voi)
+                return valid ? inds : missing
             end
             if !all(ismissing.(Δ))
                 Δnin(vout, Δ..., s=s)
             end
         end
     end
+end
+
+fakeΔnout(v::AbstractVertex, Δ) = fakeΔnout(trait(v), v, Δ)
+fakeΔnout(t::DecoratingTrait, v, Δ) = fakeΔnout(base(t), v, Δ)
+function fakeΔnout(::Immutable, v, Δ) end
+function fakeΔnout(::MutationSizeTrait, v, Δ)
+    opv = op(v)
+    opv.outΔ += Δ
+    opv.size.nout -= Δ
 end
 
 """

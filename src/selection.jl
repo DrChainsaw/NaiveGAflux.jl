@@ -201,6 +201,11 @@ NaiveNASlib.nout_org(t::DecoratingTrait, v) = nout_org(base(t), v)
 NaiveNASlib.nout_org(::MutationSizeTrait, v::MutationVertex) = nout_org(op(v))
 NaiveNASlib.nout_org(::Immutable, v) = nout(v)
 
+NaiveNASlib.nin_org(v::AbstractVertex) = nin_org(trait(v), v)
+NaiveNASlib.nin_org(t::DecoratingTrait, v) = nin_org(base(t), v)
+NaiveNASlib.nin_org(::MutationSizeTrait, v::MutationVertex) = nin_org(op(v))
+NaiveNASlib.nin_org(::Immutable, v) = nout(v)
+
 # Step 1: Select which outputs to use given possible constraints described by validouts. Since this might be infeasible to do (in special cases) we get the execute flag which is true if we shall proceed with the selection
 """
     select_outputs(v::AbstractVertex, values)

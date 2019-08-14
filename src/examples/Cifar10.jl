@@ -70,9 +70,9 @@ end
 
 function create_mutation()
 
-    function rankfun(v)
-        @info "\t\tSelect params for $(name(v))"
-        return NaiveGAflux.default_neuronselect(v)
+    function rankfun(vsel, vvals)
+        @info "\t\tSelect params for $(name(vsel))"
+        return NaiveGAflux.default_neuronselect(vsel, vvals)
     end
 
     mutate_nout = NeuronSelectMutation(rankfun, NoutMutation(-0.1, 0.1)) # Max 10% change in output size
