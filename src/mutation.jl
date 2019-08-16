@@ -381,8 +381,6 @@ function fakeΔnout_terminating(vout, vfrom, Δsign)
     end
 end
 
-NaiveNASlib.findterminating(::SizeAbsorb, v, d::Function, o::Function, visited) = vcat(v, NaiveNASlib.collectterminating(v, o, d, visited))
-
 fakeΔnout(v::AbstractVertex, Δ) = fakeΔnout(trait(v), v, Δ)
 fakeΔnout(t::DecoratingTrait, v, Δ) = fakeΔnout(base(t), v, Δ)
 function fakeΔnout(::Immutable, v, Δ) end
