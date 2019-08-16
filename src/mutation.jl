@@ -376,19 +376,37 @@ undo_fakealignΔnout(vout::AbstractVertex, vfrom::AbstractVertex) = fakeΔnout_t
 function fakeΔnout_terminating(vout, vfrom, Δsign)
     for (i, voi) in enumerate(inputs(vout))
         if voi in inputs(vfrom)
-            fakeΔnout.(keys(validouts(voi)), Δsign(nout_org(voi) - nin_org(vout)[i]))
+            fakeΔnout.(voi, Δsign(nout_org(voi) - nin_org(vout)[i]))
         end
     end
 end
 
-fakeΔnout(v::AbstractVertex, Δ) = fakeΔnout(trait(v), v, Δ)
-fakeΔnout(t::DecoratingTrait, v, Δ) = fakeΔnout(base(t), v, Δ)
-function fakeΔnout(::Immutable, v, Δ) end
-function fakeΔnout(::MutationSizeTrait, v, Δ)
+fakeΔnout(v::AbstractVertex, Δ::T, s=NaiveNASlib.VisitState{T}(v), out=true) where T = fakeΔnout(trait(v), v, Δ, s, out)
+fakeΔnout(t::DecoratingTrait, v, Δ, s, out) = fakeΔnout(base(t), v, Δ, s, out)
+function fakeΔnout(::SizeInvariant, v, Δ, s, out)
+    NaiveNASlib.anyvisit(v, s) && return
+    fakeΔnout.(inputs(v), Δ, s, true)
+    fakeΔnout.(outputs(v), Δ, s, false)
+end
+function fakeΔnout(::SizeStack, v, Δ, s, out)
+    !out && return
+    NaiveNASlib.anyvisit(v, s) && return
+    Δs = NaiveNASlib.split_nout_over_inputs(v, Δ, s)
+
+    for (Δi, vi) in zip(Δs, inputs(v))
+        fakeΔnout(vi, Δi, s)
+    end
+end
+function fakeΔnout(::Immutable, v, Δ, s, out) end
+function fakeΔnout(::SizeAbsorb, v, Δ, s, out)
+    !out && return
+    NaiveNASlib.invisit(v, s) && return
     opv = op(v)
     opv.outΔ += Δ
     opv.size.nout -= Δ
+    fakeΔnout.(outputs(v), Δ, s, false)
 end
+
 
 """
     PostMutation{T} <: AbstractMutation{T}

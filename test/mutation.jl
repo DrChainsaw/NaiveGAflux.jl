@@ -606,6 +606,38 @@
             select(m)
             @test out_inds(op(v3)) == in_inds(op(v5))[] == [1, 2, 4, 5, 6]
         end
+
+        @testset "NeuronSelectMutation remove SizeInvariant SizeStack output decrease input" begin
+            inpt = inputvertex("in", 3, FluxDense())
+            v0 = dense(inpt, 2, name="v0")
+            v1 = dense(v0, 4, name="v1")
+
+            v3 = concat("v3", v0, v1)
+            v4 = dense(v3, 3, name="v4")
+            v5 = dense(v4, 3, name="v5")
+
+            g = CompGraph(inpt, v4)
+            @test size(g(ones(Float32, 3,2))) == (nout(v4), 2)
+
+
+            rankfun(vsel, vvals) = NaiveGAflux.select_outputs(vsel, 1:nout_org(vvals))
+
+
+            m = NeuronSelectMutation(rankfun , RemoveVertexMutation(RemoveStrategy()))
+
+            m(v4)
+
+            @test nout(v3) == nin(v5)[] == 6
+
+            # Sitation: nin of v5 has increased by 3 so we just want to add 3 more inputs to it
+            # Problem that occurs is that validouts will find v0 and v1 and try to select 2+4 outputs out of 3 existing ones from v3 unless we fake their metadata so it looks like they too changed size
+            select(m)
+            @test out_inds(op(v3)) == [1, 2, 3, 4, 5, 6]
+            @test in_inds(op(v5))[] ==[1, -1, 2, 3, -1, -1]
+
+            apply_mutation(g)
+            @test size(g(ones(Float32, 3,2))) == (nout(v4), 2)
+        end
     end
 
     @testset "RemoveZeroNout" begin
