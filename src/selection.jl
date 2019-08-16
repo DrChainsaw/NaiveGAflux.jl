@@ -142,22 +142,28 @@ name(vi) = "v1"
 ```
 
 """
-validouts(v::AbstractVertex, offs=(1, 1), dd=Dict{AbstractVertex, ValidOutsInfo}(), visited = [], out=true) = validouts(trait(v), v, offs, dd, visited, out)
+function validouts(v::AbstractVertex, offs=(1, 1), dd=Dict{AbstractVertex, ValidOutsInfo}(), visited = Set(), out::Bool=true)
+    has_visited!(visited, v) && return dd
+    validouts(v, offs, dd, visited, Val(out))
+    delete!(visited, v)
+    return dd
+end
+validouts(v::AbstractVertex, offs, dd, visited, out::Val) = validouts(trait(v), v, offs, dd, visited, out)
 validouts(t::DecoratingTrait, v, offs, dd, visited, out) = validouts(base(t), v, offs, dd, visited, out)
-function validouts(::SizeStack, v, offs, dd, visited, out)
-    !out && return dd
-    has_visited!(visited,(offs, v)) && return dd
-
+function validouts(::SizeStack, v, offs, dd, visited, out::Val{true})
     for vin in inputs(v)
         validouts(vin, offs, dd, visited, true)
         offs = offs .+ (nout_org(vin), nout(vin))
     end
     return dd
 end
+function validouts(::SizeStack, v, offs, dd, visited, out::Val{false})
+    foreach(vout -> validouts(vout, offs, dd, visited, false), outputs(v))
+    return dd
+end
+
 
 function validouts(::SizeInvariant, v, offs, dd, visited, out)
-    has_visited!(visited,(offs, v)) && return dd
-
     foreach(vin -> validouts(vin, offs, dd, visited, true), inputs(v))
     foreach(vout -> validouts(vout, offs, dd, visited, false), outputs(v))
     return dd
@@ -166,10 +172,7 @@ end
 validouts(t::SizeAbsorb, v, offs, dd, visited, out) = addvalidouts(t, v, offs, dd, visited, out)
 validouts(t::Immutable, v, offs, dd, visited, out) = addvalidouts(t, v, offs, dd, visited, out)
 
-function addvalidouts(t::MutationTrait, v, offs, dd, visited, out)
-    !out && return dd
-    has_visited!(visited, (offs, v)) && return dd
-
+function addvalidouts(t::MutationTrait, v, offs, dd, visited, out::Val{true})
     initial = length(visited) == 1
 
     # length(visited) > 1 is only false if the first vertex we call validouts for is of type SizeAbsorb
@@ -187,6 +190,10 @@ function addvalidouts(t::MutationTrait, v, offs, dd, visited, out)
         dd[v] = addinds(ValidOutsInfo(orgsize, newsize, t), offs...)
     end
 
+    return dd
+end
+function addvalidouts(t::MutationTrait, v, offs, dd, visited, out::Val{false})
+    foreach(vin -> validouts(vin, offs, dd, visited, true), inputs(v))
     return dd
 end
 

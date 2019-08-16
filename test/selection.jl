@@ -268,4 +268,66 @@
 
         @test size(g(ones(3,1))) == (nout(v7), 1)
     end
+
+    @testset "Constrained by remote subtree" begin
+        inpt = iv(3)
+        v0 = av(inpt, 10, "v0")
+
+        # Main branch, the one we want to change
+        v1 = cc(v0, v0, name="v1")
+
+        # Path to subtree
+        # First hop
+        v2 = av(inpt, 10, "v2")
+        v3 = nc("v3") >> v2 + v0
+
+        # Second hop (v4 should not be touhed)
+        v4 = av(inpt, 3, "v4")
+        v5 = cc(v3, v4, name="v5")
+
+        # Subtree
+        v6 = av(inpt, 4, "v6")
+        v7 = av(inpt, nout(v5) - nout(v6), "v7")
+        v8 = cc(v6,v7,name="v7")
+
+        # Aaaand connect it to the path
+        v9 = nc("v9") >> v8 + v5
+        v10 = av(v9, 5, "v10")
+
+        g = CompGraph(inpt, [v1, v9])
+        @test size.(g(ones(3,1))) == ((nout(v1), 1), (nout(v9), 1))
+
+        @test minΔnoutfactor(v1) == 2
+
+        Δnout(v2, -6)
+
+        @test nout(v6) == 2
+        @test nout(v7) == 5
+        @test nout(v0) == 4
+
+
+        @test_logs (:warn, "Selection for vertex v1 failed! Relaxing size constraint...")  match_mode=:any select_outputs_and_change(v1, 1:nout_org(v1))
+        apply_mutation(g)
+
+        @test nout(v6) == 1
+        @test nout(v7) == 6
+        @test nout(v0) == 4
+
+        @test size.(g(ones(3,1))) == ((nout(v1), 1), (nout(v9), 1))
+
+        Δnout(v2, 8)
+
+        @test nout(v6) == 2
+        @test nout(v7) == 13
+        @test nout(v0) == 12
+
+        select_outputs_and_change(v1, 1:nout_org(v1))
+        apply_mutation(g)
+
+        @test nout(v6) == 2
+        @test nout(v7) == 13
+        @test nout(v0) == 12
+
+        @test size.(g(ones(3,1))) == ((nout(v1), 1), (nout(v9), 1))
+    end
 end

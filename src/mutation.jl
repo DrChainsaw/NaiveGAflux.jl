@@ -288,7 +288,7 @@ function select_neurons(::RemoveVertex, v::AbstractVertex, rankfun::Function)
         end
     end
 
-    # Cases 2 and 4 are a bit trickier as it is now the input size which has changed.
+    # Cases 2 and 4 are a bit trickier as it is now the input size which has changed, meaning that nout of all input verteces was not changed.
     # Reason its trickier is because there is no helper method for it (yet).
     # Therefore the strategy is to select outputs from the input vertices instead
     # Challenge with that approach is that sizes where not aligned to begin with, so if no special action is taken one will end up with tasks like "select 100 unique values out of these 50 values".
