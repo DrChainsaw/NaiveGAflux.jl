@@ -74,6 +74,22 @@ function (m::LogMutation{T})(e::T) where T
     m.m(e)
 end
 
+"""
+    MutationFilter{T} <: AbstractMutation{T}
+    MutationFilter(predicate, m)
+
+Applies mutation `m` only for entities `e` for which `predicate(e)` returns true.
+"""
+struct MutationFilter{T} <: AbstractMutation{T}
+    predicate
+    m::AbstractMutation{T}
+end
+function (m::MutationFilter{T})(e::T) where T
+    if m.predicate(e)
+        m.m(e)
+    end
+end
+
 
 """
     VertexMutation <:AbstractMutation{CompGraph}
@@ -255,46 +271,117 @@ function select_neurons(::RemoveVertex, v::AbstractVertex, rankfun::Function)
     # This is easy as it is equivalent to handling a normal Nout change except we pretend that outputs have already been visited when propagating selected indices.
 
     Δins = nin(v) - nin_org(v)
+    skip_outputs = [];
     for i in eachindex(Δins)
         Δins[i] == 0 && continue
         vin = inputs(v)[i]
-
-        # Don't want to change anything (what was) outputs to (now removed) vertex v
+        # Basic idea: Don't want to change anything (what was) outputs to (now removed) vertex v
+        # Complication: In some cases vin was changed due to some other reason than vertex removal
+        # To handle this, we search for unchanged vertices and exclude them
         s = NaiveNASlib.VisitState{Vector{Int}}(vin)
-        NaiveNASlib.visited_in!.(s, outputs(vin))
+        NaiveNASlib.visited_in!.(s, find_unchanged_outputs(vin))
 
         select_neurons(Nout(), vin, rankfun, s)
+
+        if istransparent(vin)
+            append!(skip_outputs, outputs(vin))
+        end
     end
 
     # Cases 2 and 4 are a bit trickier as it is now the input size which has changed.
     # Reason its trickier is because there is no helper method for it (yet).
     # Therefore the strategy is to select outputs from the input vertices instead
     # Challenge with that approach is that sizes where not aligned to begin with, so if no special action is taken one will end up with tasks like "select 100 unique values out of these 50 values".
+    # To handle this, we hack the mutation metadata to make it look like the vertices had the same size before the mutation.
 
     # Handle cases when 2 and 4 has happened:
     if nout(v) - nout_org(v) != 0
-        for vout in outputs(v)
-
-            # Don't want to change anything (what was) inputs to (now removed) vertex v
-            s = NaiveNASlib.VisitState{Vector{Int}}(vout)
-            NaiveNASlib.visited_out!.(s, inputs(vout))
-
-            Δ = map(enumerate(inputs(vout))) do (i, voi)
-                voi in inputs(v) || return missing
-
-                # Step 1: "hack" the metadata so it looks like sizes where aligned to begin with
-                fakeΔnout(voi, nout_org(voi) - nin_org(vout)[i])
-
-                # Step 2: Consider v when selecting indices
-                valid, inds = rankfun(voi, voi in inputs(v) ? v : voi)
-                return valid ? inds : missing
-            end
-            if !all(ismissing.(Δ))
-                Δnin(vout, Δ..., s=s)
-            end
+        for vout in filter(vo -> !in(vo, skip_outputs), outputs(v))
+            select_neurons_nout_org_not_aligned(vout, v, rankfun)
         end
     end
 end
+
+function find_unchanged_outputs(v)
+    # Basic idea: use findterminating to traverse graph and use a closure to capture the vertices we are interested in
+    # Two methods below are just capturing visited vertices which have not changed
+
+    unchanged = []
+    function search_inputs(vi)
+        vi == v && return []
+        ins_unch = filter(vii -> nout(vii) == nout_org(vii), inputs(vi))
+        append!(unchanged, ins_unch)
+        return filter(vii -> !in(vii, ins_unch), inputs(vi))
+    end
+
+    function search_outputs(vo)
+        outs_unch = filter(outputs(vo)) do voo
+            inds = inputs(voo) .== vo
+            return any(nin(voo)[inds] == nin_org(voo)[inds])
+        end
+        append!(unchanged, outs_unch)
+        return filter(voo -> !in(voo, outs_unch), outputs(vo))
+    end
+
+    findterminating(v, search_outputs, search_inputs)
+    # Special case: v is of type SizeAbsorb so findterminating returns v without invoking search_xx methods
+    if isempty(unchanged)
+        search_outputs(v)
+    end
+    return unchanged
+end
+
+istransparent(v::AbstractVertex) = istransparent(trait(v))
+istransparent(t::DecoratingTrait) = istransparent(base(t))
+istransparent(::SizeAbsorb) = false
+istransparent(::NaiveNASlib.SizeTransparent) = true
+
+select_neurons_nout_org_not_aligned(vout, vfrom, rf) = select_neurons_nout_org_not_aligned(trait(vout), vout, vfrom, rf)
+select_neurons_nout_org_not_aligned(t::DecoratingTrait, vout, vfrom, rf) = select_neurons_nout_org_not_aligned(base(t), vout, vfrom, rf)
+function select_neurons_nout_org_not_aligned(::NaiveNASlib.SizeTransparent, vout, vfrom, rf)
+    # Simple! We can just select outputs from vout since we know this affects inputs!
+    # Don't want to change anything (what might have been) inputs to vertex vfrom
+    s = fakealignΔnout(vout, vfrom)
+    select_neurons(Nout(), vout, rf, s)
+    undo_fakealignΔnout(vout, vfrom)
+end
+function select_neurons_nout_org_not_aligned(::SizeAbsorb, vout, vfrom, rankfun)
+    # Little bit trickier as changing nout of vout will not propagate to its inputs
+    # Instead, we select output neurons from all its inputs and use this to select inputs
+    s = fakealignΔnout(vout, vfrom)
+    # Note that one can probably assume that SizeAbsorb only has one input so this might be a bit overgeneralized
+    Δ = map(enumerate(inputs(vout))) do (i, voi)
+        voi in inputs(vfrom) || return missing
+        # Step 2: Consider v when selecting indices
+        valid, inds = rankfun(voi, vfrom)
+        return valid ? inds : missing
+    end
+    if !all(ismissing.(Δ))
+        Δnin(vout, Δ..., s=s)
+    end
+    undo_fakealignΔnout(vout, vfrom)
+end
+
+function fakealignΔnout(vout::AbstractVertex, vfrom::AbstractVertex)
+    # Don't want to change anything (what might have been) inputs to vertex vfrom
+    s = NaiveNASlib.VisitState{Vector{Int}}(vout)
+    NaiveNASlib.visited_out!.(s, inputs(vout))
+
+    fakeΔnout_terminating(vout, vfrom, +)
+    return s
+end
+
+undo_fakealignΔnout(vout::AbstractVertex, vfrom::AbstractVertex) = fakeΔnout_terminating(vout, vfrom, -)
+
+function fakeΔnout_terminating(vout, vfrom, Δsign)
+    for (i, voi) in enumerate(inputs(vout))
+        if voi in inputs(vfrom)
+            fakeΔnout.(keys(validouts(voi)), Δsign(nout_org(voi) - nin_org(vout)[i]))
+        end
+    end
+end
+
+NaiveNASlib.findterminating(::SizeAbsorb, v, d::Function, o::Function, visited) = vcat(v, NaiveNASlib.collectterminating(v, o, d, visited))
 
 fakeΔnout(v::AbstractVertex, Δ) = fakeΔnout(trait(v), v, Δ)
 fakeΔnout(t::DecoratingTrait, v, Δ) = fakeΔnout(base(t), v, Δ)

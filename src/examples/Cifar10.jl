@@ -75,11 +75,8 @@ function create_mutation()
         return NaiveGAflux.default_neuronselect(vsel, vvals)
     end
 
-    mutate_nout = NeuronSelectMutation(rankfun, NoutMutation(-0.1, 0.1)) # Max 10% change in output size
-
-    #TODO: New layers to have identity mapping
-    addspace = rep_fork_res(convspace(default_layerconf(), 8:128, 1:2:7, [identity, relu, elu, selu]), 1)
-    add_vertex = AddVertexMutation(MapArchSpace(gpu, addspace))
+    mutate_nout = NeuronSelectMutation(rankfun, NoutMutation(-0.1, 0.05)) # Max 10% change in output size
+    add_vertex = add_vertex_mutation()
     rem_vertex = NeuronSelectMutation(rankfun, RemoveVertexMutation())
 
     # Create a shorthand alias for MutationProbability
@@ -89,17 +86,36 @@ function create_mutation()
     maddv = mp(LogMutation(v -> "\tAdd vertex after $(name(v))", add_vertex), 0.01)
     mremv = mp(LogMutation(v -> "\tRemove vertex $(name(v))", rem_vertex), 0.01)
 
-    return LogMutation(g -> "Mutate model $(name(g.inputs[]))", PostMutation(VertexMutation(MutationList(maddv, mremv, mnout)), NeuronSelect(), RemoveZeroNout(), (m,g) -> apply_mutation(g)))
+    # Remove mutation last to not attempt to mutate a removed vertex as this most likely results in an error
+    return LogMutation(g -> "Mutate model $(modelname(g))", PostMutation(VertexMutation(MutationList(maddv, mnout, mremv)), NeuronSelect(), RemoveZeroNout(), (m,g) -> apply_mutation(g)))
 end
 
+function add_vertex_mutation()
+    acts = [identity, relu, elu, selu]
+
+    wrapitup(as) = AddVertexMutation(MapArchSpace(gpu, rep_fork_res(as, 1)))
+
+    # TODO: New layers to have identity mapping
+    add_conv = wrapitup(convspace(default_layerconf(), 8:128, 1:2:7, acts))
+    add_dense = wrapitup(VertexSpace(default_layerconf(), NamedLayerSpace("dense", DenseSpace(BaseLayerSpace(16:512, acts)))))
+
+    return MutationList(MutationFilter(is_convtype, add_conv), MutationFilter(!is_convtype, add_dense))
+end
+
+is_convtype(v::AbstractVertex) = any(is_globpool.(outputs(v))) || any(is_convtype.(outputs(v)))
+is_globpool(v::AbstractVertex) = is_globpool(base(v))
+is_globpool(v::InputVertex) = false
+is_globpool(v::CompVertex) = is_globpool(v.computation)
+is_globpool(l::ActivationContribution) = is_globpool(NaiveNASflux.wrapped(l))
+is_globpool(f) = f == globalpooling2d
 
 function initial_models(nr)
     iv(i) = inputvertex(join(["model", i, ".input"]), 3, FluxConv{2}())
     as = initial_archspace()
     return map(i -> create_model(join(["model", i]), as, iv(i)), 1:nr)
 end
-
-create_model(name, as, in) = Model(CompGraph(in, as(name, in)) |> gpu, ADAM(0.01))
+modelname(g) = split(name(g.inputs[]),'.')[1]
+create_model(name, as, in) = Model(CompGraph(in, as(name, in)) |> gpu, Descent(0.01))
 
 struct GpVertex <: AbstractArchSpace end
 (s::GpVertex)(in::AbstractVertex, rng=nothing; outsize=nothing) = funvertex(globalpooling2d, in)

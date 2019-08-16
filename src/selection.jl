@@ -345,7 +345,7 @@ nselect_out(v) = min(nout(v), nout_org(v))
 limits(s::NoutRelaxSize, n) =  (max(1, s.lower * n), s.upper * n)
 
 sizeconstraint(::NoutExact, t, v, model, var) = @constraint(model, sum(var) == min(length(var), nselect_out(v)))
-sizeconstraint(s::NoutRelaxSize, ::Immutable, v, model, var) = @constraint(model, sum(var) == min(length(var),nselect_out(v)))
+sizeconstraint(s::NoutRelaxSize, t::Immutable, v, model, var) = sizeconstraint(NoutExact(), t, v, model, var)
 function sizeconstraint(s::NoutRelaxSize, t, v, model, var)
     # Wouldn't mind being able to relax the size constraint like this:
     #@objective(model, Min, 10*(sum(selectvar) - nout(v))^2)
@@ -354,8 +354,9 @@ function sizeconstraint(s::NoutRelaxSize, t, v, model, var)
     @constraint(model, nmin <= sum(var) <= nmax)
 end
 
-function Δfactorconstraint(::AbstractJuMPSelectionStrategy, model, ::Missing, Δsizeexp) end
-function Δfactorconstraint(::AbstractJuMPSelectionStrategy, model, f, Δsizeexp)
+function Δfactorconstraint(::NoutExact, model, f, Δsizeexp) end
+function Δfactorconstraint(::NoutRelaxSize, model, ::Missing, Δsizeexp) end
+function Δfactorconstraint(::NoutRelaxSize, model, f, Δsizeexp)
     # Δfactor constraint:
     #  - Constraint that answer shall result in an integer multiple of f being not selected
     fv = @variable(model, integer=true)
