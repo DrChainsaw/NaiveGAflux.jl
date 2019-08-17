@@ -619,10 +619,7 @@
             g = CompGraph(inpt, v4)
             @test size(g(ones(Float32, 3,2))) == (nout(v4), 2)
 
-
             rankfun(vsel, vvals) = NaiveGAflux.select_outputs(vsel, 1:nout_org(vvals))
-
-
             m = NeuronSelectMutation(rankfun , RemoveVertexMutation(RemoveStrategy()))
 
             m(v4)

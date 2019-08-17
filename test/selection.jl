@@ -281,14 +281,15 @@
         v2 = av(inpt, 10, "v2")
         v3 = nc("v3") >> v2 + v0
 
-        # Second hop (v4 should not be touhed)
-        v4 = av(inpt, 3, "v4")
-        v5 = cc(v3, v4, name="v5")
+        # Second hop (v4a and v4b should not be touhed)
+        v4a = av(inpt, 3, "v4a")
+        v4b = av(inpt, 5, "v4b")
+        v5 = cc(v4a, v3, v4b, name="v5")
 
         # Subtree
         v6 = av(inpt, 4, "v6")
         v7 = av(inpt, nout(v5) - nout(v6), "v7")
-        v8 = cc(v6,v7,name="v7")
+        v8 = cc(v6,v7,name="v8")
 
         # Aaaand connect it to the path
         v9 = nc("v9") >> v8 + v5
@@ -301,32 +302,32 @@
 
         Δnout(v2, -6)
 
-        @test nout(v6) == 2
-        @test nout(v7) == 5
+        @test nout(v6) == 3
+        @test nout(v7) == 9
         @test nout(v0) == 4
 
 
         @test_logs (:warn, "Selection for vertex v1 failed! Relaxing size constraint...")  match_mode=:any select_outputs_and_change(v1, 1:nout_org(v1))
         apply_mutation(g)
 
-        @test nout(v6) == 1
-        @test nout(v7) == 6
-        @test nout(v0) == 4
+        @test nout(v6) == 4
+        @test nout(v7) == 10
+        @test nout(v0) == 6
 
         @test size.(g(ones(3,1))) == ((nout(v1), 1), (nout(v9), 1))
 
         Δnout(v2, 8)
 
-        @test nout(v6) == 2
-        @test nout(v7) == 13
-        @test nout(v0) == 12
+        @test nout(v6) == 6
+        @test nout(v7) == 16
+        @test nout(v0) == 14
 
         select_outputs_and_change(v1, 1:nout_org(v1))
         apply_mutation(g)
 
-        @test nout(v6) == 2
-        @test nout(v7) == 13
-        @test nout(v0) == 12
+        @test nout(v6) == 6
+        @test nout(v7) == 16
+        @test nout(v0) == 14
 
         @test size.(g(ones(3,1))) == ((nout(v1), 1), (nout(v9), 1))
     end

@@ -142,48 +142,73 @@ name(vi) = "v1"
 ```
 
 """
-function validouts(v::AbstractVertex, offs=(1, 1), dd=Dict{AbstractVertex, ValidOutsInfo}(), visited = Set(), out::Bool=true)
+function validouts(v::AbstractVertex, out::Bool=true, vfrom::AbstractVertex=v, dd=Dict(), path=(), offs=(1, 1), mask=maskinit(v), visited = Set())
     has_visited!(visited, v) && return dd
-    validouts(v, offs, dd, visited, Val(out))
+    validouts(v, Val(out), vfrom, dd, path, offs, mask, visited)
     delete!(visited, v)
     return dd
 end
-validouts(v::AbstractVertex, offs, dd, visited, out::Val) = validouts(trait(v), v, offs, dd, visited, out)
-validouts(t::DecoratingTrait, v, offs, dd, visited, out) = validouts(base(t), v, offs, dd, visited, out)
-function validouts(::SizeStack, v, offs, dd, visited, out::Val{true})
+maskinit(v) = (trues(nout_org(v)), trues(nout(v)))
+validouts(v::AbstractVertex, args...) = validouts(trait(v), v, args...)
+validouts(t::DecoratingTrait, args...) = validouts(base(t), args...)
+
+
+function validouts(::SizeStack, v, ::Val{true}, vfrom, dd, path, offs, mask, args...)
+    cnts = (1, 1)
     for vin in inputs(v)
-        validouts(vin, offs, dd, visited, true)
-        offs = offs .+ (nout_org(vin), nout(vin))
+        next = cnts .+ (nout_org(vin), nout(vin)) .- 1
+        newmask = map(mt -> mt[1][mt[2]:mt[3]], zip(mask, cnts, next))
+        cnts = cnts .+ (nout_org(vin), nout(vin))
+        validouts(vin, true, v, dd, path, offs, newmask, args...)
+        offs = offs .+ sum.(newmask)
     end
     return dd
 end
-function validouts(::SizeStack, v, offs, dd, visited, out::Val{false})
-    foreach(vout -> validouts(vout, offs, dd, visited, false), outputs(v))
+function validouts(::SizeStack, v, ::Val{false}, vfrom, dd, path, offs, mask, args...)
+    newmask = (BitVector(), BitVector())
+    for vin in inputs(v)
+        if vin == vfrom
+            append!.(newmask, mask)
+        else
+            append!.(newmask, map(mv -> .!mv, maskinit(vin)))
+        end
+    end
+
+    for (p, vout) in enumerate(outputs(v))
+        newpath = (path..., p)
+        validouts(vout, false, v, dd, newpath, offs, newmask, args...)
+    end
     return dd
 end
 
 
-function validouts(::SizeInvariant, v, offs, dd, visited, out)
-    foreach(vin -> validouts(vin, offs, dd, visited, true), inputs(v))
-    foreach(vout -> validouts(vout, offs, dd, visited, false), outputs(v))
+function validouts(::SizeInvariant, v, out, vfrom, dd, path, args...)
+    foreach(vin -> validouts(vin, true, v, dd, path, args...), inputs(v))
+    for (p, vout) in enumerate(outputs(v))
+        newpath = (path..., p)
+        validouts(vout, false, v, dd, newpath, args...)
+    end
     return dd
 end
 
-validouts(t::SizeAbsorb, v, offs, dd, visited, out) = addvalidouts(t, v, offs, dd, visited, out)
-validouts(t::Immutable, v, offs, dd, visited, out) = addvalidouts(t, v, offs, dd, visited, out)
+validouts(t::SizeAbsorb, args...) = addvalidouts(t, args...)
+validouts(t::Immutable, args...) = addvalidouts(t, args...)
 
-function addvalidouts(t::MutationTrait, v, offs, dd, visited, out::Val{true})
+function addvalidouts(t::MutationTrait, v, ::Val{true}, vfrom, dd, path, offs, mask, visited)
     initial = length(visited) == 1
 
     # length(visited) > 1 is only false if the first vertex we call validouts for is of type SizeAbsorb
     # If it is, we need to propagate the call instead of adding indices as the outputs of v might take us to a SizeInvariant vertex which in turn might take us to a SizeStack vertex
-    orgsize = nout_org(v)
-    newsize = nout(v)
+    orgsize = sum(mask[1])
+    newsize = sum(mask[2])
     if !initial
         info = get(() -> ValidOutsInfo(orgsize, newsize, t), dd, v)
         dd[v] = addinds(info, offs...)
     end
-    foreach(vout -> validouts(vout, offs, dd, visited, false), outputs(v))
+    for (p, vout) in enumerate(outputs(v))
+        newpath = (path..., p)
+        validouts(vout, false, v, dd, newpath, offs, mask, visited)
+    end
 
     # This is true if all outputs of v also are (or lead to) size absorb types and we shall indeed populate dd with the indices of this vertex
     if initial && isempty(dd)
@@ -192,8 +217,8 @@ function addvalidouts(t::MutationTrait, v, offs, dd, visited, out::Val{true})
 
     return dd
 end
-function addvalidouts(t::MutationTrait, v, offs, dd, visited, out::Val{false})
-    foreach(vin -> validouts(vin, offs, dd, visited, true), inputs(v))
+function addvalidouts(t::MutationTrait, v, ::Val{false}, vfrom, dd, args...)
+    foreach(vin -> validouts(vin, true, v, dd, args...), inputs(v))
     return dd
 end
 
@@ -285,6 +310,8 @@ function select_outputs(s::AbstractJuMPSelectionStrategy, v, values, cdict)
     insertlast = @expression(model, 0)
 
     for (vi, mi) in cdict
+        # TODO: Don't add to cdict if this happens?
+        isempty(mi.current) && continue
         select_i = rowconstraint(s, model, selectvar, mi.current)
         sizeconstraint(s, mi.trait, vi, model, select_i)
         Δsizeexp = @expression(model, length(select_i) - sum(select_i))
@@ -342,7 +369,7 @@ function rowconstraint(::AbstractJuMPSelectionStrategy, model, x, indmat)
     # Valid rows don't include all rows when vertex to select from has not_org < nout_org of a vertex in cdict.
     # This typically happens when resizing vertex to select from due to removal of its output vertex
     # TODO: See if this can be handled by avoiding/blocking vertices in validouts instead?
-    validrows = [i for i in 1:size(indmat, 1) if all(indmat[i,:] .<= length(x))]
+    validrows = 1:size(indmat,1) #[i for i in 1:size(indmat, 1) if all(indmat[i,:] .<= length(x))]
     var = @variable(model, [1:length(validrows)], Bin)
     @constraint(model, size(indmat,2) .* var .- sum(x[indmat[validrows,:]], dims=2) .== 0)
     return var

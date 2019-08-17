@@ -352,7 +352,13 @@ function select_neurons_nout_org_not_aligned(::SizeAbsorb, vout, vfrom, rankfun)
     # Note that one can probably assume that SizeAbsorb only has one input so this might be a bit overgeneralized
     Δ = map(enumerate(inputs(vout))) do (i, voi)
         voi in inputs(vfrom) || return missing
-        # Step 2: Consider v when selecting indices
+
+        # TODO: Temp hack
+        Δ = nout_org(voi) - nin_org(vout)[i]
+        opv = op(voi)
+        opv.outΔ += Δ
+        opv.size.nout -= Δ
+
         valid, inds = rankfun(voi, vfrom)
         return valid ? inds : missing
     end
@@ -376,36 +382,39 @@ undo_fakealignΔnout(vout::AbstractVertex, vfrom::AbstractVertex) = fakeΔnout_t
 function fakeΔnout_terminating(vout, vfrom, Δsign)
     for (i, voi) in enumerate(inputs(vout))
         if voi in inputs(vfrom)
-            fakeΔnout.(voi, Δsign(nout_org(voi) - nin_org(vout)[i]))
+            Δ = Δsign(nout_org(voi) - nin_org(vout)[i])
+            fakeΔnout.(voi, Δ)
         end
     end
 end
 
-fakeΔnout(v::AbstractVertex, Δ::T, s=NaiveNASlib.VisitState{T}(v), out=true) where T = fakeΔnout(trait(v), v, Δ, s, out)
-fakeΔnout(t::DecoratingTrait, v, Δ, s, out) = fakeΔnout(base(t), v, Δ, s, out)
-function fakeΔnout(::SizeInvariant, v, Δ, s, out)
-    NaiveNASlib.anyvisit(v, s) && return
-    fakeΔnout.(inputs(v), Δ, s, true)
-    fakeΔnout.(outputs(v), Δ, s, false)
+fakeΔnout(v::AbstractVertex, Δ::T, visited=Set(), out::Bool=true, s=NaiveNASlib.VisitState{T}(v)) where T = fakeΔnout(v, Δ, visited, Val(out), s)
+function fakeΔnout(v::AbstractVertex, Δ, visited, out::Val, s)
+    v in visited && return
+    push!(visited, v)
+    fakeΔnout(trait(v), v, Δ, visited, out, s)
+    delete!(visited, v)
 end
-function fakeΔnout(::SizeStack, v, Δ, s, out)
-    !out && return
-    NaiveNASlib.anyvisit(v, s) && return
+fakeΔnout(t::DecoratingTrait, v, Δ, visited, out, s) = fakeΔnout(base(t), v, Δ, visited, out, s)
+function fakeΔnout(::SizeInvariant, v, Δ, visited, out,s)
+    foreach(vin -> fakeΔnout(vin, Δ, visited, true,s), inputs(v))
+    foreach(vout -> fakeΔnout(vout, Δ, visited, false,s), outputs(v))
+end
+fakeΔnout(::SizeStack, v, Δ, visited, out::Val{false},s) = foreach(vout -> fakeΔnout(vout, Δ, visited, false,s), outputs(v))
+function fakeΔnout(::SizeStack, v, Δ, visited, out::Val{true},s)
     Δs = NaiveNASlib.split_nout_over_inputs(v, Δ, s)
-
     for (Δi, vi) in zip(Δs, inputs(v))
-        fakeΔnout(vi, Δi, s)
+        fakeΔnout(vi, Δi, visited, true,s)
     end
 end
-function fakeΔnout(::Immutable, v, Δ, s, out) end
-function fakeΔnout(::SizeAbsorb, v, Δ, s, out)
-    !out && return
-    NaiveNASlib.invisit(v, s) && return
+function fakeΔnout(::Immutable, v, Δ, visited, out,s) end
+function fakeΔnout(::SizeAbsorb, v, Δ, visited, ::Val{true},s)
     opv = op(v)
     opv.outΔ += Δ
     opv.size.nout -= Δ
-    fakeΔnout.(outputs(v), Δ, s, false)
+    foreach(vin -> fakeΔnout(vin, Δ, visited, false,s), outputs(v))
 end
+fakeΔnout(::SizeAbsorb, v, Δ, visited, ::Val{false},s) = foreach(vout -> fakeΔnout(vout, Δ, visited, true,s), inputs(v))
 
 
 """
