@@ -543,6 +543,7 @@
 
             @test nout(v4) == nin(v5)[] == 17
 
+            NaiveGAflux.select_neurons(NaiveGAflux.Nout(), vb, rankfun)
             select(m)
             @test out_inds(op(v4)) == [1, 2, -1, -1, -1, 3, 4, 5, 6, 7, -6, -6, -6, 8, 9, 10, 11]
             @test out_inds(op(v0)) == [1,2,3,4,-1]
@@ -611,6 +612,40 @@
             # The risk here is that we don't propagate selected indices from v3 to v5 and vice versa
             select(m)
             @test out_inds(op(v3)) == in_inds(op(v5))[] == [1, 2, 4, 5, 6]
+        end
+
+        @testset "NeuronSelectMutation remove before SizeInvariant with SizeStack input" begin
+            inpt = inputvertex("in", 3, FluxDense())
+            v0a = dense(inpt, 2, name="v0a")
+            v1a = dense(v0a, 2, name="v1a")
+            v2a = concat("v2a", v0a, v1a, v1a)
+
+
+            v0b = dense(inpt, 3, name="v0b")
+            v1b = dense(v0b, 4, name="v1b")
+            v2b = dense(v1b, 6, name="v2b")
+
+            v3 = "v3" >> v2a + v2b
+            v4 = dense(v3, 3, name="v4")
+
+            g = CompGraph(inpt, v3)
+            @test size(g(ones(Float32, 3,2))) == (nout(v3), 2)
+
+
+            rankfun(v, vvals) = 1:nout_org(vvals)
+            m = NeuronSelectMutation(rankfun , RemoveVertexMutation(RemoveStrategy()))
+
+            Δnout(v1a, 1)
+            m(v2b)
+
+            # Situation: both nout and nin appear to have changed as a result of the removal, but there was another reason
+            select(m)
+
+            @test in_inds(op(v3))[1] == in_inds(op(v3))[2] == [1, 2, 3, 4, -1, 5, 6, -1]
+            @test out_inds(op(v1b)) == [1,2,3,4,-1,-1,-1,-1]
+
+            apply_mutation(g)
+            @test size(g(ones(Float32, 3,2))) == (nout(v3), 2)
         end
 
         @testset "NeuronSelectMutation remove SizeInvariant SizeStack output decrease input" begin

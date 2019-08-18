@@ -100,7 +100,7 @@ struct NoutMainVar <: AbstractJuMPSelectionStrategy
     child::AbstractJuMPSelectionStrategy
 end
 NoutMainVar() = NoutMainVar(NoutExact(), NoutRelaxSize())
-NoutMainVar(m::LogSelection, c) = LogSelection(m.level, m.msgfun, NoutMainVar(m.andthen, s))
+NoutMainVar(m::LogSelection, c) = LogSelection(m.level, m.msgfun, NoutMainVar(m.andthen, c))
 NoutMainVar(m::AbstractSelectionStrategy, c) = m
 fallback(s::NoutMainVar) = NoutMainVar(fallback(s.main), fallback(s.child))
 

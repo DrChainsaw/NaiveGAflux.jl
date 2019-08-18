@@ -281,8 +281,11 @@ function select_neurons(strategy::RemoveVertex, v::AbstractVertex, rankfun::Func
         # Complication: In some cases vin was changed due to some other reason than vertex removal
         # To handle this, we search for unchanged vertices and exclude them
         s = NaiveNASlib.VisitState{Vector{Int}}(vin)
-        NaiveNASlib.visited_in!.(s, find_unchanged_outputs(vin))
 
+        # I,... think this is safe to do. Its only an optimizaion though afaik.
+        if !istransparent(v)
+            NaiveNASlib.visited_in!.(s, outputs(v))
+        end
 
         execute, inds = select_outputs(strategy.s, vin, rankfun(vin, vin), s.out, s.in)
         if execute
@@ -305,35 +308,6 @@ function select_neurons(strategy::RemoveVertex, v::AbstractVertex, rankfun::Func
     end
 end
 
-function find_unchanged_outputs(v)
-    # Basic idea: use findterminating to traverse graph and use a closure to capture the vertices we are interested in
-    # Two methods below are just capturing visited vertices which have not changed
-
-    unchanged = []
-    function search_inputs(vi)
-        vi == v && return []
-        ins_unch = filter(vii -> nout(vii) == nout_org(vii), inputs(vi))
-        append!(unchanged, ins_unch)
-        return filter(vii -> !in(vii, ins_unch), inputs(vi))
-    end
-
-    function search_outputs(vo)
-        outs_unch = filter(outputs(vo)) do voo
-            inds = inputs(voo) .== vo
-            return any(nin(voo)[inds] == nin_org(voo)[inds])
-        end
-        append!(unchanged, outs_unch)
-        return filter(voo -> !in(voo, outs_unch), outputs(vo))
-    end
-
-    findterminating(v, search_outputs, search_inputs)
-    # Special case: v is of type SizeAbsorb so findterminating returns v without invoking search_xx methods
-    if isempty(unchanged)
-        search_outputs(v)
-    end
-    return unchanged
-end
-
 istransparent(v::AbstractVertex) = istransparent(trait(v))
 istransparent(t::DecoratingTrait) = istransparent(base(t))
 istransparent(::SizeAbsorb) = false
@@ -341,20 +315,19 @@ istransparent(::NaiveNASlib.SizeTransparent) = true
 
 select_neurons_nout_org_not_aligned(vout, vfrom, strat, rf) = select_neurons_nout_org_not_aligned(trait(vout), vout, vfrom, strat, rf)
 select_neurons_nout_org_not_aligned(t::DecoratingTrait, vout, vfrom, strat, rf) = select_neurons_nout_org_not_aligned(base(t), vout, vfrom, strat, rf)
-# function select_neurons_nout_org_not_aligned(::NaiveNASlib.SizeTransparent, vout, vfrom, rankfun)
-#     # Simple! We can just select outputs from vout since we know this affects inputs!
-#     # Don't want to change anything (what might have been) inputs to vertex vfrom
-#     s = fakealignΔnout(vout, vfrom)
-#     #cdict = validouts(vout, false)
-#     #execute, inds = select_outputs(NoutExact(), vout, 1:nout_org(vout), cdict)
-#     #execute, inds = rankfun(vout, vout)
-#     @show inds
-#     if execute
-#         Δnout(vout, inds, s=s)
-#     end
-#     undo_fakealignΔnout(vout, vfrom)
-# end
-function select_neurons_nout_org_not_aligned(t, vout, vfrom, strategy, rankfun)
+function select_neurons_nout_org_not_aligned(::SizeInvariant, vout, vfrom, strategy, rankfun)
+    # Select outputs from vout directly and let them propagate backwards to not risk selecting different outputs from each input vertex
+    s = NaiveNASlib.VisitState{Vector{Int}}(vout)
+    NaiveNASlib.visited_out!.(s, filter(voi -> voi in inputs(vfrom), inputs(vout)))
+
+    cdict = validouts(vout, Set(s.out), Set(s.in), true)
+    execute, inds = select_outputs(NoutMainVar(strategy, NoutRelaxSize(0.01, 2)), vout, rankfun(vout, vout), cdict)
+
+    if execute
+        Δnout(vout, inds, s=s)
+    end
+end
+function select_neurons_nout_org_not_aligned(::MutationSizeTrait, vout, vfrom, strategy, rankfun)
     # Little bit trickier as changing nout of vout will not propagate to its inputs
     # Instead, we select output neurons from all its inputs and use this to select inputs
     s = NaiveNASlib.VisitState{Vector{Int}}(vout)
@@ -364,7 +337,8 @@ function select_neurons_nout_org_not_aligned(t, vout, vfrom, strategy, rankfun)
     Δ = map(enumerate(inputs(vout))) do (i, voi)
 
         voi in inputs(vfrom) || return missing
-        #TODO Is last out=false really correct?
+
+        # out=false because we are actually selecting for vout in the input direction
         cdict = validouts(voi, Set(s.out), Set(s.in), false)
         valid, inds = select_outputs(NoutMainVar(strategy, NoutRelaxSize(0.01, 2)), voi, rankfun(voi, vfrom), cdict)
         return valid ? inds : missing
