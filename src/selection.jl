@@ -95,6 +95,16 @@ ValidOutsInfo(currsize::I, aftersize::I, trait::T) where {T<:MutationTrait,I<:In
 addinds(v::ValidOutsInfo{I, T}, c::Integer, a::Integer) where {I,T} = ValidOutsInfo([v.current range(c, length=size(v.current,1))], [v.after range(a, length=size(v.after,1))], v.trait)
 
 
+struct NoutMainVar <: AbstractJuMPSelectionStrategy
+    main::AbstractJuMPSelectionStrategy
+    child::AbstractJuMPSelectionStrategy
+end
+NoutMainVar() = NoutMainVar(NoutExact(), NoutRelaxSize())
+NoutMainVar(m::LogSelection, c) = LogSelection(m.level, m.msgfun, NoutMainVar(m.andthen, s))
+NoutMainVar(m::AbstractSelectionStrategy, c) = m
+fallback(s::NoutMainVar) = NoutMainVar(fallback(s.main), fallback(s.child))
+
+
 """
     validouts(v::AbstractVertex)
 
@@ -142,16 +152,18 @@ name(vi) = "v1"
 ```
 
 """
-function validouts(v::AbstractVertex, out::Bool=true, vfrom::AbstractVertex=v, dd=Dict(), path=(), offs=(1, 1), mask=maskinit(v), visited = Set())
+validouts(v::AbstractVertex, skipin::Set, skipout::Set, out::Bool=true) = validouts(v, out, v, Dict(), (), (1, 1), maskinit(v), Set(), skipin, skipout)
+function validouts(v::AbstractVertex, out::Bool=true, vfrom::AbstractVertex=v, dd=Dict(), path=(), offs=(1, 1), mask=maskinit(v), visited = Set(), skipin::Set=Set(), skipout::Set=Set())
     has_visited!(visited, v) && return dd
-    validouts(v, Val(out), vfrom, dd, path, offs, mask, visited)
+    out && v in skipin && return dd
+    !out && v in skipout && return dd
+    validouts(v, Val(out), vfrom, dd, path, offs, mask, visited, skipin, skipout)
     delete!(visited, v)
     return dd
 end
 maskinit(v) = (trues(nout_org(v)), trues(nout(v)))
 validouts(v::AbstractVertex, args...) = validouts(trait(v), v, args...)
 validouts(t::DecoratingTrait, args...) = validouts(base(t), args...)
-
 
 function validouts(::SizeStack, v, ::Val{true}, vfrom, dd, path, offs, mask, args...)
     cnts = (1, 1)
@@ -164,6 +176,7 @@ function validouts(::SizeStack, v, ::Val{true}, vfrom, dd, path, offs, mask, arg
     end
     return dd
 end
+
 function validouts(::SizeStack, v, ::Val{false}, vfrom, dd, path, offs, mask, args...)
     newmask = (BitVector(), BitVector())
     for vin in inputs(v)
@@ -181,7 +194,6 @@ function validouts(::SizeStack, v, ::Val{false}, vfrom, dd, path, offs, mask, ar
     return dd
 end
 
-
 function validouts(::SizeInvariant, v, out, vfrom, dd, path, args...)
     foreach(vin -> validouts(vin, true, v, dd, path, args...), inputs(v))
     for (p, vout) in enumerate(outputs(v))
@@ -194,7 +206,7 @@ end
 validouts(t::SizeAbsorb, args...) = addvalidouts(t, args...)
 validouts(t::Immutable, args...) = addvalidouts(t, args...)
 
-function addvalidouts(t::MutationTrait, v, ::Val{true}, vfrom, dd, path, offs, mask, visited)
+function addvalidouts(t::MutationTrait, v, ::Val{true}, vfrom, dd, path, offs, mask, visited, args...)
     initial = length(visited) == 1
 
     # length(visited) > 1 is only false if the first vertex we call validouts for is of type SizeAbsorb
@@ -207,7 +219,7 @@ function addvalidouts(t::MutationTrait, v, ::Val{true}, vfrom, dd, path, offs, m
     end
     for (p, vout) in enumerate(outputs(v))
         newpath = (path..., p)
-        validouts(vout, false, v, dd, newpath, offs, mask, visited)
+        validouts(vout, false, v, dd, newpath, offs, mask, visited, args...)
     end
 
     # This is true if all outputs of v also are (or lead to) size absorb types and we shall indeed populate dd with the indices of this vertex
@@ -279,8 +291,8 @@ julia> NaiveGAflux.select_outputs(v, 1:nout_org(op(v)))
 ```
 
 """
-select_outputs(v::AbstractVertex, values) = select_outputs(NoutExact(), v, values)
-select_outputs(s::AbstractSelectionStrategy, v, values) = select_outputs(s, v, values, validouts(v))
+select_outputs(v::AbstractVertex, values, skipin=[], skipout=[]) = select_outputs(NoutExact(), v, values, skipin, skipout)
+select_outputs(s::AbstractSelectionStrategy, v, values, skipin=[], skipout=[])= select_outputs(s, v, values, validouts(v, Set(skipin), Set(skipout)))
 
 function select_outputs(s::LogSelection, v, values, cdict)
     @logmsg s.level s.msgfun(v)
@@ -305,9 +317,9 @@ function select_outputs(s::AbstractJuMPSelectionStrategy, v, values, cdict)
     # Variable for deciding at what positions to insert new outputs.
     insertvar = @variable(model, insertvar[1:nout(v)], Bin)
 
-    # Will be added to objective to try to insert new neurons last
+    # insertlast will be added to objective to try to insert new neurons last
     # Should not really matter whether it does that or not, but makes things a bit easier to debug
-    insertlast = @expression(model, 0)
+    insertlast = sizeconstraintmainvar(s, SizeAbsorb(), v, model, selectvar, insertvar)
 
     for (vi, mi) in cdict
         # TODO: Don't add to cdict if this happens?
@@ -368,26 +380,43 @@ optmodel(::AbstractJuMPSelectionStrategy, v, values) = JuMP.Model(JuMP.with_opti
 function rowconstraint(::AbstractJuMPSelectionStrategy, model, x, indmat)
     # Valid rows don't include all rows when vertex to select from has not_org < nout_org of a vertex in cdict.
     # This typically happens when resizing vertex to select from due to removal of its output vertex
-    # TODO: See if this can be handled by avoiding/blocking vertices in validouts instead?
-    validrows = 1:size(indmat,1) #[i for i in 1:size(indmat, 1) if all(indmat[i,:] .<= length(x))]
+    validrows = [i for i in 1:size(indmat, 1) if all(indmat[i,:] .<= length(x))]
     var = @variable(model, [1:length(validrows)], Bin)
     @constraint(model, size(indmat,2) .* var .- sum(x[indmat[validrows,:]], dims=2) .== 0)
     return var
 end
 
+
+sizeconstraintmainvar(::AbstractJuMPSelectionStrategy, t, v, model, selvar, insvar) = @expression(model, 0)
+function sizeconstraintmainvar(s::NoutMainVar, t, v, model, selvar, insvar)
+    toselect = min(length(selvar), length(insvar))
+    sizeconstraint(s.main, toselect, model, selvar)
+    if length(insvar) > length(selvar)
+        @constraint(model, sum(insvar) == length(insvar) - sum(selvar))
+    end
+    return @expression(model, sum(insvar[1:toselect]))
+end
+
+function sizeconstraint(s::NoutMainVar, t, v, model, var)
+    #sizeconstraint(s.child, t, v, model, var)
+end
+
 nselect_out(v) = min(nout(v), nout_org(v))
 limits(s::NoutRelaxSize, n) =  (max(1, s.lower * n), s.upper * n)
 
-sizeconstraint(::NoutExact, t, v, model, var) = @constraint(model, sum(var) == min(length(var), nselect_out(v)))
+sizeconstraint(s::AbstractJuMPSelectionStrategy, t, v, model, var) = sizeconstraint(s, min(length(var), nselect_out(v)), model, var)
 sizeconstraint(s::NoutRelaxSize, t::Immutable, v, model, var) = sizeconstraint(NoutExact(), t, v, model, var)
-function sizeconstraint(s::NoutRelaxSize, t, v, model, var)
+
+sizeconstraint(::NoutExact, size::Integer, model, var) = @constraint(model, sum(var) == size)
+function sizeconstraint(s::NoutRelaxSize, sizetarget::Integer, model, var)
     # Wouldn't mind being able to relax the size constraint like this:
-    #@objective(model, Min, 10*(sum(selectvar) - nout(v))^2)
+    #@objective(model, Min, 10*(sum(selectvar) - sizetarget^2))
     # but that requires MISOCP and only commercial solvers seem to do that
-    nmin, nmax = limits(s, nselect_out(v))
+    nmin, nmax = limits(s, sizetarget)
     @constraint(model, nmin <= sum(var) <= nmax)
 end
 
+Δfactorconstraint(s::NoutMainVar, model, f, Δsizeexp) = Δfactorconstraint(s.child, model, f, Δsizeexp)
 function Δfactorconstraint(::NoutExact, model, f, Δsizeexp) end
 function Δfactorconstraint(::NoutRelaxSize, model, ::Missing, Δsizeexp) end
 function Δfactorconstraint(::NoutRelaxSize, model, f, Δsizeexp)

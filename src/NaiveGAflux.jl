@@ -37,11 +37,12 @@ export mutate, allow_mutation, select
 # Examples
 export Cifar10
 
+# As this will (hopefully) be moved to NaiveNASlib
+include("selection.jl")
+
 include("util.jl")
 include("archspace.jl")
 include("mutation.jl")
-include("selection.jl")
-
 include("examples/Cifar10.jl")
 
 

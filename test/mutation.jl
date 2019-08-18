@@ -151,7 +151,13 @@
     @testset "NeuronSelectMutation" begin
 
         # Dummy neuron selection function just to mix things up in a predicable way
-        oddfirst(v, vvals) = true, vcat(sort(vcat(1:2:nout_org(op(v)), 2:2:nout_org(op(v)))[1:min(nout(v),end)]), -ones(Int, max(0, nout(v) - nout_org(op(v)))))
+        function oddfirst(v, vvals)
+            values = zeros(nout_org(vvals))
+            nvals = length(values)
+            values[1:2:nvals] = nvals:-1:ceil(Int, nvals / 2)
+            values[2:2:nvals] = (nvals ÷ 2):-1:1
+            return values
+        end
         batchnorm(inpt; name="bn") = mutable(name, BatchNorm(nout(inpt)), inpt)
 
         @testset "NeuronSelectMutation NoutMutation" begin
@@ -254,7 +260,7 @@
             pa2 = concat(pa1pa1, pa1pb1, traitfun=named("pa2"))
             v4 = concat(pa2, pb1, pc1, pd1, traitfun=named("v4"))
 
-            rankfun(v, vvals) = NaiveGAflux.select_outputs(v, 1:nout_org(op(vvals)))
+            rankfun(vsel, vvals) = 1:nout_org(vvals)
             m = NeuronSelectMutation(rankfun , NoutMutation(0.5))
             push!(m.m.mutated, v4)
 
@@ -333,7 +339,7 @@
             v5 = "v5" >> v3 + v4
             v6 = dense(v5, 2, name="v6")
 
-            rankfun(v, vvals) = NaiveGAflux.select_outputs(v, 1:nout_org(op(vvals)))
+            rankfun(vsel, vvals) = 1:nout_org(vvals)
             m = NeuronSelectMutation(rankfun , NoutMutation(0.5))
             push!(m.m.mutated, v4)
 
@@ -371,7 +377,7 @@
             v10 = dense(inpt, nout(v9), name="v10")
             add = traitconf(named("add")) >> v8 + v9# + v10
 
-            rankfun(v, vvals) = NaiveGAflux.select_outputs(v, 1:nout_org(op(vvals)))
+            rankfun(vsel, vvals) = 1:nout_org(vvals)
             m = NeuronSelectMutation(rankfun , NoutMutation(0.5))
             push!(m.m.mutated, v10)
 
@@ -404,7 +410,7 @@
             g = CompGraph(inpt, v4)
             @test size(g(ones(Float32, 3,2))) == (nout(v4), 2)
 
-            rankfun(v, vvals) = NaiveGAflux.select_outputs(v, 1:nout_org(op(vvals)))
+            rankfun(vsel, vvals) = 1:nout_org(vvals)
             m = NeuronSelectMutation(rankfun , RemoveVertexMutation(RemoveStrategy(DecreaseBigger())))
 
             m(v3)
@@ -431,7 +437,7 @@
             g = CompGraph(inpt, v4)
             @test size(g(ones(Float32, 3,2))) == (nout(v4), 2)
 
-            rankfun(v, vvals) = NaiveGAflux.select_outputs(v, 1:nout_org(op(vvals)))
+            rankfun(vsel, vvals) = 1:nout_org(vvals)
             m = NeuronSelectMutation(rankfun , RemoveVertexMutation())
 
             Δnout(v1, 1)
@@ -441,7 +447,7 @@
             @test nout(v4) == nin(v5)[] == 15
 
             select(m)
-            @test out_inds(op(v4)) == [1, 2, -1, -1, 3, 4, 5, 6, 7, -1, -1, 8, 9, 10, 11]
+            @test out_inds(op(v4)) == [1, 2, -1, -1, 3, 4, 5, 6, 7, -6, -6, 8, 9, 10, 11]
             @test out_inds(op(v0)) == [1,2,3,4]
 
             apply_mutation(g)
@@ -464,7 +470,7 @@
             g = CompGraph(inpt, v4)
             @test size(g(ones(Float32, 3,2))) == (nout(v4), 2)
 
-            rankfun(v, vvals) = NaiveGAflux.select_outputs(v, 1:nout_org(op(vvals)))
+            rankfun(vsel, vvals) = 1:nout_org(vvals)
             m = NeuronSelectMutation(rankfun , RemoveVertexMutation(RemoveStrategy(DecreaseBigger())))
 
             Δnout(v1, 1)
@@ -473,7 +479,7 @@
             @test nout(v4) == nin(v5)[] == 13
 
             select(m)
-            @test out_inds(op(v4)) == [1, 2, -1, 3, 4, 5, 6, 7, -1, 8, 9, 10, 11]
+            @test out_inds(op(v4)) == [1, 2, -1, 3, 4, 5, 6, 7, -6, 8, 9, 10, 11]
             @test out_inds(op(v0)) == [2,3,4]
 
             apply_mutation(g)
@@ -496,7 +502,7 @@
             g = CompGraph(inpt, v4)
             @test size(g(ones(Float32, 3,2))) == (nout(v4), 2)
 
-            rankfun(v, vvals) = NaiveGAflux.select_outputs(v, 1:nout_org(op(vvals)))
+            rankfun(vsel, vvals) = 1:nout_org(vvals)
             m = NeuronSelectMutation(rankfun , RemoveVertexMutation(RemoveStrategy(AlignSizeBoth())))
 
             Δnout(v1, 4)
@@ -505,7 +511,7 @@
             @test nout(v4) == nin(v5)[] == 17
 
             select(m)
-            @test out_inds(op(v4)) == [1, 2, -1, -1, -1, 3, 4, 5, 6, 7, -1, -1, -1, 8, 9, 10, 11]
+            @test out_inds(op(v4)) == [1, 2, -1, -1, -1, 3, 4, 5, 6, 7, -6, -6, -6, 8, 9, 10, 11]
             @test out_inds(op(v0)) == [1,2,3,4,-1]
 
             apply_mutation(g)
@@ -529,7 +535,7 @@
             g = CompGraph(inpt, v4)
             @test size(g(ones(Float32, 3,2))) == (nout(v4), 2)
 
-            rankfun(v, vvals) = NaiveGAflux.select_outputs(v, 1:nout_org(op(vvals)))
+            rankfun(vsel, vvals) = 1:nout_org(vvals)
             m = NeuronSelectMutation(rankfun , RemoveVertexMutation(RemoveStrategy(AlignSizeBoth())))
 
             Δnout(v1, 4)
@@ -562,7 +568,7 @@
             g = CompGraph(inpt, v4)
             @test size(g(ones(Float32, 3,2))) == (nout(v4), 2)
 
-            rankfun(v, vvals) = NaiveGAflux.select_outputs(v, 1:nout_org(op(vvals)))
+            rankfun(vsel, vvals) = 1:nout_org(vvals)
             m = NeuronSelectMutation(rankfun , RemoveVertexMutation())
 
             Δnout(v1, 1)
@@ -571,7 +577,7 @@
             @test nout(v4) == nin(v5)[] == 13
 
             select(m)
-            @test out_inds(op(v4)) == [1, 2, -1, 3, 4, 5, 6, 7, -1, 8, 9, 10, 11]
+            @test out_inds(op(v4)) == [1, 2, -1, 3, 4, 5, 6, 7, -6, 8, 9, 10, 11]
             @test out_inds(op(v1)) == [1,2,-1]
 
             apply_mutation(g)
@@ -594,7 +600,7 @@
             @test size(g(ones(Float32, 3,2))) == (nout(v4), 2)
 
 
-            rankfun(v, vvals) = NaiveGAflux.select_outputs(v, vvals == v3 ? (1:nout_org(vvals)) : (nout_org(vvals):-1:1))
+            rankfun(v, vvals) = vvals == v3 ? (1:nout_org(vvals)) : (nout_org(vvals):-1:1)
 
             m = NeuronSelectMutation(rankfun , RemoveVertexMutation(RemoveStrategy(AlignSizeBoth())))
 
@@ -619,7 +625,7 @@
             g = CompGraph(inpt, v4)
             @test size(g(ones(Float32, 3,2))) == (nout(v4), 2)
 
-            rankfun(vsel, vvals) = NaiveGAflux.select_outputs(vsel, 1:nout_org(vvals))
+            rankfun(vsel, vvals) = 1:nout_org(vvals)
             m = NeuronSelectMutation(rankfun , RemoveVertexMutation(RemoveStrategy()))
 
             m(v4)
@@ -627,10 +633,9 @@
             @test nout(v3) == nin(v5)[] == 6
 
             # Sitation: nin of v5 has increased by 3 so we just want to add 3 more inputs to it
-            # Problem that occurs is that validouts will find v0 and v1 and try to select 2+4 outputs out of 3 existing ones from v3 unless we fake their metadata so it looks like they too changed size
             select(m)
             @test out_inds(op(v3)) == [1, 2, 3, 4, 5, 6]
-            @test in_inds(op(v5))[] ==[1, -1, 2, 3, -1, -1]
+            @test in_inds(op(v5))[] ==[1, 2, 3, -1, -1, -1]
 
             apply_mutation(g)
             @test size(g(ones(Float32, 3,2))) == (nout(v4), 2)
