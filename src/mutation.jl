@@ -164,17 +164,7 @@ end
 AddVertexMutation(s, outselect::Function=identity) = AddVertexMutation(s, outselect, rng_default)
 AddVertexMutation(s, rng::AbstractRNG) = AddVertexMutation(s, identity, rng)
 
-(m::AddVertexMutation)(v::AbstractVertex) = insert!(v, vi -> m.s(vi, outsize=nout(vi)), m.outselect)
-
-# TODO: Belongs in NaiveNASlib
-struct CheckAligned <:AbstractAlignSizeStrategy
-    ifnot
-end
-CheckAligned() = CheckAligned(IncreaseSmaller())
-function NaiveNASlib.prealignsizes(s::CheckAligned, vin, vout, will_rm)
-    nout(vin) == NaiveNASlib.tot_nin(vout) && return true
-    return NaiveNASlib.prealignsizes(s.ifnot, vin, vout, will_rm)
-end
+(m::AddVertexMutation)(v::AbstractVertex) = insert!(v, vi -> m.s(name(vi), vi, outsize=nout(vi)), m.outselect)
 
 """
     RemoveVertexMutation <:AbstractMutation{AbstractVertex}
@@ -190,7 +180,7 @@ Default reconnect strategy is `ConnectAll`.
 struct RemoveVertexMutation <:AbstractMutation{AbstractVertex}
     s::RemoveStrategy
 end
-RemoveVertexMutation() = RemoveVertexMutation(RemoveStrategy(CheckAligned(IncreaseSmaller(DecreaseBigger(AlignSizeBoth(FailAlignSizeWarn()))))))
+RemoveVertexMutation() = RemoveVertexMutation(RemoveStrategy(CheckAligned(CheckNoSizeCycle(ifok=IncreaseSmaller(DecreaseBigger(AlignSizeBoth(FailAlignSizeWarn())))))))
 
 (m::RemoveVertexMutation)(v::AbstractVertex) = remove!(v, m.s)
 
