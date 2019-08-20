@@ -66,7 +66,7 @@ struct MapArchSpace <: AbstractArchSpace
     s::AbstractArchSpace
 end
 (s::MapArchSpace)(in::AbstractVertex, rng=NaiveGAflux.rng_default; outsize=missing) = s.f(s.s(in, rng, outsize=outsize))
-(s::MapArchSpace)(name::String, in::AbstractVertex, rng=rng_default; outsize=missing) = s.f(s.s(name, in, rng, outsize=outsize))
+(s::MapArchSpace)(name::String, in::AbstractVertex, rng=NaiveGAflux.rng_default; outsize=missing) = s.f(s.s(name, in, rng, outsize=outsize))
 
 function create_mutation()
 
