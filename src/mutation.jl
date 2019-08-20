@@ -142,7 +142,7 @@ function (m::NoutMutation)(v::AbstractVertex)
     Δ = Int(sign(x) * max(Δfactor, abs(xq) * Δfactor))
 
     minsize = min(nout(v), minimum(nout.(findterminating(v, inputs))))
-    minsize + Δ <= 0 && return
+    minsize + Δ <= Δfactor && return
     Δnout(v, Δ)
 end
 
@@ -180,7 +180,7 @@ Default reconnect strategy is `ConnectAll`.
 struct RemoveVertexMutation <:AbstractMutation{AbstractVertex}
     s::RemoveStrategy
 end
-RemoveVertexMutation() = RemoveVertexMutation(RemoveStrategy(CheckAligned(CheckNoSizeCycle(ifok=IncreaseSmaller(DecreaseBigger(AlignSizeBoth(FailAlignSizeWarn())))))))
+RemoveVertexMutation() = RemoveVertexMutation(RemoveStrategy(CheckAligned(CheckNoSizeCycle(IncreaseSmaller(DecreaseBigger(AlignSizeBoth(FailAlignSizeWarn()))), FailAlignSizeWarn(msgfun = (vin,vout) -> "Can not remove vertex $(name(vin))! Size cycle detected!")))))
 
 (m::RemoveVertexMutation)(v::AbstractVertex) = remove!(v, m.s)
 
@@ -192,7 +192,7 @@ RemoveVertexMutation() = RemoveVertexMutation(RemoveStrategy(CheckAligned(CheckN
 
 Selects neurons of vertices mutated by the wrapped `RecordMutation`.
 
-Possible to select ranking method for neurons using `rankfun` which takes a mutated vertex as input and returns indices of selected neurons.
+Possible to select ranking method for neurons using `rankfun` which takes a mutated vertex as input and value/utility per neuron (higher is better).
 
 How to select neurons depends a bit on what operation the wrapped `RecordMutation` performs. If not supplied explicitly an attempt to infer it will be made, resulting in an error if not possible.
 """
