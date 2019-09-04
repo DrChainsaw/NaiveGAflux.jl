@@ -236,7 +236,10 @@ default_neuronselect(vsel, vvals) = neuron_value(trait(vvals), vvals)
 
 NaiveNASflux.neuron_value(t::DecoratingTrait, v) = neuron_value(base(t), v)
 NaiveNASflux.neuron_value(::Immutable, v) = ones(nout(v))
-NaiveNASflux.neuron_value(::MutationSizeTrait, v) = neuron_value(v)
+NaiveNASflux.neuron_value(::MutationSizeTrait, v) = clean_values(neuron_value(v),v)
+clean_values(::Missing, v) = ones(nout_org(v))
+clean_values(a::AbstractArray, v) = replace(a, NaN => -Inf)
+
 
 select_neurons(::T, v::AbstractVertex, rankfun::Function) where T = error("Neuron select not implemented for $T")
 function select_neurons(strategy::Nout, v::AbstractVertex, rankfun::Function)
