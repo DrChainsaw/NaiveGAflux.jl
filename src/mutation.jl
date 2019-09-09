@@ -143,7 +143,12 @@ function (m::NoutMutation)(v::AbstractVertex)
 
     minsize = min(nout(v), minimum(nout.(findterminating(v, inputs))))
     minsize + Δ <= Δfactor && return
-    Δnout(v, Δ)
+
+    Δsize(ΔNout{Exact}(v, Δ, LogΔSizeExec(Logging.Warn, "Could not change nout of $v by $(Δ)! Relaxing constraints...", ΔNout{Relaxed}(v, Δ, LogΔSizeExec(Logging.Warn, "Could not change nout of $v by $(Δ) after relaxation! Vertex not changed!", ΔSizeFailNoOp())))), all_in_Δsize_graph(v, Output()))
+    # if nout(v) != nout_org(v)
+    #     Δoutputs(SelectDirection(), v, v -> default_neuronselect(v,v))
+    #     apply_mutation.(all_in_graph(v))
+    # end
 end
 
 """
@@ -180,7 +185,8 @@ Default reconnect strategy is `ConnectAll`.
 struct RemoveVertexMutation <:AbstractMutation{AbstractVertex}
     s::RemoveStrategy
 end
-RemoveVertexMutation() = RemoveVertexMutation(RemoveStrategy(CheckAligned(CheckNoSizeCycle(IncreaseSmaller(DecreaseBigger(AlignSizeBoth(FailAlignSizeWarn()))), FailAlignSizeWarn(msgfun = (vin,vout) -> "Can not remove vertex $(name(vin))! Size cycle detected!")))))
+RemoveVertexMutation() = RemoveVertexMutation(RemoveStrategy(CheckAligned(CheckNoSizeCycle(ApplyMutation(SelectOutputs(select = SelectDirection(OutSelect{NaiveNASlib.Exact}(NaiveNASlib.LogSelectionFallback("Reverting...", NoutRevert()))),
+ valuefun = v -> default_neuronselect(v,v), align=IncreaseSmaller(DecreaseBigger(AlignSizeBoth(FailAlignSizeWarn()))))), FailAlignSizeWarn(msgfun = (vin,vout) -> "Can not remove vertex $(name(vin))! Size cycle detected!")))))
 
 (m::RemoveVertexMutation)(v::AbstractVertex) = remove!(v, m.s)
 
@@ -214,11 +220,7 @@ neuron_select_strategy(::NoutMutation) = Nout()
 struct Nout
     s::AbstractSelectionStrategy
 end
-Nout() = Nout(NoutExact())
-struct RemoveVertex
-    s::AbstractSelectionStrategy
-end
-RemoveVertex() = RemoveVertex(NoutExact())
+Nout() = Nout(SelectDirection())
 
 """
     select(m::NeuronSelectMutation)
@@ -231,16 +233,6 @@ function select(m::NeuronSelectMutation)
     end
 end
 
-default_neuronselect(vsel, vvals) = neuron_value(trait(vvals), vvals)
-
-
-NaiveNASflux.neuron_value(t::DecoratingTrait, v) = neuron_value(base(t), v)
-NaiveNASflux.neuron_value(::Immutable, v) = ones(nout(v))
-NaiveNASflux.neuron_value(::MutationSizeTrait, v) = clean_values(neuron_value(v),v)
-clean_values(::Missing, v) = ones(nout_org(v))
-clean_values(a::AbstractArray, v) = replace(a, NaN => -Inf)
-
-
 select_neurons(::T, v::AbstractVertex, rankfun::Function) where T = error("Neuron select not implemented for $T")
 function select_neurons(strategy::Nout, v::AbstractVertex, rankfun::Function)
     v in vcat(outputs.(inputs(v))...) || return # if vertex was removed
@@ -248,100 +240,20 @@ function select_neurons(strategy::Nout, v::AbstractVertex, rankfun::Function)
     Δout = nout(v) - nout_org(v)
 
     if Δout != 0
-        execute, inds = select_outputs(strategy.s, v, rankfun(v, v))
-        if execute
-            Δnout(v, inds)
-        end
+        Δoutputs(strategy.s, v, v -> rankfun(v,v))
     end
 end
 
-function select_neurons(strategy::RemoveVertex, v::AbstractVertex, rankfun::Function)
-    # This could be messy due to many different cases:
-    # 1: Outsize of input vertex is increased
-    # 2: Insize of output vertex is increased
-    # 3: Outsize of input vertex is decreased
-    # 4: Insize of output vertex is decreased
-    # as well as all combinations of two of the above.
+default_neuronselect(vsel, vvals) = neuron_value(trait(vvals), vvals)
 
-    # Handle cases when 1 or 3 has happened:
-    # This is easy as it is equivalent to handling a normal Nout change except we pretend that outputs have already been visited when propagating selected indices.
-    Δins = nin(v) - nin_org(v)
-    skip_outputs = [];
-    for i in eachindex(Δins)
-        Δins[i] == 0 && continue
-        vin = inputs(v)[i]
-        # Basic idea: Don't want to change anything (what was) outputs to (now removed) vertex v
-        # Complication: In some cases vin was changed due to some other reason than vertex removal
-        # To handle this, we search for unchanged vertices and exclude them
-        s = NaiveNASlib.VisitState{Vector{Int}}(vin)
 
-        # I,... think this is safe to do. Its only an optimizaion though afaik.
-        if !istransparent(v)
-            NaiveNASlib.visited_in!.(s, outputs(v))
-        end
+NaiveNASflux.neuron_value(t::DecoratingTrait, v) = neuron_value(base(t), v)
+NaiveNASflux.neuron_value(::Immutable, v) = ones(nout(v))
+NaiveNASflux.neuron_value(::MutationSizeTrait, v) = clean_values(cpu(neuron_value(v)),v)
+clean_values(::Missing, v) = ones(nout_org(v))
+# NaN should perhaps be < 0, but since SelectDirection is used, this might lead to inconsistent results as a subset of neurons for a vertex v whose output vertices are not part of the selection (typically because only v's inputs are touched) are selected. As the output vertices are not changed this will lead to a size inconsistency. Cleanest fix might be to separate "touch output" from "touch input" when formulating the output selection problem.
+clean_values(a::AbstractArray, v) = replace(a, NaN => 0.01, 0.0 => 0.01, Inf => 0.01, -Inf => 0.01)
 
-        execute, inds = select_outputs(strategy.s, vin, rankfun(vin, vin), s.out, s.in)
-        if execute
-            Δnout(vin, inds, s=s)
-        end
-
-        if istransparent(vin)
-            append!(skip_outputs, outputs(vin))
-        end
-    end
-
-    # Handle cases when 2 and 4 has happened
-    # Cases 2 and 4 are a bit trickier as it is now the input size which has changed, meaning that nout of all input verteces was not changed. Reason its trickier is because there is no helper method for it (yet).
-    # The strategy is to select outputs from the input vertices instead
-    # Challenge with that approach is that sizes where not aligned to begin with, so if no special action is taken one will end up with tasks like "select 100 unique values out of these 50 values".
-    if nout(v) - nout_org(v) != 0
-        for vout in filter(vo -> !in(vo, skip_outputs), unique(outputs(v)))
-            select_neurons_nout_org_not_aligned(vout, v, strategy.s, rankfun)
-        end
-    end
-end
-
-istransparent(v::AbstractVertex) = istransparent(trait(v))
-istransparent(t::DecoratingTrait) = istransparent(base(t))
-istransparent(::SizeAbsorb) = false
-istransparent(::NaiveNASlib.SizeTransparent) = true
-
-select_neurons_nout_org_not_aligned(vout, vfrom, strat, rf) = select_neurons_nout_org_not_aligned(trait(vout), vout, vfrom, strat, rf)
-select_neurons_nout_org_not_aligned(t::DecoratingTrait, vout, vfrom, strat, rf) = select_neurons_nout_org_not_aligned(base(t), vout, vfrom, strat, rf)
-function select_neurons_nout_org_not_aligned(::SizeInvariant, vout, vfrom, strategy, rankfun)
-    # Select outputs from vout directly and let them propagate backwards to not risk selecting different outputs from each input vertex
-    s = NaiveNASlib.VisitState{Vector{Int}}(vout)
-    NaiveNASlib.visited_out!.(s, filter(voi -> voi in inputs(vfrom), inputs(vout)))
-
-    cdict = validouts(vout, Set(s.out), Set(s.in), true)
-    execute, inds = select_outputs(NoutMainVar(strategy, NoutRelaxSize(0.01, 2)), vout, rankfun(vout, vout), cdict)
-
-    if execute
-        Δnout(vout, inds, s=s)
-    end
-end
-function select_neurons_nout_org_not_aligned(::MutationSizeTrait, vout, vfrom, strategy, rankfun)
-    # Little bit trickier as changing nout of vout will not propagate to its inputs
-    # Instead, we select output neurons from all its inputs and use this to select inputs
-    s = NaiveNASlib.VisitState{Vector{Int}}(vout)
-    NaiveNASlib.visited_out!.(s, inputs(vout))
-
-    # Note that one can probably assume that SizeAbsorb only has one input so this might be a bit overgeneralized
-    Δ = map(enumerate(inputs(vout))) do (i, voi)
-
-        voi in inputs(vfrom) || return missing
-
-        # out=false because we are actually selecting for vout in the input direction
-        cdict = validouts(voi, Set(s.out), Set(s.in), false)
-        valid, inds = select_outputs(NoutMainVar(strategy, NoutRelaxSize(0.01, 2)), voi, rankfun(voi, vfrom), cdict)
-        return valid ? inds : missing
-    end
-
-    if !all(ismissing.(Δ))
-        Δnin(vout, Δ..., s=s)
-    end
-
-end
 
 """
     PostMutation{T} <: AbstractMutation{T}

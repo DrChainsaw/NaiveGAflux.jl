@@ -2,6 +2,9 @@ module Cifar10
 
 using ..NaiveGAflux
 using Random
+import BSON: @save
+import BSON
+import Logging
 
 export run_experiment, initial_models
 
@@ -28,27 +31,47 @@ function run_experiment(popsize, niters, data; nevolve=100, baseseed=666)
         trainmodels!(population, (x_train, onehot(y_train)))
 
         if i % nevolve == 0
+            if i > 90
+                foreach(cpu, population)
+                @save "models_snaphot.bson" population
+                foreach(gpu, population)
+            end
             evolvemodels!(population)
         end
     end
     return population
 end
 
+function BSON.newstruct!(x, fs...)
+  for (i, f) = enumerate(fs)
+    f = fixarrtype(f)
+    f = convert(fieldtype(typeof(x),i), f)
+    ccall(:jl_set_nth_field, Nothing, (Any, Csize_t, Any), x, i-1, f)
+  end
+  return x
+end
+fixarrtype(f) = f
+fixarrtype(f::AbstractVector{Any}) = map(fixarrtype, f)
+
 # Workaround as losses fail with Flux.OneHotMatrix on Appveyor x86 (works everywhere else)
 onehot(y) = Float32.(Flux.onehotbatch(y, 0:9))
 
+# TODO: Add as a util for "evolving entities" so they can 1) stop training and 2) report very poor fitness
+function nanguard(x)
+     if isnan(x)
+         @warn "Loss is NaN!"
+         x.data = typeof(x.data)(1e6)
+     end
+     return x
+ end
+
 function trainmodels!(population, data)
     data = [data |> gpu]
-    nptot = 0
     for model in population
-        np = sum(map(ppp -> prod(size(ppp)), params(model.g).order))
-        nptot += np
-        @info "Train model $(name(model.g.inputs[])) nv: $(nv(model.g)) np: $np"
-        loss(x,y) = Flux.logitcrossentropy(model(x), y)
+        @info "Train model $(modelname(model.g)) nv: $(nv(model.g))"
+        loss(x,y) = nanguard(Flux.logitcrossentropy(model(x), y))
         Flux.train!(loss, params(model), data, model.opt)
     end
-    @info "nptot: $nptot"
-    sleep(1)
 end
 
 function evolvemodels!(population)
@@ -68,36 +91,37 @@ end
 (s::MapArchSpace)(in::AbstractVertex, rng=NaiveGAflux.rng_default; outsize=missing) = s.f(s.s(in, rng, outsize=outsize))
 (s::MapArchSpace)(name::String, in::AbstractVertex, rng=NaiveGAflux.rng_default; outsize=missing) = s.f(s.s(name, in, rng, outsize=outsize))
 
+Flux.mapchildren(f, aa::AbstractArray{<:Integer, 1}) = aa
+
 function create_mutation()
 
-    function rankfun(vsel, vvals)
-        @info "\t\tSelect params for $(name(vsel))"
-        return NaiveGAflux.default_neuronselect(vsel, vvals)
+    function rankfun(vsel, vval)
+        return (NaiveGAflux.default_neuronselect(vsel, vval) |> cpu) .+ 10
     end
 
-    mutate_nout = NeuronSelectMutation(rankfun, NoutMutation(-0.1, 0.05)) # Max 10% change in output size
+    mutate_nout = NoutMutation(-0.1, 0.05) # Max 10% change in output size
     add_vertex = add_vertex_mutation()
-    rem_vertex = NeuronSelectMutation(rankfun, RemoveVertexMutation())
+    rem_vertex = RemoveVertexMutation()
 
     # Create a shorthand alias for MutationProbability
     mp(m,p) = MutationProbability(m, Probability(p))
 
     mnout = mp(LogMutation(v -> "\tChange size of vertex $(name(v))", mutate_nout), 0.05)
     maddv = mp(LogMutation(v -> "\tAdd vertex after $(name(v))", add_vertex), 0.01)
-    mremv = mp(LogMutation(v -> "\tRemove vertex $(name(v))", rem_vertex), 0.01)
+    mremv = mp(LogMutation(v -> "\tRemove vertex $(name(v))", rem_vertex), 0.04)
 
     # Remove mutation last to not attempt to mutate a removed vertex as this most likely results in an error
-    return LogMutation(g -> "Mutate model $(modelname(g))", PostMutation(VertexMutation(MutationList(maddv, mnout, mremv)), NeuronSelect(), RemoveZeroNout(), (m,g) -> apply_mutation(g)))
+    return LogMutation(g -> "Mutate model $(modelname(g))", MutationList(VertexMutation(mremv), PostMutation(VertexMutation(mnout), NeuronSelect(), RemoveZeroNout(), (m,g) -> apply_mutation(g)), MutationFilter(g -> nv(g) < 100, VertexMutation(maddv))))
 end
 
 function add_vertex_mutation()
     acts = [identity, relu, elu, selu]
 
-    wrapitup(as) = AddVertexMutation(MapArchSpace(gpu, rep_fork_res(as, 1)))
+    wrapitup(as) = AddVertexMutation(MapArchSpace(gpu, rep_fork_res(as, 1,loglevel=Logging.Info)))
 
     # TODO: New layers to have identity mapping
-    add_conv = wrapitup(convspace(default_layerconf(), 8:128, 1:2:7, acts))
-    add_dense = wrapitup(VertexSpace(default_layerconf(), NamedLayerSpace("dense", DenseSpace(BaseLayerSpace(16:512, acts)))))
+    add_conv = wrapitup(convspace(default_layerconf(), 8:128, 1:2:7, acts,loglevel=Logging.Info))
+    add_dense = wrapitup(LoggingArchSpace(Logging.Info, VertexSpace(default_layerconf(), NamedLayerSpace("dense", DenseSpace(BaseLayerSpace(16:512, acts))))))
 
     return MutationList(MutationFilter(is_convtype, add_conv), MutationFilter(!is_convtype, add_dense))
 end
@@ -115,18 +139,18 @@ function initial_models(nr)
     return map(i -> create_model(join(["model", i]), as, iv(i)), 1:nr)
 end
 modelname(g) = split(name(g.inputs[]),'.')[1]
-create_model(name, as, in) = Model(CompGraph(in, as(name, in)) |> gpu, Descent(0.01))
+create_model(name, as, in) = Model(CompGraph(in, as(name, in)) |> gpu, Descent(0.00001))
 
 struct GpVertex <: AbstractArchSpace end
 (s::GpVertex)(in::AbstractVertex, rng=nothing; outsize=nothing) = funvertex(globalpooling2d, in)
 (s::GpVertex)(name::String, in::AbstractVertex, rng=nothing; outsize=nothing) = funvertex(join([name,".globpool"]), globalpooling2d, in)
 
-funvertex(fun, in::AbstractVertex) = invariantvertex(ActivationContribution(fun), in, mutation=IoChange, traitdecoration = MutationShield ∘ NaiveGAflux.default_logging() ∘ validated())
+funvertex(fun, in::AbstractVertex) = invariantvertex(ActivationContribution(fun), in, mutation=IoChange, traitdecoration = MutationShield ∘ NaiveGAflux.default_logging())
 
 funvertex(name::String, fun, in::AbstractVertex) =
-invariantvertex(ActivationContribution(fun), in, mutation=IoChange, traitdecoration = MutationShield ∘ NaiveGAflux.default_logging() ∘ validated() ∘ named(name))
+invariantvertex(ActivationContribution(fun), in, mutation=IoChange, traitdecoration = MutationShield ∘ NaiveGAflux.default_logging() ∘ named(name))
 
-default_layerconf() = LayerVertexConf(ActivationContribution ∘ LazyMutable, NaiveGAflux.default_logging() ∘ validated())
+default_layerconf() = LayerVertexConf(ActivationContribution ∘ LazyMutable, NaiveGAflux.default_logging())
 
 
 function initial_archspace()
@@ -179,25 +203,29 @@ function initial_archspace()
     return ListArchSpace(block1, block2, blockout)
 end
 
-function rep_fork_res(s, n, min_rp=1)
+function rep_fork_res(s, n, min_rp=1;loglevel=Logging.Debug)
     n == 0 && return s
 
-    resconf = VertexConf(outwrap = ActivationContribution, traitdecoration = MutationShield ∘ NaiveGAflux.default_logging() ∘ validated())
-    concconf = ConcConf(ActivationContribution,  MutationShield ∘ NaiveGAflux.default_logging() ∘ validated())
+    resconf = VertexConf(outwrap = ActivationContribution, traitdecoration = MutationShield ∘ NaiveGAflux.default_logging())
+    concconf = ConcConf(ActivationContribution,  MutationShield ∘ NaiveGAflux.default_logging())
+
+    msgfun(v) = "Created $(name(v)), nin: $(nin(v)), nout: $(nout(v))"
 
     rep = RepeatArchSpace(s, min_rp:3)
-    fork = ForkArchSpace(rep, min_rp:3, conf=concconf)
-    res = ResidualArchSpace(rep, resconf)
-    return rep_fork_res(ArchSpace(ParSpace([rep, fork, res])), n-1, 0)
+    fork = LoggingArchSpace(loglevel, msgfun, ForkArchSpace(rep, min_rp:3, conf=concconf))
+    res = LoggingArchSpace(loglevel, msgfun, ResidualArchSpace(rep, resconf))
+    rep = LoggingArchSpace(loglevel, msgfun, rep)
+    return rep_fork_res(ArchSpace(ParSpace([rep, fork, res])), n-1, 0, loglevel=loglevel)
 end
 
 # About 50% faster on GPU to create a MeanPool and use it compared to dropdims(mean(x, dims=[1:2]), dims=(1,2)). CBA to figure out why...
 globalpooling2d(x) = dropdims(MeanPool(size(x)[1:2])(x),dims=(1,2))
 
-function convspace(conf, outsizes, kernelsizes, acts)
+function convspace(conf, outsizes, kernelsizes, acts; loglevel=Logging.Debug)
     # CoupledParSpace due to CuArrays issue# 356
-    conv2d = VertexSpace(conf, NamedLayerSpace("conv2d", ConvSpace(BaseLayerSpace(outsizes, acts), CoupledParSpace(kernelsizes, 2))))
-    bn = VertexSpace(conf, NamedLayerSpace("batchnorm", BatchNormSpace(acts)))
+    msgfun(v) = "Created $(name(v)), nin: $(nin(v)), nout: $(nout(v))"
+    conv2d = LoggingArchSpace(loglevel, msgfun, VertexSpace(conf, NamedLayerSpace("conv2d", ConvSpace(BaseLayerSpace(outsizes, acts), CoupledParSpace(kernelsizes, 2)))))
+    bn = LoggingArchSpace(loglevel, msgfun, VertexSpace(conf, NamedLayerSpace("batchnorm", BatchNormSpace(acts))))
 
     # Make sure that each alternative has the option to change output size
     # This is important to make fork and res play nice together
@@ -206,5 +234,21 @@ function convspace(conf, outsizes, kernelsizes, acts)
 
     return ArchSpace(ParSpace([conv2d, convbn, bnconv]))
 end
+
+
+ # TODO Debugging utils. To be removed
+inout_info(g) = [name.(vertices(g)) nin.(vertices(g)) nout.(vertices(g))]
+
+function sizecheck(g)
+    for v in vertices(g)
+        nins1 = nin(v)
+        nins2 = nout.(inputs(v))
+        if nins1 != nins2
+            @warn "Size fail for $(name(v))! $nins1 vs $nins2"
+        end
+    end
+end
+
+changed(g) = filter(v -> nin(v) != nin_org(v) || nout(v) != nout_org(v), vertices(g))
 
 end  # module cifar10

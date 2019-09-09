@@ -126,6 +126,29 @@ function (s::NamedLayerSpace)(in::Integer,rng=rng_default; outsize=missing)
 end
 
 """
+    LoggingLayerSpace <: AbstractLayerSpace
+    LoggingLayerSpace(s::AbstractLayerSpace)
+    LoggingLayerSpace(level::LogLevel, s::AbstractLayerSpace)
+    LoggingLayerSpace(level::LogLevel, msgfun::Function, s::AbstractLayerSpace)
+
+Logs `msgfun(layer)` at loglevel `level` after creating a `layer` from `s`.
+"""
+struct LoggingLayerSpace <: AbstractLayerSpace
+    level::LogLevel
+    msgfun::Function
+    s::AbstractLayerSpace
+end
+LoggingLayerSpace(s::AbstractLayerSpace) = LoggingLayerSpace(Logging.Debug, s)
+LoggingLayerSpace(level::LogLevel, s::AbstractLayerSpace) = LoggingLayerSpace(level, l -> "Create $l from $(name(s))", s)
+NaiveNASlib.name(s::LoggingLayerSpace) = name(s.s)
+function (s::LoggingLayerSpace)(in::Integer,rng=rng_default; outsize=missing)
+    layer = ismissing(outsize) ? s.s(in, rng) : s.s(in, rng, outsize=outsize)
+    msg = s.msgfun(layer)
+    @logmsg s.level msg
+    return layer
+end
+
+"""
     DenseSpace <:AbstractLayerSpace
 
 Search space of Dense layers.
@@ -241,6 +264,33 @@ ConcConf() = ConcConf(ActivationContribution, validated() ∘ default_logging())
 (c::ConcConf)(name::String, in::AbstractVector{<:AbstractVertex}) = c(name, in...)
 (c::ConcConf)(name::String, in::AbstractVertex) = in
 (c::ConcConf)(name::String, ins::AbstractVertex...) = concat(ins...,mutation=IoChange, traitfun = c.traitfun ∘ named(name), layerfun=c.layerfun)
+
+
+"""
+    LoggingArchSpace <: AbstractArchSpace
+    LoggingArchSpace(s::AbstractArchSpace)
+    LoggingArchSpace(level::LogLevel, s::AbstractArchSpace)
+    LoggingArchSpace(level::LogLevel, msgfun::Function, s::AbstractArchSpace)
+
+Logs `msgfun(vertex)` at loglevel `level` after creating a `vertex` from `s`.
+"""
+struct LoggingArchSpace <: AbstractArchSpace
+    level::LogLevel
+    msgfun::Function
+    s::AbstractArchSpace
+end
+LoggingArchSpace(s::AbstractArchSpace) = LoggingArchSpace(Logging.Debug, s)
+LoggingArchSpace(level::LogLevel, s::AbstractArchSpace) = LoggingArchSpace(level, v -> "Created $(name(v))", s)
+function (s::LoggingArchSpace)(in::AbstractVertex,rng=rng_default; outsize=missing)
+    layer = ismissing(outsize) ? s.s(in, rng) : s.s(in, rng, outsize=outsize)
+    @logmsg s.level s.msgfun(layer)
+    return layer
+end
+function (s::LoggingArchSpace)(namestr::String, in::AbstractVertex,rng=rng_default; outsize=missing)
+    layer = ismissing(outsize) ? s.s(namestr, in, rng) : s.s(namestr, in, rng, outsize=outsize)
+    @logmsg s.level s.msgfun(layer)
+    return layer
+end
 
 """
     VertexSpace <:AbstractArchSpace

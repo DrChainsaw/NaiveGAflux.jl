@@ -71,6 +71,25 @@
         @test size(l1.W) == size(l2.W)
     end
 
+    @testset "LoggingLayerSpace" begin
+        rng = SeqRng()
+        s1 = DenseSpace(BaseLayerSpace(2, identity))
+        s2 = LoggingLayerSpace(NamedLayerSpace("test", s1))
+
+        @test name(s2) == "test"
+
+        l1 = s1(3, rng)
+        l2 = (@test_logs (:debug, "Create Dense(3, 2) from test") min_level=Logging.Debug s2(3,rng))
+
+        @test l1.σ == l2.σ
+        @test size(l1.W) == size(l2.W)
+
+        l1 = s1(3, rng, outsize = 4)
+        l2 = (@test_logs s2(3,rng, outsize = 4))
+
+        @test size(l1.W) == size(l2.W)
+    end
+
     @testset "DenseSpace" begin
         rng = SeqRng()
         space = DenseSpace(BaseLayerSpace(3, σ))
@@ -143,6 +162,19 @@
         space = VertexSpace(NamedLayerSpace("dense", DenseSpace(BaseLayerSpace(3,relu))))
         v = space("v", inpt)
         @test name(v) == "v.dense"
+    end
+
+    @testset "LoggingArchSpace" begin
+        space = LoggingArchSpace(VertexSpace(NamedLayerSpace("dense", DenseSpace(BaseLayerSpace(3, identity)))))
+        inpt = inputvertex("in", 2)
+
+        v = (@test_logs (:debug, "Created test.dense") min_level=Logging.Debug space("test", inpt))
+        @test nin(v) == [2]
+        @test nout(v) == 3
+
+        v = (@test_logs space(inpt))
+        @test nin(v) == [2]
+        @test nout(v) == 3
     end
 
     @testset "ArchSpace" begin

@@ -7,6 +7,10 @@ using Logging
 
 const rng_default = Random.GLOBAL_RNG
 
+
+NaiveNASlib.set_defaultΔNoutStrategy(DefaultJuMPΔSizeStrategy())
+NaiveNASlib.set_defaultΔNinStrategy(DefaultJuMPΔSizeStrategy())
+
 # misc types
 export Probability, MutationShield
 
@@ -20,10 +24,10 @@ export AbstractMutation, MutationProbability, MutationList, RecordMutation, LogM
 export select, NeuronSelect, RemoveZeroNout
 
 # architecture spaces
-export AbstractArchSpace, VertexSpace, ArchSpace, RepeatArchSpace, ListArchSpace, ForkArchSpace, ResidualArchSpace
+export AbstractArchSpace, LoggingArchSpace, VertexSpace, ArchSpace, RepeatArchSpace, ListArchSpace, ForkArchSpace, ResidualArchSpace
 
 #  Other search space types
-export BaseLayerSpace, AbstractParSpace, SingletonParSpace, Singleton2DParSpace, ParSpace, ParSpace1D, ParSpace2D, CoupledParSpace, AbstractPadSpace, SamePad, NamedLayerSpace, DenseSpace, ConvSpace, ConvSpace2D, BatchNormSpace, PoolSpace, PoolSpace2D, MaxPoolSpace, LayerVertexConf, ConcConf
+export BaseLayerSpace, AbstractParSpace, SingletonParSpace, Singleton2DParSpace, ParSpace, ParSpace1D, ParSpace2D, CoupledParSpace, AbstractPadSpace, SamePad, NamedLayerSpace, LoggingLayerSpace, DenseSpace, ConvSpace, ConvSpace2D, BatchNormSpace, PoolSpace, PoolSpace2D, MaxPoolSpace, LayerVertexConf, ConcConf
 
 # functions
 export mutate, allow_mutation, select

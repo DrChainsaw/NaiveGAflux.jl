@@ -154,7 +154,7 @@
         function oddfirst(v, vvals)
             values = zeros(nout_org(vvals))
             nvals = length(values)
-            values[1:2:nvals] = nvals:-1:ceil(Int, nvals / 2)
+            values[1:2:nvals] = nvals:-1:(nvals ÷ 2 + 1)
             values[2:2:nvals] = (nvals ÷ 2):-1:1
             return values
         end
@@ -175,57 +175,6 @@
             @test out_inds(op(v1)) == [1,3,5]
         end
 
-        @testset "NeuronSelectMutation RemoveVertexMutation" begin
-            m = NeuronSelectMutation(oddfirst, RemoveVertexMutation())
-
-            # Increase the input size
-            inpt = inputvertex("in", 2, FluxDense())
-            v3 = dense(inpt, 7,5,3, layerfun=identity)
-
-            m(inputs(v3)[])
-            select(m)
-            @test in_inds(op(v3)) == [[1,2,3,4,5,-1,-1]]
-            @test out_inds(op(inputs(v3)[])) == 1:7
-            apply_mutation(CompGraph(inpt, v3))
-
-            # Increase the output size
-            v3 = dense(inpt, 3,5,7, layerfun=identity)
-
-            m(inputs(v3)[])
-            select(m)
-            @test in_inds(op(v3)) == [[1,2,3,4,5]]
-            @test out_inds(op(inputs(v3)[])) == [1,2,3,-1,-1]
-            apply_mutation(CompGraph(inpt, v3))
-
-            # Decrease the output size
-            m = NeuronSelectMutation(oddfirst, RemoveVertexMutation(RemoveStrategy(DecreaseBigger())))
-            v3 = dense(inpt, 7,5,3, layerfun=identity)
-
-            m(inputs(v3)[])
-            select(m)
-            @test in_inds(op(v3)) == [[1,2,3,4,5]]
-            @test out_inds(op(inputs(v3)[])) == [1,2,3,5,7]
-            apply_mutation(CompGraph(inpt, v3))
-
-            # Decrease the input size
-            v3 = dense(inpt, 3,5,7, layerfun=identity)
-
-            m(inputs(v3)[])
-            select(m)
-            @test in_inds(op(v3)) == [[1,3,5]]
-            @test out_inds(op(inputs(v3)[])) == 1:3
-            apply_mutation(CompGraph(inpt, v3))
-
-            # Decrease outsize of input and increase insize of output
-            m = NeuronSelectMutation(oddfirst, RemoveVertexMutation(RemoveStrategy(AlignSizeBoth())))
-            v3 = dense(inpt, 7,5,3, layerfun=identity)
-
-            m(inputs(v3)[])
-            select(m)
-            @test in_inds(op(v3)) == [[1,2,3,4,5,-1]]
-            @test out_inds(op(inputs(v3)[])) == [1,2,3,4,5,7]
-            apply_mutation(CompGraph(inpt, v3))
-        end
 
         @testset "NeuronSelect" begin
             m1 = MutationProbability(NeuronSelectMutation(oddfirst, NoutMutation(0.5, MockRng([1]))), Probability(0.2, MockRng([0.1, 0.3])))
@@ -271,60 +220,33 @@
             Δnout(v4, -8)
             noutv4 = nout(v4)
 
-            @test nout(v1) == 7
+            @test nout(v1) == 6
             @test nout(v2) == 4
-            @test nout(pd1) == 1
+            @test nout(pd1) == 5
 
             select(m)
             apply_mutation(g)
 
-            @test nout(v1) == 7
+            @test nout(v1) == 6
             @test nout(v2) == 4
-            @test nout(pd1) == 1
+            @test nout(pd1) == 5
 
             @test size(g(ones(Float32, 3,2))) == (noutv4, 2)
 
-            Δnout(v4, +24)
+            Δnout(v4, +8)
             Δnout(v1, -5)
             noutv4 = nout(v4)
 
-            @test nout(v1) == 6
-            @test nout(v2) == 5
+            @test nout(v1) == 2
+            @test nout(v2) == 8
             @test nout(pd1) == 5
 
             select(m)
-
-            @test nout(v1) == 6
-            @test nout(v2) == 5
-            @test nout(pd1) == 5
-
-            # This is a sucky almost-reimplement-the-alg-in-a-different-way kinda test
-            # I just can't think of a better test since there are many ways to get this wrong without messing up the sizes and the only way to spot it is worse performance when mutating a trained model
-            indsv4 = out_inds(op(v4))
-            indsv1 = out_inds(op(v1))
-            indsv2 = out_inds(op(v2))
-            indspd1 = out_inds(op(pd1))
-
-            shift_nonneg(v, n, o) = map(x -> x < 0 ? x : x + n * length(v)+n+o, v)
-
-            reps = minΔnoutfactor(v4)
-            offs = 0
-            # Concatentated activations from v1 and v2 are interleaved in the graph like this:
-            # [a1, a2, a1, a2, a1, a2] where a1 is activation from v1 and a2 is activation from v2
-            for r in 1:reps
-                inds = (1:nout(v1)) .+ offs
-                @test indsv4[inds] == shift_nonneg(indsv1, r-1, (r-1) * (nout(v1) - 2))
-                offs = inds[end]
-
-                inds = (1:nout(v2)) .+ offs
-                @test indsv4[inds] == shift_nonneg(indsv2, r-1, (r-1) * (nout_org(op(v2)) + 1) + nout_org(op(v1)))
-                offs = inds[end]
-            end
-
-            inds = (1:nout(pd1)) .+ offs
-            @test indsv4[inds] == [45, -1, -1, -1, -1]
-
             apply_mutation(g)
+
+            @test nout(v1) == 2
+            @test nout(v2) == 8
+            @test nout(pd1) == 5
 
             @test size(g(ones(Float32, 3,2))) == (noutv4, 2)
         end
@@ -396,285 +318,6 @@
 
             @test size(g(ones(Float32, 3,2))) == (nout(add), 2)
         end
-
-        @testset "NeuronSelectMutation remove SizeAbsorb with SizeInvariant input decrease bigger output" begin
-            inpt = inputvertex("in", 3, FluxDense())
-            v1a = dense(inpt, 2, name="v1a")
-            # Add a vertex which must be considered even though it is not input to v3
-            v1b = dense(inpt, 2, name="v1b")
-            vadd = "vadd" >> v1a + v1b
-            v2 = batchnorm(v1a, name="v2")
-            v3 = dense(v2, 4, name="v3")
-            v4 = dense(v3, 3, name="v4")
-
-            g = CompGraph(inpt, v4)
-            @test size(g(ones(Float32, 3,2))) == (nout(v4), 2)
-
-            rankfun(vsel, vvals) = 1:nout_org(vvals)
-            m = NeuronSelectMutation(rankfun , RemoveVertexMutation(RemoveStrategy(DecreaseBigger())))
-
-            m(v3)
-
-            select(m)
-            @test in_inds(op(v4))[] == [3, 4]
-            @test out_inds(op(v1a)) == out_inds(op(v1b)) == out_inds(op(vadd)) == out_inds(op(v2)) == [1, 2]
-
-            apply_mutation(g)
-
-            @test size(g(ones(Float32, 3,2))) == (nout(v4), 2)
-        end
-
-        @testset "NeuronSelectMutation remove SizeStack input increase" begin
-            inpt = inputvertex("in", 3, FluxDense())
-            v0 = dense(inpt, 4, name="v0")
-            v1 = dense(v0, 2, name="v1")
-            v2 = dense(v0, 3, name="v2")
-            v3 = dense(v0, 4, name="v3")
-
-            v4 = concat("v4", v1,v2,v1,v3)
-            v5 = dense(v4, 3, name="v5")
-
-            g = CompGraph(inpt, v4)
-            @test size(g(ones(Float32, 3,2))) == (nout(v4), 2)
-
-            rankfun(vsel, vvals) = 1:nout_org(vvals)
-            m = NeuronSelectMutation(rankfun , RemoveVertexMutation())
-
-            Δnout(v1, 1)
-
-            m(v1)
-
-            @test nout(v4) == nin(v5)[] == 15
-
-            select(m)
-            @test out_inds(op(v4)) == [1, 2, -1, -1, 3, 4, 5, 6, 7, -6, -6, 8, 9, 10, 11]
-            @test out_inds(op(v0)) == [1,2,3,4]
-
-            apply_mutation(g)
-
-            @test nout(v4) == nin(v5)[] == 15
-
-            @test size(g(ones(Float32, 3,2))) == (nout(v4), 2)
-        end
-
-        @testset "NeuronSelectMutation remove SizeStack input decrease" begin
-            inpt = inputvertex("in", 3, FluxDense())
-            v0 = dense(inpt, 4, name="v0")
-            v1 = dense(v0, 2, name="v1")
-            v2 = dense(v0, 3, name="v2")
-            v3 = dense(v0, 4, name="v3")
-
-            v4 = concat("v4", v1,v2,v1,v3)
-            v5 = dense(v4, 3, name="v5")
-
-            g = CompGraph(inpt, v4)
-            @test size(g(ones(Float32, 3,2))) == (nout(v4), 2)
-
-            rankfun(vsel, vvals) = 1:nout_org(vvals)
-            m = NeuronSelectMutation(rankfun , RemoveVertexMutation(RemoveStrategy(DecreaseBigger())))
-
-            Δnout(v1, 1)
-            m(v1)
-
-            @test nout(v4) == nin(v5)[] == 13
-
-            select(m)
-            @test out_inds(op(v4)) == [1, 2, -1, 3, 4, 5, 6, 7, -6, 8, 9, 10, 11]
-            @test out_inds(op(v0)) == [2,3,4]
-
-            apply_mutation(g)
-
-            @test nout(v4) == nin(v5)[] == 13
-
-            @test size(g(ones(Float32, 3,2))) == (nout(v4), 2)
-        end
-
-        @testset "NeuronSelectMutation remove SizeStack input change both" begin
-            inpt = inputvertex("in", 3, FluxDense())
-            v0 = dense(inpt, 4, name="v0")
-            v1 = dense(v0, 2, name="v1")
-            v2 = dense(v0, 3, name="v2")
-            v3 = dense(v0, 4, name="v3")
-
-            v4 = concat("v4", v1,v2,v1,v3)
-            v5 = dense(v4, 3, name="v5")
-
-            g = CompGraph(inpt, v4)
-            @test size(g(ones(Float32, 3,2))) == (nout(v4), 2)
-
-            rankfun(vsel, vvals) = 1:nout_org(vvals)
-            m = NeuronSelectMutation(rankfun , RemoveVertexMutation(RemoveStrategy(AlignSizeBoth())))
-
-            Δnout(v1, 4)
-            m(v1)
-
-            @test nout(v4) == nin(v5)[] == 17
-
-            select(m)
-            @test out_inds(op(v4)) == [1, 2, -1, -1, -1, 3, 4, 5, 6, 7, -6, -6, -6, 8, 9, 10, 11]
-            @test out_inds(op(v0)) == [1,2,3,4,-1]
-
-            apply_mutation(g)
-
-            @test nout(v4) == nin(v5)[] == 17
-
-            @test size(g(ones(Float32, 3,2))) == (nout(v4), 2)
-        end
-
-        @testset "NeuronSelectMutation remove after SizeInvariant SizeStack input change both" begin
-            inpt = inputvertex("in", 3, FluxDense())
-            v0 = dense(inpt, 4, name="v0")
-            vb = batchnorm(v0, name="vb")
-            v1 = dense(vb, 2, name="v1")
-            v2 = dense(v0, 3, name="v2")
-            v3 = dense(v0, 4, name="v3")
-
-            v4 = concat("v4", v1,v2,v1,v3)
-            v5 = dense(v4, 3, name="v5")
-
-            g = CompGraph(inpt, v4)
-            @test size(g(ones(Float32, 3,2))) == (nout(v4), 2)
-
-            rankfun(vsel, vvals) = 1:nout_org(vvals)
-            m = NeuronSelectMutation(rankfun , RemoveVertexMutation(RemoveStrategy(AlignSizeBoth())))
-
-            Δnout(v1, 4)
-            m(v1)
-
-            @test nout(v4) == nin(v5)[] == 17
-
-            NaiveGAflux.select_neurons(NaiveGAflux.Nout(), vb, rankfun)
-            select(m)
-            @test out_inds(op(v4)) == [1, 2, -1, -1, -1, 3, 4, 5, 6, 7, -6, -6, -6, 8, 9, 10, 11]
-            @test out_inds(op(v0)) == [1,2,3,4,-1]
-
-            apply_mutation(g)
-
-            @test nout(v4) == nin(v5)[] == 17
-
-            @test size(g(ones(Float32, 3,2))) == (nout(v4), 2)
-        end
-
-        @testset "NeuronSelectMutation remove SizeInvariant SizeStack input no change" begin
-            inpt = inputvertex("in", 3, FluxDense())
-            v0 = dense(inpt, 4, name="v0")
-            v1 = dense(v0, 2, name="v1")
-            v2 = dense(v0, 3, name="v2")
-            v3 = dense(v0, 4, name="v3")
-
-            vb = batchnorm(v1, name="vb")
-            v4 = concat("v4", vb,v2,vb,v3)
-            v5 = dense(v4, 3, name="v5")
-
-            g = CompGraph(inpt, v4)
-            @test size(g(ones(Float32, 3,2))) == (nout(v4), 2)
-
-            rankfun(vsel, vvals) = 1:nout_org(vvals)
-            m = NeuronSelectMutation(rankfun , RemoveVertexMutation())
-
-            Δnout(v1, 1)
-            m(vb)
-
-            @test nout(v4) == nin(v5)[] == 13
-
-            select(m)
-            @test out_inds(op(v4)) == [1, 2, -1, 3, 4, 5, 6, 7, -6, 8, 9, 10, 11]
-            @test out_inds(op(v1)) == [1,2,-1]
-
-            apply_mutation(g)
-
-            @test nout(v4) == nin(v5)[] == 13
-
-            @test size(g(ones(Float32, 3,2))) == (nout(v4), 2)
-        end
-
-        @testset "NeuronSelectMutation remove SizeInvariant SizeStack output no change" begin
-            inpt = inputvertex("in", 3, FluxDense())
-            v0 = dense(inpt, 2, name="v0")
-            v1 = dense(v0, 4, name="v1")
-
-            v3 = concat("v3", v0, v1)
-            v4 = batchnorm(v3, name="v4")
-            v5 = dense(v4, 3, name="v5")
-
-            g = CompGraph(inpt, v4)
-            @test size(g(ones(Float32, 3,2))) == (nout(v4), 2)
-
-
-            rankfun(v, vvals) = vvals == v3 ? (1:nout_org(vvals)) : (nout_org(vvals):-1:1)
-
-            m = NeuronSelectMutation(rankfun , RemoveVertexMutation(RemoveStrategy(AlignSizeBoth())))
-
-            Δnout(v1, -1)
-            m(v4)
-
-            # Situation: both nout and nin appear to have changed as a result of the removal, but there was another reason
-            # The risk here is that we don't propagate selected indices from v3 to v5 and vice versa
-            select(m)
-            @test out_inds(op(v3)) == in_inds(op(v5))[] == [1, 2, 4, 5, 6]
-        end
-
-        @testset "NeuronSelectMutation remove before SizeInvariant with SizeStack input" begin
-            inpt = inputvertex("in", 3, FluxDense())
-            v0a = dense(inpt, 2, name="v0a")
-            v1a = dense(v0a, 2, name="v1a")
-            v2a = concat("v2a", v0a, v1a, v1a)
-
-
-            v0b = dense(inpt, 3, name="v0b")
-            v1b = dense(v0b, 4, name="v1b")
-            v2b = dense(v1b, 6, name="v2b")
-
-            v3 = "v3" >> v2a + v2b
-            v4 = dense(v3, 3, name="v4")
-
-            g = CompGraph(inpt, v3)
-            @test size(g(ones(Float32, 3,2))) == (nout(v3), 2)
-
-
-            rankfun(v, vvals) = 1:nout_org(vvals)
-            m = NeuronSelectMutation(rankfun , RemoveVertexMutation(RemoveStrategy()))
-
-            Δnout(v1a, 1)
-            m(v2b)
-
-            # Situation: both nout and nin appear to have changed as a result of the removal, but there was another reason
-            select(m)
-
-            @test in_inds(op(v3))[1] == in_inds(op(v3))[2] == [1, 2, 3, 4, -1, 5, 6, -1]
-            @test out_inds(op(v1b)) == [1,2,3,4,-1,-1,-1,-1]
-
-            apply_mutation(g)
-            @test size(g(ones(Float32, 3,2))) == (nout(v3), 2)
-        end
-
-        @testset "NeuronSelectMutation remove SizeInvariant SizeStack output decrease input" begin
-            inpt = inputvertex("in", 3, FluxDense())
-            v0 = dense(inpt, 2, name="v0")
-            v1 = dense(v0, 4, name="v1")
-
-            v3 = concat("v3", v0, v1)
-            v4 = dense(v3, 3, name="v4")
-            v5 = dense(v4, 3, name="v5")
-
-            g = CompGraph(inpt, v4)
-            @test size(g(ones(Float32, 3,2))) == (nout(v4), 2)
-
-            rankfun(vsel, vvals) = 1:nout_org(vvals)
-            m = NeuronSelectMutation(rankfun , RemoveVertexMutation(RemoveStrategy()))
-
-            m(v4)
-
-            @test nout(v3) == nin(v5)[] == 6
-
-            # Sitation: nin of v5 has increased by 3 so we just want to add 3 more inputs to it
-            select(m)
-            @test out_inds(op(v3)) == [1, 2, 3, 4, 5, 6]
-            @test in_inds(op(v5))[] ==[1, 2, 3, -1, -1, -1]
-
-            apply_mutation(g)
-            @test size(g(ones(Float32, 3,2))) == (nout(v4), 2)
-        end
     end
 
     @testset "RemoveZeroNout" begin
@@ -717,10 +360,13 @@
                     @test size(g(ones(4,2))) == (5,2)
 
                     to_remove = vert(to_rm, g)
-                    Δnout(to_remove, -nout(to_remove))
+                    Δ = -nout(to_remove)
+                    Δnout(NaiveNASlib.OnlyFor(), to_remove, Δ)
 
                     RemoveZeroNout()(g)
+                    Δsize(AlignNinToNout(), vertices(g))
                     apply_mutation(g)
+
                     @test !in(to_remove, vertices(g))
                     @test size(g(ones(4,2))) == (5,2)
                 end
