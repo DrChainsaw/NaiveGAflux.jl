@@ -23,6 +23,9 @@ Flux.@treelike Model
 function run_experiment(popsize, niters, data; nevolve=100, baseseed=666)
     Random.seed!(NaiveGAflux.rng_default, baseseed)
 
+    NaiveNASlib.set_defaultΔNoutStrategy(DefaultJuMPΔSizeStrategy())
+    NaiveNASlib.set_defaultΔNinStrategy(DefaultJuMPΔSizeStrategy())
+
     population = initial_models(popsize)
 
     for i in 1:niters
@@ -31,7 +34,7 @@ function run_experiment(popsize, niters, data; nevolve=100, baseseed=666)
         trainmodels!(population, (x_train, onehot(y_train)))
 
         if i % nevolve == 0
-            if i > 90
+            if i > 110
                 foreach(cpu, population)
                 @save "models_snaphot.bson" population
                 foreach(gpu, population)
@@ -95,23 +98,19 @@ Flux.mapchildren(f, aa::AbstractArray{<:Integer, 1}) = aa
 
 function create_mutation()
 
-    function rankfun(vsel, vval)
-        return (NaiveGAflux.default_neuronselect(vsel, vval) |> cpu) .+ 10
-    end
-
-    mutate_nout = NoutMutation(-0.1, 0.05) # Max 10% change in output size
+    mutate_nout = NeuronSelectMutation(NoutMutation(-0.1, 0.05)) # Max 10% change in output size
     add_vertex = add_vertex_mutation()
     rem_vertex = RemoveVertexMutation()
 
     # Create a shorthand alias for MutationProbability
-    mp(m,p) = MutationProbability(m, Probability(p))
+    mp(m,p) = VertexMutation(MutationProbability(m, Probability(p)))
 
     mnout = mp(LogMutation(v -> "\tChange size of vertex $(name(v))", mutate_nout), 0.05)
     maddv = mp(LogMutation(v -> "\tAdd vertex after $(name(v))", add_vertex), 0.01)
     mremv = mp(LogMutation(v -> "\tRemove vertex $(name(v))", rem_vertex), 0.04)
 
-    # Remove mutation last to not attempt to mutate a removed vertex as this most likely results in an error
-    return LogMutation(g -> "Mutate model $(modelname(g))", MutationList(VertexMutation(mremv), PostMutation(VertexMutation(mnout), NeuronSelect(), RemoveZeroNout(), (m,g) -> apply_mutation(g)), MutationFilter(g -> nv(g) < 100, VertexMutation(maddv))))
+    # Add mutation last as new vertices with neuron_value == 0 screws up outputs selection as per https://github.com/DrChainsaw/NaiveNASlib.jl/issues/39
+    return LogMutation(g -> "Mutate model $(modelname(g))", MutationList(MutationFilter(g -> nv(g) > 5, mremv), PostMutation(mnout, NeuronSelect()), MutationFilter(g -> nv(g) < 100, maddv)))
 end
 
 function add_vertex_mutation()

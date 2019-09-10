@@ -151,8 +151,8 @@
     @testset "NeuronSelectMutation" begin
 
         # Dummy neuron selection function just to mix things up in a predicable way
-        function oddfirst(v, vvals)
-            values = zeros(nout_org(vvals))
+        function oddfirst(v)
+            values = zeros(nout_org(v))
             nvals = length(values)
             values[1:2:nvals] = nvals:-1:(nvals ÷ 2 + 1)
             values[2:2:nvals] = (nvals ÷ 2):-1:1
@@ -160,13 +160,15 @@
         end
         batchnorm(inpt; name="bn") = mutable(name, BatchNorm(nout(inpt)), inpt)
 
+        noutselect = NaiveGAflux.Nout(OutSelectExact())
+
         @testset "NeuronSelectMutation NoutMutation" begin
             inpt = inputvertex("in", 3, FluxDense())
             v1 = dense(inpt, 5)
             v2 = mutable(BatchNorm(nout(v1)), v1)
             v3 = dense(v2, 6)
 
-            m = NeuronSelectMutation(oddfirst, NoutMutation(-0.5, MockRng([0])))
+            m = NeuronSelectMutation(oddfirst, noutselect, NoutMutation(-0.5, MockRng([0])))
             m(v2)
             select(m)
 
@@ -177,8 +179,8 @@
 
 
         @testset "NeuronSelect" begin
-            m1 = MutationProbability(NeuronSelectMutation(oddfirst, NoutMutation(0.5, MockRng([1]))), Probability(0.2, MockRng([0.1, 0.3])))
-            m2 = MutationProbability(NeuronSelectMutation(oddfirst, NoutMutation(-0.5, MockRng([0]))), Probability(0.2, MockRng([0.3, 0.1])))
+            m1 = MutationProbability(NeuronSelectMutation(oddfirst, noutselect, NoutMutation(0.5, MockRng([1]))), Probability(0.2, MockRng([0.1, 0.3])))
+            m2 = MutationProbability(NeuronSelectMutation(oddfirst, noutselect, NoutMutation(-0.5, MockRng([0]))), Probability(0.2, MockRng([0.3, 0.1])))
             m = VertexMutation(MutationList(m1, m2))
 
             inpt = inputvertex("in", 2, FluxDense())
@@ -209,7 +211,7 @@
             pa2 = concat(pa1pa1, pa1pb1, traitfun=named("pa2"))
             v4 = concat(pa2, pb1, pc1, pd1, traitfun=named("v4"))
 
-            rankfun(vsel, vvals) = 1:nout_org(vvals)
+            rankfun(v) = 1:nout_org(v)
             m = NeuronSelectMutation(rankfun , NoutMutation(0.5))
             push!(m.m.mutated, v4)
 
@@ -261,7 +263,7 @@
             v5 = "v5" >> v3 + v4
             v6 = dense(v5, 2, name="v6")
 
-            rankfun(vsel, vvals) = 1:nout_org(vvals)
+            rankfun(v) = 1:nout_org(v)
             m = NeuronSelectMutation(rankfun , NoutMutation(0.5))
             push!(m.m.mutated, v4)
 
@@ -299,7 +301,7 @@
             v10 = dense(inpt, nout(v9), name="v10")
             add = traitconf(named("add")) >> v8 + v9# + v10
 
-            rankfun(vsel, vvals) = 1:nout_org(vvals)
+            rankfun(v) = 1:nout_org(v)
             m = NeuronSelectMutation(rankfun , NoutMutation(0.5))
             push!(m.m.mutated, v10)
 

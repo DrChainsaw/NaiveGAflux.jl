@@ -144,10 +144,12 @@ function (m::NoutMutation)(v::AbstractVertex)
     minsize = min(nout(v), minimum(nout.(findterminating(v, inputs))))
     minsize + Δ <= Δfactor && return
 
-    Δsize(ΔNout{Exact}(v, Δ, LogΔSizeExec(Logging.Warn, "Could not change nout of $v by $(Δ)! Relaxing constraints...", ΔNout{Relaxed}(v, Δ, LogΔSizeExec(Logging.Warn, "Could not change nout of $v by $(Δ) after relaxation! Vertex not changed!", ΔSizeFailNoOp())))), all_in_Δsize_graph(v, Output()))
+    fallback = ΔNout{Relaxed}(v, Δ, LogΔSizeExec(Logging.Warn, "Could not change nout of $v by $(Δ) after relaxation! Vertex not changed!", ΔSizeFailNoOp()))
+    strategy = ΔNout{Exact}(v, Δ, LogΔSizeExec(Logging.Warn, "Could not change nout of $v by $(Δ)! Relaxing constraints...", fallback))
+
+    Δsize(strategy , all_in_Δsize_graph(v, Output()))
     # if nout(v) != nout_org(v)
-    #     Δoutputs(SelectDirection(), v, v -> default_neuronselect(v,v))
-    #     apply_mutation.(all_in_graph(v))
+    #     Δoutputs(SelectDirection(ApplyAfter()), v, default_neuronselect)
     # end
 end
 
@@ -185,8 +187,8 @@ Default reconnect strategy is `ConnectAll`.
 struct RemoveVertexMutation <:AbstractMutation{AbstractVertex}
     s::RemoveStrategy
 end
-RemoveVertexMutation() = RemoveVertexMutation(RemoveStrategy(CheckAligned(CheckNoSizeCycle(ApplyMutation(SelectOutputs(select = SelectDirection(OutSelect{NaiveNASlib.Exact}(NaiveNASlib.LogSelectionFallback("Reverting...", NoutRevert()))),
- valuefun = v -> default_neuronselect(v,v), align=IncreaseSmaller(DecreaseBigger(AlignSizeBoth(FailAlignSizeWarn()))))), FailAlignSizeWarn(msgfun = (vin,vout) -> "Can not remove vertex $(name(vin))! Size cycle detected!")))))
+RemoveVertexMutation() = RemoveVertexMutation(RemoveStrategy(CheckAligned(CheckNoSizeCycle(ApplyMutation(SelectOutputs(select = SelectDirection(OutSelect{NaiveNASlib.Exact}(LogSelectionFallback("Reverting...", NoutRevert()))),
+ valuefun = default_neuronselect, align=IncreaseSmaller(DecreaseBigger(AlignSizeBoth(FailAlignSizeWarn()))))), FailAlignSizeWarn(msgfun = (vin,vout) -> "Can not remove vertex $(name(vin))! Size cycle detected!")))))
 
 (m::RemoveVertexMutation)(v::AbstractVertex) = remove!(v, m.s)
 
@@ -207,45 +209,39 @@ struct NeuronSelectMutation{T} <: AbstractMutation{AbstractVertex}
     strategy::T
     m::RecordMutation{AbstractVertex}
 end
-NeuronSelectMutation(rankfun, m::AbstractMutation{AbstractVertex}) = NeuronSelectMutation(rankfun, neuron_select_strategy(m), RecordMutation(m))
+NeuronSelectMutation(rankfun, m::AbstractMutation{AbstractVertex}) = NeuronSelectMutation(rankfun, neuron_select_strategy(m), m)
+NeuronSelectMutation(rankfun, strategy, m::AbstractMutation{AbstractVertex}) = NeuronSelectMutation(rankfun, strategy, RecordMutation(m))
 NeuronSelectMutation(m::AbstractMutation{AbstractVertex}) = NeuronSelectMutation(default_neuronselect, m)
 NeuronSelectMutation(m::RecordMutation{AbstractVertex}) = NeuronSelectMutation(default_neuronselect, neuron_select_strategy(m.m), m)
 
 (m::NeuronSelectMutation)(v::AbstractVertex) = m.m(v)
 
 neuron_select_strategy(::T) where T <:AbstractMutation = error("Neuron select strategy not implemented for $T")
-neuron_select_strategy(::RemoveVertexMutation) = RemoveVertex()
+neuron_select_strategy(::RemoveVertexMutation) = Nout()
 neuron_select_strategy(::NoutMutation) = Nout()
 
 struct Nout
     s::AbstractSelectionStrategy
 end
-Nout() = Nout(SelectDirection())
+Nout() = Nout(ApplyAfter())
 
 """
     select(m::NeuronSelectMutation)
 
 Select neurons for each `AbstractVertex` mutated by `m`.
 """
-function select(m::NeuronSelectMutation)
-    for v in m.m.mutated
-        select_neurons(m.strategy, v, m.rankfun)
-    end
+select(m::NeuronSelectMutation) = select_neurons(m.strategy, m.m.mutated, m.rankfun)
+
+select_neurons(::T, vs, rankfun) where T = error("Neuron select not implemented for $T")
+function select_neurons(strategy::Nout, vs::AbstractArray{AbstractVertex}, rankfun::Function)
+    vchanged = filter(v -> nout(v) != nout_org(v), vs)
+    isempty(vchanged) && return
+
+    vall = unique(mapfoldl(v -> all_in_Δsize_graph(v, Output()), vcat, vchanged))
+    Δoutputs(strategy.s, vall, rankfun)
 end
 
-select_neurons(::T, v::AbstractVertex, rankfun::Function) where T = error("Neuron select not implemented for $T")
-function select_neurons(strategy::Nout, v::AbstractVertex, rankfun::Function)
-    v in vcat(outputs.(inputs(v))...) || return # if vertex was removed
-
-    Δout = nout(v) - nout_org(v)
-
-    if Δout != 0
-        Δoutputs(strategy.s, v, v -> rankfun(v,v))
-    end
-end
-
-default_neuronselect(vsel, vvals) = neuron_value(trait(vvals), vvals)
-
+default_neuronselect(v) = neuron_value(trait(v), v)
 
 NaiveNASflux.neuron_value(t::DecoratingTrait, v) = neuron_value(base(t), v)
 NaiveNASflux.neuron_value(::Immutable, v) = ones(nout(v))
