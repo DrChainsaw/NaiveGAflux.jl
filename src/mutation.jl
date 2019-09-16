@@ -148,9 +148,6 @@ function (m::NoutMutation)(v::AbstractVertex)
     strategy = ΔNout{Exact}(v, Δ, LogΔSizeExec(Logging.Warn, "Could not change nout of $v by $(Δ)! Relaxing constraints...", fallback))
 
     Δsize(strategy , all_in_Δsize_graph(v, Output()))
-    # if nout(v) != nout_org(v)
-    #     Δoutputs(SelectDirection(ApplyAfter()), v, default_neuronselect)
-    # end
 end
 
 """
