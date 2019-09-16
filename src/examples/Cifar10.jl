@@ -1,6 +1,7 @@
 module Cifar10
 
 using ..NaiveGAflux
+import NaiveGAflux:globalpooling2d
 using Random
 import BSON: @save
 import BSON
@@ -138,15 +139,6 @@ end
 modelname(g) = split(name(g.inputs[]),'.')[1]
 create_model(name, as, in) = Model(CompGraph(in, as(name, in)) |> gpu, Descent(0.00001))
 
-struct GpVertex <: AbstractArchSpace end
-(s::GpVertex)(in::AbstractVertex, rng=nothing; outsize=nothing) = funvertex(globalpooling2d, in)
-(s::GpVertex)(name::String, in::AbstractVertex, rng=nothing; outsize=nothing) = funvertex(join([name,".globpool"]), globalpooling2d, in)
-
-funvertex(fun, in::AbstractVertex) = invariantvertex(ActivationContribution(fun), in, mutation=IoChange, traitdecoration = MutationShield ∘ NaiveGAflux.default_logging())
-
-funvertex(name::String, fun, in::AbstractVertex) =
-invariantvertex(ActivationContribution(fun), in, mutation=IoChange, traitdecoration = MutationShield ∘ NaiveGAflux.default_logging() ∘ named(name))
-
 default_layerconf() = LayerVertexConf(ActivationContribution ∘ LazyMutable, NaiveGAflux.default_logging())
 
 
@@ -186,13 +178,13 @@ function initial_archspace()
     # Option 1: Just a global pooling layer
     # For this to work we need to ensure that the layer before the global pool has exactly 10 outputs, that is what this is all about (or else we could just have allowed 0 dense layers in the search space for option 2).
     convout = convspace(outconf, 10, 1:2:5, identity)
-    blockcout = ListArchSpace(convout, GpVertex())
+    blockcout = ListArchSpace(convout, GpVertex2D())
 
     # Option 2: 1-3 Dense layers after the global pool
     dense = VertexSpace(layerconf, NamedLayerSpace("dense", DenseSpace(BaseLayerSpace(16:512, acts))))
     drep = RepeatArchSpace(dense, 0:2)
     dout=VertexSpace(outconf, NamedLayerSpace("dense", DenseSpace(BaseLayerSpace(10, identity))))
-    blockdout = ListArchSpace(GpVertex(), drep, dout)
+    blockdout = ListArchSpace(GpVertex2D(), drep, dout)
 
     blockout = ArchSpace(ParSpace([blockdout, blockcout]))
 
@@ -215,9 +207,6 @@ function rep_fork_res(s, n, min_rp=1;loglevel=Logging.Debug)
     rep = LoggingArchSpace(loglevel, msgfun, rep)
     return rep_fork_res(ArchSpace(ParSpace([rep, fork, res])), n-1, 0, loglevel=loglevel)
 end
-
-# About 50% faster on GPU to create a MeanPool and use it compared to dropdims(mean(x, dims=[1:2]), dims=(1,2)). CBA to figure out why...
-globalpooling2d(x) = dropdims(MeanPool(size(x)[1:2])(x),dims=(1,2))
 
 function convspace(conf, outsizes, kernelsizes, acts; loglevel=Logging.Debug)
     # CoupledParSpace due to CuArrays issue# 356

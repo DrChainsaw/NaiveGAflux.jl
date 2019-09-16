@@ -332,4 +332,25 @@
 
     end
 
+    @testset "FunVertex" begin
+        space = FunVertex(x -> 2 .* x, ".fun")
+        inpt = inputvertex("in", 3)
+
+        v = space(inpt)
+        @test nin(v) == [3]
+        @test nout(v) == 3
+        @test v([1 2 3]) == [2 4 6]
+
+        v = space("v", inpt)
+        @test name(v) == "v.fun"
+        @test nin(v) == [3]
+        @test nout(v) == 3
+        @test v([1 2 3]) == [2 4 6]
+
+        space = GpVertex2D()
+        v = space("v", inpt)
+
+        @test size(v(ones(Float32, 3,4,5,6))) == (5,6)
+    end
+
 end

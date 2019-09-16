@@ -414,3 +414,35 @@ ResidualArchSpace(l::AbstractLayerSpace) = ResidualArchSpace(VertexSpace(l))
 
 (s::ResidualArchSpace)(in::AbstractVertex, rng=rng_default;outsize=missing) = s.conf >> in + s.s(in, rng,outsize=nout(in))
 (s::ResidualArchSpace)(name::String, in::AbstractVertex, rng=rng_default; outsize=missing) = VertexConf(s.conf.mutation, s.conf.traitdecoration ∘ named(name * ".add"), s.conf.outwrap) >> in + s.s(join([name, ".res"]), in, rng,outsize=nout(in))
+
+"""
+    FunVertex <: AbstractArchSpace
+    FunVertex(fun::Function, namesuff::String, conf=LayerVertexConf(ActivationContribution, validated() ∘ default_logging()))
+
+Return a `SizeInvariant` vertex representing `fun(x)` when invoked with `in` as input vertex where `x` is output of `in`.
+"""
+struct FunVertex <: AbstractArchSpace
+    conf::LayerVertexConf
+    fun::Function
+    namesuff::String
+end
+FunVertex(fun::Function, namesuff::String, conf=LayerVertexConf(ActivationContribution, validated() ∘ default_logging())) = FunVertex(conf, fun, namesuff)
+
+(s::FunVertex)(in::AbstractVertex, rng=nothing; outsize=nothing) = funvertex(s, in)
+(s::FunVertex)(name::String, in::AbstractVertex, rng=nothing; outsize=nothing) = funvertex(join([name,s.namesuff]), s, in)
+
+funvertex(s, in::AbstractVertex) = invariantvertex(s.conf.layerfun(s.fun), in, mutation=IoChange, traitdecoration = s.conf.traitfun)
+
+funvertex(name::String, s, in::AbstractVertex) =
+invariantvertex(s.conf.layerfun(s.fun), in, mutation=IoChange, traitdecoration = s.conf.traitfun ∘ named(name))
+
+"""
+    GpVertex()
+    GpVertex(conf::LayerVertexConf)
+
+Short for `FunVertex` with `fun = globalpooling2d`.
+"""
+GpVertex2D() = FunVertex(globalpooling2d, ".globpool")
+GpVertex2D(conf) = FunVertex(globalpooling2d, ".globpool", conf)
+# About 50% faster on GPU to create a MeanPool and use it compared to dropdims(mean(x, dims=[1:2]), dims=(1,2)). CBA to figure out why...
+globalpooling2d(x) = dropdims(MeanPool(size(x)[1:2])(x),dims=(1,2))
