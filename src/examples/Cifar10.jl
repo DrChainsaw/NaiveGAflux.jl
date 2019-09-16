@@ -20,11 +20,8 @@ end
 (m::Model)(x) = m.g(x)
 Flux.@treelike Model
 
-function run_experiment(popsize, niters, data; nevolve=100, baseseed=666)
+function run_experiment(popsize, niters, data; nevolve=100, baseseed=666, cb = () -> nothing)
     Random.seed!(NaiveGAflux.rng_default, baseseed)
-
-    NaiveNASlib.set_defaultΔNoutStrategy(DefaultJuMPΔSizeStrategy())
-    NaiveNASlib.set_defaultΔNinStrategy(DefaultJuMPΔSizeStrategy())
 
     population = initial_models(popsize)
 
@@ -34,12 +31,13 @@ function run_experiment(popsize, niters, data; nevolve=100, baseseed=666)
         trainmodels!(population, (x_train, onehot(y_train)))
 
         if i % nevolve == 0
-            if i > 110
-                foreach(cpu, population)
-                @save "models_snaphot.bson" population
-                foreach(gpu, population)
-            end
+            # if i > 50
+            #     foreach(cpu, population)
+            #     @save "models_snaphot.bson" population
+            #     foreach(gpu, population)
+            # end
             evolvemodels!(population)
+            cb()
         end
     end
     return population
@@ -172,6 +170,7 @@ function initial_archspace()
     rfr2 = rep_fork_res(conv2,2)
 
     # Each "block" is finished with a maxpool to downsample
+    # TODO: Maxpools can currently be removed, but are never added. Care needs to be taken to not insert too many so shape is subsampled below 1. MutationFilter and then count number of maxpools in graph?
     maxpoolvertex = VertexSpace(layerconf, NamedLayerSpace("maxpool", MaxPoolSpace(PoolSpace2D([2]))))
     red1 = ListArchSpace(rfr1, maxpoolvertex)
     red2 = ListArchSpace(rfr2, maxpoolvertex)

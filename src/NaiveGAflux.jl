@@ -7,10 +7,6 @@ using Logging
 
 const rng_default = Random.GLOBAL_RNG
 
-
-NaiveNASlib.set_defaultΔNoutStrategy(DefaultJuMPΔSizeStrategy())
-NaiveNASlib.set_defaultΔNinStrategy(DefaultJuMPΔSizeStrategy())
-
 # misc types
 export Probability, MutationShield
 

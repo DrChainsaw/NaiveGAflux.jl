@@ -5,9 +5,6 @@ using Test
 
 @testset "NaiveGAflux.jl" begin
 
-    NaiveNASlib.set_defaultΔNoutStrategy(DefaultJuMPΔSizeStrategy())
-    NaiveNASlib.set_defaultΔNinStrategy(DefaultJuMPΔSizeStrategy())
-
     mutable struct MockRng <:AbstractRNG
         seq::AbstractVector
         ind::Integer
