@@ -52,3 +52,32 @@ end
     end
 
 end
+
+@testset "remove_redundant_vertices" begin
+    v1 = inputvertex("in", 3)
+    v2 = mutable("v2", Dense(nout(v1), 5), v1)
+    v3 = mutable("V3", Dense(nout(v1), 5), v1)
+    v4 = traitconf(t -> RemoveIfSingleInput(NamedTrait(t, "v4"))) >>  v2 + v3
+    v5 = mutable("v5", BatchNorm(nout(v4)), v4)
+    v6 = concat("v6", v3, v5, traitfun = t -> RemoveIfSingleInput(t))
+    v7 = mutable("v7", Dense(nout(v6), 2), v6)
+
+    g = CompGraph(v1, v7)
+
+    nv_pre = nv(g)
+
+    check_apply(g)
+    # Nothing is redundant
+    @test nv_pre == nv(g)
+
+    remove_edge!(v3, v4)
+    check_apply(g)
+
+    @test nv_pre == nv(g)+1
+
+    # Note, v3 also disappears from the graph as it is no longer used to compute the output
+    remove_edge!(v3, v6)
+    check_apply(g)
+
+    @test nv_pre == nv(g) + 3
+end

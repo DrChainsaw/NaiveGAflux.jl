@@ -228,7 +228,7 @@ end
 (s::MaxPoolSpace)(in::Integer, rng=rng_default;outsize=nothing) = s.s(in, rng, pooltype=MaxPool)
 
 
-default_logging() = logged(level=Logging.Debug, info=NameAndIOInfoStr())
+default_logging() = logged(level=Logging.Info, info=NameAndIOInfoStr())
 """
     LayerVertexConf
 

@@ -8,7 +8,7 @@ using Logging
 const rng_default = Random.GLOBAL_RNG
 
 # misc types
-export Probability, MutationShield
+export Probability, MutationShield, ApplyIf, RemoveIfSingleInput
 
 # Vertex selection types
 export AbstractVertexSelection, AllVertices, FilterMutationAllowed
@@ -26,7 +26,7 @@ export AbstractArchSpace, LoggingArchSpace, VertexSpace, ArchSpace, RepeatArchSp
 export BaseLayerSpace, AbstractParSpace, SingletonParSpace, Singleton2DParSpace, ParSpace, ParSpace1D, ParSpace2D, CoupledParSpace, AbstractPadSpace, SamePad, NamedLayerSpace, LoggingLayerSpace, DenseSpace, ConvSpace, ConvSpace2D, BatchNormSpace, PoolSpace, PoolSpace2D, MaxPoolSpace, LayerVertexConf, ConcConf
 
 # functions
-export mutate, allow_mutation, select
+export mutate, allow_mutation, select, check_apply
 
 # Examples
 export Cifar10

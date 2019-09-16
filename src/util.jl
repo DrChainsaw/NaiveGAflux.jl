@@ -72,3 +72,18 @@ struct FilterMutationAllowed <:AbstractVertexSelection
 end
 FilterMutationAllowed() = FilterMutationAllowed(AllVertices())
 select(s::FilterMutationAllowed, g::CompGraph) = filter(allow_mutation, select(s.s, g))
+
+
+struct ApplyIf <: DecoratingTrait
+    predicate::Function
+    apply::Function
+    base::MutationTrait
+end
+RemoveIfSingleInput(t) = ApplyIf(v -> length(inputs(v)) == 1, remove!, t)
+NaiveNASlib.base(t::ApplyIf) = t.base
+
+check_apply(g::CompGraph) = foreach(check_apply, vertices(g))
+check_apply(v::AbstractVertex) = check_apply(trait(v), v)
+check_apply(t::DecoratingTrait, v) = check_apply(base(t), v)
+check_apply(t::ApplyIf, v) = t.predicate(v) && t.apply(v)
+function check_apply(t, v) end
