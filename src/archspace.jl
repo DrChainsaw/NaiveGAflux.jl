@@ -228,7 +228,7 @@ end
 (s::MaxPoolSpace)(in::Integer, rng=rng_default;outsize=nothing) = s.s(in, rng, pooltype=MaxPool)
 
 
-default_logging() = logged(level=Logging.Info, info=NameAndIOInfoStr())
+default_logging() = logged(level=Logging.Debug, info=NameAndIOInfoStr())
 """
     LayerVertexConf
 
@@ -441,8 +441,10 @@ invariantvertex(s.conf.layerfun(s.fun), in, mutation=IoChange, traitdecoration =
     GpVertex(conf::LayerVertexConf)
 
 Short for `FunVertex` with `fun = globalpooling2d`.
+
+Also adds a `MutationShield` to prevent the vertex from being removed.
 """
-GpVertex2D() = FunVertex(globalpooling2d, ".globpool")
+GpVertex2D() = FunVertex(globalpooling2d, ".globpool", LayerVertexConf(ActivationContribution, MutationShield ∘ validated() ∘ default_logging()))
 GpVertex2D(conf) = FunVertex(globalpooling2d, ".globpool", conf)
 # About 50% faster on GPU to create a MeanPool and use it compared to dropdims(mean(x, dims=[1:2]), dims=(1,2)). CBA to figure out why...
 globalpooling2d(x) = dropdims(MeanPool(size(x)[1:2])(x),dims=(1,2))
