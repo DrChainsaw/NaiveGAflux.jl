@@ -15,7 +15,7 @@
     # Can be of any dimension and type
     ps2d = ParSpace(["1","2","3"], ["4","5","6","7"])
 
-    @test typeof(ps1d) == ParSpace{1, Int64}
+    @test typeof(ps1d) == ParSpace{1, Int}
     @test typeof(ps2d) == ParSpace{2, String}
 
     @test ps2d() == ("3", "6")
