@@ -12,8 +12,8 @@ struct Probability
          return new(p, rng)
     end
 end
-Probability(p::Real) = Probability(p, Random.GLOBAL_RNG)
-Probability(p::Integer) = Probability(p, Random.GLOBAL_RNG)
+Probability(p::Real) = Probability(p, rng_default)
+Probability(p::Integer) = Probability(p, rng_default)
 Probability(p::Integer, rng) = Probability(p / 100.0, rng)
 
 """
@@ -30,8 +30,6 @@ Call `f` with probability `p.p` (subject to `p.rng` behaviour).
 """
 apply(f::Function, p::Probability) =  apply(p) && f()
 
-# TODO: Fix NaiveNaslib issue #18
-import NaiveNASlib: DecoratingTrait
 """
     MutationShield <: DecoratingTrait
 
@@ -74,3 +72,18 @@ struct FilterMutationAllowed <:AbstractVertexSelection
 end
 FilterMutationAllowed() = FilterMutationAllowed(AllVertices())
 select(s::FilterMutationAllowed, g::CompGraph) = filter(allow_mutation, select(s.s, g))
+
+
+struct ApplyIf <: DecoratingTrait
+    predicate::Function
+    apply::Function
+    base::MutationTrait
+end
+RemoveIfSingleInput(t) = ApplyIf(v -> length(inputs(v)) == 1, remove!, t)
+NaiveNASlib.base(t::ApplyIf) = t.base
+
+check_apply(g::CompGraph) = foreach(check_apply, vertices(g))
+check_apply(v::AbstractVertex) = check_apply(trait(v), v)
+check_apply(t::DecoratingTrait, v) = check_apply(base(t), v)
+check_apply(t::ApplyIf, v) = t.predicate(v) && t.apply(v)
+function check_apply(t, v) end

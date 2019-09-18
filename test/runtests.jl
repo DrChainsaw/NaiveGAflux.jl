@@ -1,5 +1,6 @@
 using NaiveGAflux
 using Random
+using Logging
 using Test
 
 @testset "NaiveGAflux.jl" begin
@@ -18,7 +19,16 @@ using Test
     @info "Testing util"
     include("util.jl")
 
+    @info "Testing archspace"
+    include("archspace.jl")
+
     @info "Testing mutation"
     include("mutation.jl")
+
+    @info "Testing README examples"
+    include("examples.jl")
+
+    @info "Testing CIFAR10 example"
+    include("examples/Cifar10.jl")
 
 end
