@@ -25,6 +25,9 @@ using Test
     @info "Testing mutation"
     include("mutation.jl")
 
+    @info "Testing candidate"
+    include("candidate.jl")
+
     @info "Testing README examples"
     include("examples.jl")
 

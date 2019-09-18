@@ -4,8 +4,12 @@ using Reexport
 @reexport using NaiveNASflux
 using Random
 using Logging
+using Statistics
 
 const rng_default = Random.GLOBAL_RNG
+
+# Fitness
+export fitness, instrument, AbstractFitness, AccuracyFitness, MapFitness, TimeFitness
 
 # misc types
 export Probability, MutationShield, ApplyIf, RemoveIfSingleInput
@@ -34,6 +38,7 @@ export Cifar10
 include("util.jl")
 include("archspace.jl")
 include("mutation.jl")
+include("candidate.jl")
 include("examples/Cifar10.jl")
 
 end # module
