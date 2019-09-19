@@ -9,7 +9,13 @@ using Statistics
 const rng_default = Random.GLOBAL_RNG
 
 # Fitness
-export fitness, instrument, AbstractFitness, AccuracyFitness, MapFitness, TimeFitness
+export fitness, instrument, AbstractFitness, AccuracyFitness, MapFitness, TimeFitness, FitnessCache
+
+# Candidate
+export AbstractCandidate, CandidateModel
+
+# Evolution
+export evolve, AbstractEvolution, EliteSelection
 
 # misc types
 export Probability, MutationShield, ApplyIf, RemoveIfSingleInput

@@ -32,4 +32,26 @@
         @test fitness(tf, identity) ≈ 0.03 rtol=0.1
     end
 
+    @testset "FitnessCache" begin
+        struct RandomFitness <: AbstractFitness end
+        NaiveGAflux.fitness(s::RandomFitness, f) = rand()
+
+        cf = FitnessCache(RandomFitness())
+        @test fitness(cf, identity) == fitness(cf, identity)
+    end
+end
+
+
+@testset "Evolution" begin
+
+    @testset "EliteSelection" begin
+        struct MockCand <: AbstractCandidate
+            val::Real
+        end
+        NaiveGAflux.fitness(c::MockCand) = c.val
+
+        pop = MockCand.([3, 7, 4, 5, 9, 0])
+        @test fitness.(evolve(EliteSelection(3), pop)) == [9, 7, 5]
+    end
+
 end
