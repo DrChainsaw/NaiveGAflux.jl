@@ -65,7 +65,8 @@ end
         struct DummyFitness <: AbstractFitness end
 
         invertex = inputvertex("in", 3, FluxDense())
-        outlayer = mutable(Dense(3, 2), invertex)
+        hlayer = mutable("hlayer", Dense(3,4), invertex)
+        outlayer = mutable("outlayer", Dense(4, 2), hlayer)
         graph = CompGraph(invertex, outlayer)
 
         cand = CandidateModel(graph, Flux.Descent(0.01), Flux.mse, DummyFitness())
@@ -91,6 +92,15 @@ end
         reset!(cand)
 
         @test wasreset
+
+        evofun = evolvemodel(VertexMutation(MutationFilter(v -> name(v)=="hlayer", RemoveVertexMutation())))
+        newcand = evofun(cand)
+
+        @test nv(newcand.graph) == 2
+        @test nv(cand.graph) == 3
+
+        Flux.train!(cand, [(ones(Float32, 3, 2), ones(Float32, 2,2))])
+        Flux.train!(newcand, [(ones(Float32, 3, 2), ones(Float32, 2,2))])
     end
 
 end
@@ -128,6 +138,11 @@ end
     @testset "CombinedEvolution" begin
         pop = [DummyCand() for i in 1:5]
         @test evolve!(CombinedEvolution(NoOpEvolution(), NoOpEvolution()), pop) == vcat(pop,pop)
+    end
+
+    @testset "EvolveCandidates" begin
+        pop = MockCand.([2,3,5,9])
+        @test fitness.(evolve!(EvolveCandidates(mc -> MockCand(2mc.val)), pop)) == 2fitness.(pop)
     end
 
 end

@@ -134,7 +134,7 @@ abstract type AbstractCandidate end
 Reset state of `c`. Typically needs to be called after evolution to clear old fitness computations.
 """
 function reset!(c::AbstractCandidate) end
-
+Base.Broadcast.broadcastable(c::AbstractCandidate) = Ref(c)
 
 """
     CandidateModel <: Candidate
@@ -149,6 +149,7 @@ struct CandidateModel <: AbstractCandidate
     fitness::AbstractFitness
 end
 
+
 function Flux.train!(model::CandidateModel, data)
     f = instrument(Train(), model.fitness, x -> model.graph(x))
     loss(x,y) = model.lossfun(f(x), y)
@@ -159,10 +160,35 @@ fitness(model::CandidateModel) = fitness(model.fitness, instrument(Validate(), m
 
 reset!(model::CandidateModel) = reset!(model.fitness)
 
+function mapmodel(newgraph::Function, newfields::Function=deepcopy)
+    mapfield(g::CompGraph) = newgraph(g)
+    mapfield(f) = newfields(f)
+    return c::CandidateModel -> CandidateModel(map(mapfield, getproperty.(c, fieldnames(CandidateModel)))...)
+end
+
+"""
+    evolvemodel(m::AbstractMutation{CompGraph})
+
+Return a function which maps a `CandidateModel c1` to a new `CandidateModel c2` where `c2.graph = m(copy(c1.graph))`.
+
+All other fields are copied "as is".
+
+Intended use is together with [`EvolveCandidates`](@ref).
+"""
+function evolvemodel(m::AbstractMutation{CompGraph})
+    function copymutate(g::CompGraph)
+        ng = copy(g)
+        m(ng)
+        return ng
+    end
+     mapmodel(copymutate)
+ end
+
+
 """
     AbstractEvolution
 
-Abstract base type for strategies for how to evolve a population into a new population
+Abstract base type for strategies for how to evolve a population into a new population.
 """
 abstract type AbstractEvolution end
 
@@ -211,7 +237,7 @@ ResetAfterEvolution(evo::AbstractEvolution) = AfterEvolution(evo, np -> reset!.(
     EliteSelection <: AbstractEvolution
     EliteSelection(nselect::Integer)
 
-Selects the only the `nselect` highest fitness candidates
+Selects the only the `nselect` highest fitness candidates.
 """
 struct EliteSelection <: AbstractEvolution
     nselect::Integer
@@ -250,10 +276,23 @@ end
     CombinedEvolution(evos::AbstractArray{<:AbstractEvolution})
     CombinedEvolution(evos::AbstractEvolution...)
 
-Combines the evolved populations from several `AbstractEvolutions` into one population
+Combines the evolved populations from several `AbstractEvolutions` into one population.
 """
 struct CombinedEvolution <: AbstractEvolution
     evos::AbstractArray{<:AbstractEvolution}
 end
 CombinedEvolution(evos::AbstractEvolution...) = CombinedEvolution(collect(evos))
 evolve!(e::CombinedEvolution, pop) = mapfoldl(evo -> evolve!(evo, pop), vcat, e.evos)
+
+"""
+    EvolveCandidates <: AbstractEvolution
+    EvolveCandidates(fun::Function)
+
+Applies `fun` for each candidate in a given population.
+
+Useful with [`evolvemodel`](@ref).
+"""
+struct EvolveCandidates <: AbstractEvolution
+    fun::Function
+end
+evolve!(e::EvolveCandidates, pop) = map(e.fun, pop)

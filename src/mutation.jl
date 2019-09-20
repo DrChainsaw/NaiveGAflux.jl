@@ -168,7 +168,7 @@ end
 AddVertexMutation(s, outselect::Function=identity) = AddVertexMutation(s, outselect, rng_default)
 AddVertexMutation(s, rng::AbstractRNG) = AddVertexMutation(s, identity, rng)
 
-(m::AddVertexMutation)(v::AbstractVertex) = insert!(v, vi -> m.s(name(vi), vi, outsize=nout(vi)), m.outselect)
+(m::AddVertexMutation)(v::AbstractVertex) = insert!(v, vi -> m.s(name(vi), vi, m.rng, outsize=nout(vi)), m.outselect)
 
 """
     RemoveVertexMutation <:AbstractMutation{AbstractVertex}
