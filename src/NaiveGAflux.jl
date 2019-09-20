@@ -15,7 +15,7 @@ export fitness, instrument, reset!, AbstractFitness, AccuracyFitness, MapFitness
 export AbstractCandidate, CandidateModel
 
 # Evolution
-export evolve!, AbstractEvolution, NoOpEvolution, AfterEvolution, ResetAfterEvolution, EliteSelection, SusSelection
+export evolve!, AbstractEvolution, NoOpEvolution, AfterEvolution, ResetAfterEvolution, EliteSelection, SusSelection, CombinedEvolution
 
 # misc types
 export Probability, MutationShield, ApplyIf, RemoveIfSingleInput

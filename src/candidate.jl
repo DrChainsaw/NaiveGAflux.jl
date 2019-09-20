@@ -244,3 +244,16 @@ function evolve!(e::SusSelection, pop::AbstractArray{<:AbstractCandidate})
     end
     return evolve!(e.evo, selected)
 end
+
+"""
+    CombinedEvolution <: AbstractEvolution
+    CombinedEvolution(evos::AbstractArray{<:AbstractEvolution})
+    CombinedEvolution(evos::AbstractEvolution...)
+
+Combines the evolved populations from several `AbstractEvolutions` into one population
+"""
+struct CombinedEvolution <: AbstractEvolution
+    evos::AbstractArray{<:AbstractEvolution}
+end
+CombinedEvolution(evos::AbstractEvolution...) = CombinedEvolution(collect(evos))
+evolve!(e::CombinedEvolution, pop) = mapfoldl(evo -> evolve!(evo, pop), vcat, e.evos)
