@@ -15,6 +15,13 @@
 
         @test fitness( MapFitness(f -> 2f, MockFitness(3)), identity) == 6
         @test instrument(NaiveGAflux.Train(), MapFitness(identity, MockFitness(2)), x -> 3x)(5) == 2*3*5
+
+        wasreset = false
+        NaiveGAflux.reset!(s::MockFitness) = wasreset=true
+
+        reset!(MapFitness(identity, MockFitness(2)))
+
+        @test wasreset
     end
 
     @testset "TimeFitness" begin
@@ -25,11 +32,17 @@
             return t
         end
 
+        @test fitness(tf, identity) == 0
+
         @test instrument(Train(), tf, sleepret)(0.02) == 0.02
         @test instrument(Validate(), tf, sleepret)(0.1) == 0.1
         @test instrument(Train(), tf, sleepret)(0.04) == 0.04
 
         @test fitness(tf, identity) ≈ 0.03 rtol=0.1
+
+        reset!(tf)
+
+        @test fitness(tf, identity) == 0
     end
 
     @testset "FitnessCache" begin
@@ -38,9 +51,49 @@
 
         cf = FitnessCache(RandomFitness())
         @test fitness(cf, identity) == fitness(cf, identity)
+
+        val = fitness(cf, identity)
+        reset!(cf)
+        @test fitness(cf, identity) != val
     end
 end
 
+@testset "Candidate" begin
+
+    @testset "CandidateModel" begin
+        import NaiveGAflux: AbstractFunLabel, Train, Validate
+        struct DummyFitness <: AbstractFitness end
+
+        invertex = inputvertex("in", 3, FluxDense())
+        outlayer = mutable(Dense(3, 2), invertex)
+        graph = CompGraph(invertex, outlayer)
+
+        cand = CandidateModel(graph, Flux.Descent(0.01), Flux.mse, DummyFitness())
+
+        labs = []
+        function NaiveGAflux.instrument(l::AbstractFunLabel, s::DummyFitness, f::Function)
+            push!(labs, l)
+            return f
+        end
+
+        Flux.train!(cand, [(ones(Float32, 3, 2), ones(Float32, 2,2))])
+
+        @test labs == [Train()]
+
+        NaiveGAflux.fitness(::DummyFitness, f) = 17
+        @test fitness(cand) == 17
+
+        @test labs == [Train(), Validate()]
+
+        wasreset = false
+        NaiveGAflux.reset!(::DummyFitness) = wasreset = true
+
+        reset!(cand)
+
+        @test wasreset
+    end
+
+end
 
 @testset "Evolution" begin
 
@@ -52,6 +105,18 @@ end
 
         pop = MockCand.([3, 7, 4, 5, 9, 0])
         @test fitness.(evolve(EliteSelection(3), pop)) == [9, 7, 5]
+    end
+
+    @testset "ResetAfterSelection" begin
+        struct DummyCand <: AbstractCandidate end
+
+        nreset = 0
+        NaiveGAflux.reset!(::DummyCand) = nreset += 1
+
+        pop = [DummyCand() for i in 1:5]
+        @test evolve(ResetAfterEvolution(NoOpEvolution()), pop) == pop
+
+        @test nreset == length(pop)
     end
 
 end

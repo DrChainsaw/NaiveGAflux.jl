@@ -19,9 +19,18 @@ struct Validate <: AbstractFunLabel end
 
 Instrument `f` labelled `l` for fitness measurement `s`.
 
-Example is to store the result of `f` for fitness calculation, or to add a measurement of the average time it takes to evalute as used with [`TimeFitness`](@ref)..
+Example is to use the result of `f` for fitness calculation, or to add a measurement of the average time it takes to evalute as used with [`TimeFitness`](@ref).
+
+Basically a necessary (?) evil which complicates things around it quite a bit.
 """
 instrument(::AbstractFunLabel, ::AbstractFitness, f::Function) = f
+
+"""
+    reset!(s::AbstractFitness)
+
+Reset all state of `s`. Typically needs to be performed after new candidates are selected.
+"""
+function reset!(::AbstractFitness) end
 
 """
     AccuracyFitness <: AbstractFitness
@@ -55,6 +64,7 @@ struct MapFitness <: AbstractFitness
 end
 fitness(s::MapFitness, f) = fitness(s.base, f) |> s.mapping
 instrument(l::AbstractFunLabel,s::MapFitness,f::Function) = instrument(l, s.base, f)
+reset!(s::MapFitness) = reset!(s.base)
 
 """
     TimeFitness{T} <: AbstractFitness where T <: AbstractFunLabel
@@ -69,7 +79,7 @@ mutable struct TimeFitness{T} <: AbstractFitness where T <: AbstractFunLabel
     neval
 end
 TimeFitness(t::T) where T = TimeFitness{T}(0.0, 0)
-fitness(s::TimeFitness, f) = s.totaltime / s.neval
+fitness(s::TimeFitness, f) = s.neval == 0 ? 0 : s.totaltime / s.neval
 
 function instrument(::T, s::TimeFitness{T}, f::Function) where T <: AbstractFunLabel
     return function(x...)
@@ -80,10 +90,17 @@ function instrument(::T, s::TimeFitness{T}, f::Function) where T <: AbstractFunL
     end
 end
 
+function reset!(s::TimeFitness)
+    s.totaltime = 0.0
+    s.neval = 0
+end
+
 """
     FitnessCache <: AbstractFitness
 
 Caches fitness values so that they don't need to be recomputed.
+
+Needs to be `reset!` manually when cache is stale (e.g. after training the model some more).
 """
 mutable struct FitnessCache <: AbstractFitness
     wrapped::AbstractFitness
@@ -98,6 +115,11 @@ function fitness(s::FitnessCache, f)
     return s.cache
 end
 
+function reset!(s::FitnessCache)
+    s.cache = nothing
+    reset!(s.wrapped)
+end
+
 
 """
     AbstractCandidate
@@ -105,6 +127,14 @@ end
 Abstract base type for canidates
 """
 abstract type AbstractCandidate end
+
+"""
+    reset!(c::AbstractCandidate)
+
+Reset state of `c`. Typically needs to be called after evolution to clear old fitness computations.
+"""
+function reset!(c::AbstractCandidate) end
+
 
 """
     CandidateModel <: Candidate
@@ -127,6 +157,8 @@ end
 
 fitness(model::CandidateModel) = fitness(model.fitness, instrument(Validate(), model.fitness, x -> model.graph(x)))
 
+reset!(model::CandidateModel) = reset!(model.fitness)
+
 """
     AbstractEvolution
 
@@ -140,6 +172,40 @@ abstract type AbstractEvolution end
 Evolve `population` into a new population. New population may or may not contain same individuals as before.
 """
 function evolve end
+
+"""
+    NoOpEvolution <: AbstractEvolution
+    NoOpEvolution()
+
+Does not evolve the given population.
+"""
+struct NoOpEvolution <: AbstractEvolution end
+evolve(::NoOpEvolution, pop) = pop
+
+"""
+    AfterEvolution <: AbstractEvolution
+    AfterSelection(evo::AbstractEvolution, fun::Function)
+
+Calls `fun(newpop)` where `newpop = evolve(e.evo, pop)` where `pop` is original population to evolve.
+"""
+struct AfterEvolution <: AbstractEvolution
+    evo::AbstractEvolution
+    fun::Function
+end
+
+function evolve(e::AfterEvolution, pop)
+    newpop = evolve(e.evo, pop)
+    e.fun(newpop)
+    return newpop
+end
+
+"""
+    ResetAfterEvolution(evo::AbstractEvolution)
+
+Alias for `AfterEvolution` with `fun == reset!`.
+"""
+ResetAfterEvolution(evo::AbstractEvolution) = AfterEvolution(evo, np -> reset!.(np))
+
 
 """
     EliteSelection <: AbstractEvolution
