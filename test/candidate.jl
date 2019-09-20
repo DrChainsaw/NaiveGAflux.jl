@@ -97,14 +97,14 @@ end
 
 @testset "Evolution" begin
 
-    @testset "EliteSelection" begin
-        struct MockCand <: AbstractCandidate
-            val::Real
-        end
-        NaiveGAflux.fitness(c::MockCand) = c.val
+    struct MockCand <: AbstractCandidate
+        val::Real
+    end
+    NaiveGAflux.fitness(c::MockCand) = c.val
 
+    @testset "EliteSelection" begin
         pop = MockCand.([3, 7, 4, 5, 9, 0])
-        @test fitness.(evolve(EliteSelection(3), pop)) == [9, 7, 5]
+        @test fitness.(evolve!(EliteSelection(3), pop)) == [9, 7, 5]
     end
 
     @testset "ResetAfterSelection" begin
@@ -114,9 +114,14 @@ end
         NaiveGAflux.reset!(::DummyCand) = nreset += 1
 
         pop = [DummyCand() for i in 1:5]
-        @test evolve(ResetAfterEvolution(NoOpEvolution()), pop) == pop
+        @test evolve!(ResetAfterEvolution(NoOpEvolution()), pop) == pop
 
         @test nreset == length(pop)
+    end
+
+    @testset "SusSelection" begin
+        pop = MockCand.(0.1:0.1:0.8)
+        @test fitness.(evolve!(SusSelection(4, NoOpEvolution(), MockRng([0.05])), pop)) == [0.1, 0.4, 0.6, 0.7]
     end
 
 end

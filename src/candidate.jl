@@ -167,7 +167,7 @@ Abstract base type for strategies for how to evolve a population into a new popu
 abstract type AbstractEvolution end
 
 """
-    evolve(e::AbstractEvolution, population::AbstractArray{<:AbstractCandidate})
+    evolve!(e::AbstractEvolution, population::AbstractArray{<:AbstractCandidate})
 
 Evolve `population` into a new population. New population may or may not contain same individuals as before.
 """
@@ -180,21 +180,21 @@ function evolve end
 Does not evolve the given population.
 """
 struct NoOpEvolution <: AbstractEvolution end
-evolve(::NoOpEvolution, pop) = pop
+evolve!(::NoOpEvolution, pop) = pop
 
 """
     AfterEvolution <: AbstractEvolution
     AfterSelection(evo::AbstractEvolution, fun::Function)
 
-Calls `fun(newpop)` where `newpop = evolve(e.evo, pop)` where `pop` is original population to evolve.
+Calls `fun(newpop)` where `newpop = evolve!(e.evo, pop)` where `pop` is original population to evolve.
 """
 struct AfterEvolution <: AbstractEvolution
     evo::AbstractEvolution
     fun::Function
 end
 
-function evolve(e::AfterEvolution, pop)
-    newpop = evolve(e.evo, pop)
+function evolve!(e::AfterEvolution, pop)
+    newpop = evolve!(e.evo, pop)
     e.fun(newpop)
     return newpop
 end
@@ -216,4 +216,31 @@ Selects the only the `nselect` highest fitness candidates
 struct EliteSelection <: AbstractEvolution
     nselect::Integer
 end
-evolve(e::EliteSelection, pop::AbstractArray{<:AbstractCandidate}) = partialsort(pop, 1:e.nselect, by=fitness, rev=true)
+evolve!(e::EliteSelection, pop::AbstractArray{<:AbstractCandidate}) = partialsort(pop, 1:e.nselect, by=fitness, rev=true)
+
+"""
+    SusSelection <: AbstractEvolution
+    SusSelection(nselect::Integer, evo::AbstractEvolution, rng=rng_default)
+
+Selects candidates for further evolution using stochastic universal sampling.
+"""
+struct SusSelection <: AbstractEvolution
+    nselect::Integer
+    evo::AbstractEvolution
+    rng
+end
+SusSelection(nselect, evo, rng=rng_default) = SusSelection(nselect, evo, rng)
+
+function evolve!(e::SusSelection, pop::AbstractArray{<:AbstractCandidate})
+    csfitness = cumsum(fitness.(pop))
+
+    gridspace = csfitness[end] / e.nselect
+    start = rand(e.rng)*gridspace
+
+    selected = similar(pop, e.nselect)
+    for i in eachindex(selected)
+        candind = findfirst(x -> x >= start + (i-1)*gridspace, csfitness)
+        selected[i] = pop[candind]
+    end
+    return evolve!(e.evo, selected)
+end
