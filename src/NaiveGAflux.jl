@@ -10,7 +10,7 @@ import Base.Iterators: Take, Stateful
 const rng_default = Random.GLOBAL_RNG
 
 # Fitness
-export fitness, instrument, reset!, AbstractFitness, AccuracyFitness, MapFitness, TimeFitness, FitnessCache, NanGuard
+export fitness, instrument, reset!, AbstractFitness, AccuracyFitness, MapFitness, TimeFitness, FitnessCache, NanGuard, AggFitness
 
 # Candidate
 export evolvemodel, AbstractCandidate, CandidateModel

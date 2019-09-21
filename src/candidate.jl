@@ -169,6 +169,24 @@ end
 nanreplace(x::Real; replaceval) = isnan(x) ? (true, replaceval) : (false, x)
 nanreplace(x::Union{Tuple, AbstractArray}; replaceval) = any(isnan, x), map(xi -> isnan(xi) ? replaceval : xi, x)
 
+"""
+    AggFitness <: AbstractFitness
+    AggFitness(aggfun::Function, fitnesses::AbstractFitness...)
+
+Aggreagate fitness value from all `fitnesses` using `aggfun`
+"""
+struct AggFitness <: AbstractFitness
+    aggfun::Function
+    fitnesses
+end
+AggFitness(aggfun, fitnesses::AbstractFitness...) = AggFitness(aggfun, fitnesses)
+
+fitness(s::AggFitness, f) = s.aggfun(fitness.(s.fitnesses, f))
+
+reset!(s::AggFitness) = foreach(reset!, s.fitnesses)
+
+instrument(l::AbstractFunLabel, s::AggFitness, f::Function) = foldl((ifun, fit) -> instrument(l, fit, ifun), s.fitnesses, init = f)
+
 
 """
     AbstractCandidate

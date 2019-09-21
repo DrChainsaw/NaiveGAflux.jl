@@ -116,6 +116,21 @@
         @test (@test_logs (:warn, r"NaN detected") nokfun(param([1,2,3]))) == [0,0,0]
         @test fitness(ng, identity) == 0
     end
+
+    @testset "AggFitness" begin
+        af = AggFitness(sum, MockFitness(3), MockFitness(2))
+
+        @test fitness(af, identity) == 5
+
+        NaiveGAflux.instrument(::NaiveGAflux.AbstractFunLabel, s::MockFitness, f::Function) = x -> s.f*f(x)
+        @test instrument(NaiveGAflux.Train(), af, x -> 5x)(7) == 2*3*5*7
+
+        nreset = 0
+        NaiveGAflux.reset!(::MockFitness) = nreset += 1
+        reset!(af)
+
+        @test nreset == 2
+    end
 end
 
 @testset "Candidate" begin
