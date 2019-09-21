@@ -3,8 +3,6 @@ module Cifar10
 using ..NaiveGAflux
 import NaiveGAflux:globalpooling2d
 using Random
-import BSON: @save
-import BSON
 import Logging
 
 export run_experiment, initial_models
@@ -32,28 +30,12 @@ function run_experiment(popsize, niters, data; nevolve=100, baseseed=666, cb = (
         trainmodels!(population, (x_train, onehot(y_train)))
 
         if i % nevolve == 0
-            # if i > 50
-            #     foreach(cpu, population)
-            #     @save "models_snaphot.bson" population
-            #     foreach(gpu, population)
-            # end
             evolvemodels!(population)
             cb()
         end
     end
     return population
 end
-
-function BSON.newstruct!(x, fs...)
-  for (i, f) = enumerate(fs)
-    f = fixarrtype(f)
-    f = convert(fieldtype(typeof(x),i), f)
-    ccall(:jl_set_nth_field, Nothing, (Any, Csize_t, Any), x, i-1, f)
-  end
-  return x
-end
-fixarrtype(f) = f
-fixarrtype(f::AbstractVector{Any}) = map(fixarrtype, f)
 
 # Workaround as losses fail with Flux.OneHotMatrix on Appveyor x86 (works everywhere else)
 onehot(y) = Float32.(Flux.onehotbatch(y, 0:9))
