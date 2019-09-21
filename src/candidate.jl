@@ -12,12 +12,15 @@ Puts a label on a function for use with [`instrument`](@ref).
 """
 abstract type AbstractFunLabel end
 struct Train <: AbstractFunLabel end
+struct TrainLoss <: AbstractFunLabel end
 struct Validate <: AbstractFunLabel end
 
 """
     instrument(l::AbstractFunLabel, s::AbstractFitness, f::Funtion)
 
-Instrument `f` labelled `l` for fitness measurement `s`.
+Instrument `f` for fitness measurement `s`.
+
+Argument `l` gives some context to `f` to enable different instrumentation for different operations.
 
 Example is to use the result of `f` for fitness calculation, or to add a measurement of the average time it takes to evalute as used with [`TimeFitness`](@ref).
 
@@ -103,13 +106,13 @@ Caches fitness values so that they don't need to be recomputed.
 Needs to be `reset!` manually when cache is stale (e.g. after training the model some more).
 """
 mutable struct FitnessCache <: AbstractFitness
-    wrapped::AbstractFitness
+    base::AbstractFitness
     cache
 end
 FitnessCache(f::AbstractFitness) = FitnessCache(f, nothing)
 function fitness(s::FitnessCache, f)
     if isnothing(s.cache)
-        val = fitness(s.wrapped, f)
+        val = fitness(s.base, f)
         s.cache = val
     end
     return s.cache
@@ -117,8 +120,54 @@ end
 
 function reset!(s::FitnessCache)
     s.cache = nothing
-    reset!(s.wrapped)
+    reset!(s.base)
 end
+
+"""
+    NanGuard{T} <: AbstractFitness where T <: AbstractFunLabel
+    NanGuard(base::AbstractFitness, replaceval = 0.0)
+    NanGuard(t::T, base::AbstractFitness, replaceval = 0.0) where T <: AbstractFunLabel
+
+Instruments functions labeled with type `T` with a NaN guard.
+
+The NaN guard checks for NaNs in the output of the instrumented function and
+    1. Replaces the NaN with a configured value (default 0.0)
+    2. Prevents the function from being called again and instead returns the same output as last time
+    3. Returns fitness value of 0.0 without calling the base fitness function
+
+Rationale for 2 is that models tend to become very slow to evalute if when producing NaNs.
+"""
+mutable struct NanGuard{T} <: AbstractFitness where T <: AbstractFunLabel
+    base::AbstractFitness
+    nandetected::Bool
+    replaceval
+    lastout
+end
+NanGuard(base::AbstractFitness, replaceval = 0.0) = NanGuard{AbstractFitness}(base, false, replaceval, nothing)
+NanGuard(t::T, base::AbstractFitness, replaceval = 0.0) where T <: AbstractFunLabel = NanGuard{T}(base, false, replaceval, nothing)
+
+fitness(s::NanGuard, f) = s.nandetected ? 0.0 : fitness(s.base, f)
+
+function reset!(s::NanGuard)
+    s.nandetected = false
+    reset!(s.base)
+end
+
+function instrument(l::T, s::NanGuard{T}, f::Function) where T <: AbstractFunLabel
+    return function(x...)
+        s.nandetected && return s.lastout
+
+        y = f(x...)
+        s.nandetected, s.lastout = nanreplace(y; replaceval = s.replaceval)
+        if s.nandetected
+            @warn "NaN detected in function $f with label $l"
+        end
+        return s.lastout
+    end
+end
+
+nanreplace(x::Real; replaceval) = isnan(x) ? (true, replaceval) : (false, x)
+nanreplace(x::Union{Tuple, AbstractArray}; replaceval) = any(isnan, x), map(xi -> isnan(xi) ? replaceval : xi, x)
 
 
 """
@@ -153,7 +202,8 @@ end
 function Flux.train!(model::CandidateModel, data)
     f = instrument(Train(), model.fitness, x -> model.graph(x))
     loss(x,y) = model.lossfun(f(x), y)
-    Flux.train!(loss, params(model.graph), data, model.opt)
+    iloss = instrument(TrainLoss(), model.fitness, loss)
+    Flux.train!(iloss, params(model.graph), data, model.opt)
 end
 
 fitness(model::CandidateModel) = fitness(model.fitness, instrument(Validate(), model.fitness, x -> model.graph(x)))
@@ -254,8 +304,8 @@ struct SusSelection <: AbstractEvolution
     nselect::Integer
     evo::AbstractEvolution
     rng
+    SusSelection(nselect, evo, rng=rng_default) = new(nselect, evo, rng)
 end
-SusSelection(nselect, evo, rng=rng_default) = SusSelection(nselect, evo, rng)
 
 function evolve!(e::SusSelection, pop::AbstractArray{<:AbstractCandidate})
     csfitness = cumsum(fitness.(pop))

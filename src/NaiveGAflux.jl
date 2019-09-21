@@ -9,7 +9,7 @@ using Statistics
 const rng_default = Random.GLOBAL_RNG
 
 # Fitness
-export fitness, instrument, reset!, AbstractFitness, AccuracyFitness, MapFitness, TimeFitness, FitnessCache
+export fitness, instrument, reset!, AbstractFitness, AccuracyFitness, MapFitness, TimeFitness, FitnessCache, NanGuard
 
 # Candidate
 export evolvemodel, AbstractCandidate, CandidateModel
