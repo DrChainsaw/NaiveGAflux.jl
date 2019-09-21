@@ -81,3 +81,74 @@ end
 
     @test nv_pre == nv(g) + 3
 end
+
+@testset "RepeatPartitionIterator" begin
+
+    testiter(itr, exp) = for (act,exp) in zip(itr, exp)
+        @test act == exp
+    end
+
+    @testset "RepeatPartitionIterator basic" begin
+
+        itr = RepeatPartitionIterator(1:20, 5)
+
+        testiter(itr, 1:5)
+        testiter(itr, 1:5)
+
+        advance!(itr)
+
+        testiter(itr, 6:10)
+        testiter(itr, 6:10)
+    end
+
+    @testset "RepeatPartitionIterator partition" begin
+
+        itr = RepeatPartitionIterator(Iterators.partition(1:20, 5), 2)
+
+        testiter(itr,[1:5, 6:10])
+        testiter(itr,[1:5, 6:10])
+        testiter(itr,[1:5, 6:10])
+        testiter(itr,[1:5, 6:10])
+
+        advance!(itr)
+
+        testiter(itr, [11:15, 16:20])
+        testiter(itr, [11:15, 16:20])
+        testiter(itr, [11:15, 16:20])
+        testiter(itr, [11:15, 16:20])
+
+        advance!(itr)
+
+        testiter(itr, [])
+    end
+
+    @testset "RepeatPartitionIterator repeated partition" begin
+        itr = RepeatPartitionIterator(repeatiter(Iterators.partition(1:20, 5), 3), 2)
+
+        testiter(itr,[1:5, 6:10])
+        testiter(itr,[1:5, 6:10])
+
+        advance!(itr)
+        testiter(itr, [11:15, 16:20])
+        testiter(itr, [11:15, 16:20])
+
+        advance!(itr)
+        testiter(itr,[1:5, 6:10])
+        testiter(itr,[1:5, 6:10])
+
+        advance!(itr)
+        testiter(itr, [11:15, 16:20])
+        testiter(itr, [11:15, 16:20])
+
+        advance!(itr)
+        testiter(itr,[1:5, 6:10])
+        testiter(itr,[1:5, 6:10])
+
+        advance!(itr)
+        testiter(itr, [11:15, 16:20])
+        testiter(itr, [11:15, 16:20])
+
+        advance!(itr)
+        testiter(itr, [])
+    end
+end

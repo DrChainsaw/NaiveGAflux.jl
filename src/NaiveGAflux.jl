@@ -5,6 +5,7 @@ using Reexport
 using Random
 using Logging
 using Statistics
+import Base.Iterators: Take, Stateful
 
 const rng_default = Random.GLOBAL_RNG
 
@@ -18,7 +19,7 @@ export evolvemodel, AbstractCandidate, CandidateModel
 export evolve!, AbstractEvolution, NoOpEvolution, AfterEvolution, ResetAfterEvolution, EliteSelection, SusSelection, CombinedEvolution, EvolveCandidates
 
 # misc types
-export Probability, MutationShield, ApplyIf, RemoveIfSingleInput
+export Probability, MutationShield, ApplyIf, RemoveIfSingleInput, RepeatPartitionIterator, advance!, repeatiter
 
 # Vertex selection types
 export AbstractVertexSelection, AllVertices, FilterMutationAllowed

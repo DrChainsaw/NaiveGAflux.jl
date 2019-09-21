@@ -73,7 +73,14 @@ end
 FilterMutationAllowed() = FilterMutationAllowed(AllVertices())
 select(s::FilterMutationAllowed, g::CompGraph) = filter(allow_mutation, select(s.s, g))
 
+"""
+    ApplyIf <: DecoratingTrait
+    ApplyIf(predicate::Function, apply::Function, base::MutationTrait)
 
+Enables calling `apply(v)` for an `AbstractVertex v` which has this trait if 'predicate(v) == true'.
+
+Motivating use case is to have a way to remove vertices which have ended up as noops, e.g. element wise and concatenation vertices with a single input or identity activation functions.
+"""
 struct ApplyIf <: DecoratingTrait
     predicate::Function
     apply::Function
@@ -87,3 +94,40 @@ check_apply(v::AbstractVertex) = check_apply(trait(v), v)
 check_apply(t::DecoratingTrait, v) = check_apply(base(t), v)
 check_apply(t::ApplyIf, v) = t.predicate(v) && t.apply(v)
 function check_apply(t, v) end
+
+
+"""
+    RepeatPartitionIterator
+    RepeatPartitionIterator(base, nrep)
+
+Stateful iterator which repeats a partition of size `nrep` elements in `base` each time iterated over until [`advance!`](@ref) is called.
+
+Useful for training all models in a population with the same data in each evolution epoch.
+
+Calling `advance!(itr)` will advance the state so that the next time `itr` is iterated over it will start from the element after `e` in base where `e` is the last element from previous iteration.
+"""
+mutable struct RepeatPartitionIterator{T,VS}
+    base::T
+    curr::VS
+    RepeatPartitionIterator(base::Stateful{B, VS}, nrep) where {B,VS} = new{Take{Stateful{B,VS}}, VS}(Take(base, nrep), base.nextvalstate)
+end
+RepeatPartitionIterator(base::B, nrep) where B = RepeatPartitionIterator(Stateful(base), nrep)
+
+function Base.iterate(itr::RepeatPartitionIterator)
+    itr.base.xs.nextvalstate = itr.curr
+    return iterate(itr.base)
+end
+Base.iterate(itr::RepeatPartitionIterator, state) = iterate(itr.base, state)
+
+Base.length(itr::RepeatPartitionIterator) = length(itr.base)
+Base.eltype(itr::RepeatPartitionIterator) = eltype(itr.base)
+
+# Workaround for https://github.com/JuliaLang/julia/issues/33349
+repeatiter(itr, nreps) = Iterators.take(Iterators.cycle(itr), nreps * length(itr))
+
+"""
+    advance!(itr::RepeatPartitionIterator)
+
+Advances itr to the next partition of the wrapped iterator.
+"""
+advance!(itr::RepeatPartitionIterator) = itr.curr = itr.base.xs.nextvalstate
