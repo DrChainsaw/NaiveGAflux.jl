@@ -39,7 +39,7 @@
         @test instrument(Validate(), tf, sleepret)(0.1) == 0.1
         @test instrument(Train(), tf, sleepret)(0.04) == 0.04
 
-        @test fitness(tf, identity) ≈ 0.03 rtol=0.1
+        @test fitness(tf, identity) ≈ 0.03 rtol=0.5
 
         reset!(tf)
 
@@ -86,16 +86,16 @@
         nanfun(x::Real) = NaN
         nanfun(x::AbstractArray) = repeat([NaN], size(x)...)
 
-        ng = NanGuard(Train(), MockFitness(3))
+        ng = NanGuard(Train(), MockFitness(1))
 
         okfun = instrument(Train(), ng, identity)
         nokfun = instrument(Train(), ng, nanfun)
 
         @test okfun(5) == 5
-        @test fitness(ng, identity) == 3
+        @test fitness(ng, identity) == 1
 
         @test okfun([3,4,5]) == [3,4,5]
-        @test fitness(ng, identity) == 3
+        @test fitness(ng, identity) == 1
 
         # Overwritten by NanGuard
         @test (@test_logs (:warn, r"NaN detected") nokfun(3)) == 0
@@ -111,7 +111,7 @@
         @test wasreset
 
         @test okfun(5) == 5
-        @test fitness(ng, identity) == 3
+        @test fitness(ng, identity) == 1
 
         @test (@test_logs (:warn, r"NaN detected") nokfun(param([1,2,3]))) == [0,0,0]
         @test fitness(ng, identity) == 0

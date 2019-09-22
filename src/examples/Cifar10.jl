@@ -11,74 +11,51 @@ export run_experiment, initial_models
 NaiveNASlib.minΔninfactor(::ActivationContribution) = 1
 NaiveNASlib.minΔnoutfactor(::ActivationContribution) = 1
 
-# Stop-gap solution until a real candidate/entity type is created
-struct Model
-    g::CompGraph
-    opt
-end
-(m::Model)(x) = m.g(x)
-Flux.@treelike Model
 
-function run_experiment(popsize, niters, data; nevolve=100, baseseed=666, cb = () -> nothing)
+function run_experiment(popsize, datatrain::RepeatPartitionIterator, datafitness; nelites = 2, baseseed=666, cb = () -> nothing)
     Random.seed!(NaiveGAflux.rng_default, baseseed)
 
-    population = initial_models(popsize)
+    population = initial_models(popsize, () -> fitnessfun(datafitness))
+    evostrategy = evolutionstrategy(popsize, nelites)
 
-    for i in 1:niters
-        @info "Begin iteration $i"
-        x_train,y_train = data()
-        trainmodels!(population, (x_train, onehot(y_train)))
+    for (gen, iter) in enumerate(datatrain)
+        @info "Begin generation $gen"
 
-        if i % nevolve == 0
-            evolvemodels!(population)
-            cb()
+        for (i, cand) in enumerate(population)
+            @info "\tTrain model $i"
+            for (x,y) in iter
+                Flux.train!(cand, [(x, onehot(y)) |> gpu])
+            end
         end
+
+        # TODO: Bake into evolution? Would anyways like to log selected models...
+        for (i, cand) in enumerate(population)
+            @info "\tFitness model $i: $(fitness(cand))"
+        end
+
+        evolve!(evostrategy, population)
+        cb()
     end
+
     return population
 end
 
 # Workaround as losses fail with Flux.OneHotMatrix on Appveyor x86 (works everywhere else)
 onehot(y) = Float32.(Flux.onehotbatch(y, 0:9))
 
-# TODO: Add as a util for "evolving entities" so they can 1) stop training and 2) report very poor fitness
-function nanguard(x)
-     if isnan(x)
-         @warn "Loss is NaN!"
-         x.data = typeof(x.data)(1e6)
-     end
-     return x
- end
 
-function trainmodels!(population, data)
-    data = [data |> gpu]
-    for model in population
-        @info "Train model $(modelname(model.g)) nv: $(nv(model.g))"
-        loss(x,y) = nanguard(Flux.logitcrossentropy(model(x), y))
-        Flux.train!(loss, params(model), data, model.opt)
-    end
+function evolutionstrategy(popsize, nelites=2)
+    elite = EliteSelection(nelites)
+
+    # Looks like a complete mess because mutation is stateful -> we need to create a new instance each time we mutate
+    mutate = EvolveCandidates(c -> evolvemodel(mutation())(c))
+    evolve = SusSelection(popsize - nelites, mutate)
+
+    combine = CombinedEvolution(elite, evolve)
+    return ResetAfterEvolution(combine)
 end
 
-function evolvemodels!(population)
-    @info "\tEvolve population!"
-
-    for model in population
-        mutation = create_mutation()
-        mutation(model.g)
-    end
-    @info "\tDone evolving!"
-end
-
-struct MapArchSpace <: AbstractArchSpace
-    f::Function
-    s::AbstractArchSpace
-end
-(s::MapArchSpace)(in::AbstractVertex, rng=NaiveGAflux.rng_default; outsize=missing) = s.f(s.s(in, rng, outsize=outsize))
-(s::MapArchSpace)(name::String, in::AbstractVertex, rng=NaiveGAflux.rng_default; outsize=missing) = s.f(s.s(name, in, rng, outsize=outsize))
-
-Flux.mapchildren(f, aa::AbstractArray{<:Integer, 1}) = aa
-
-function create_mutation()
-
+function mutation()
     mutate_nout = NeuronSelectMutation(NoutMutation(-0.1, 0.05)) # Max 10% change in output size
     add_vertex = add_vertex_mutation()
     rem_vertex = RemoveVertexMutation()
@@ -93,6 +70,15 @@ function create_mutation()
     # Add mutation last as new vertices with neuron_value == 0 screws up outputs selection as per https://github.com/DrChainsaw/NaiveNASlib.jl/issues/39
     return LogMutation(g -> "Mutate model $(modelname(g))", MutationList(MutationFilter(g -> nv(g) > 5, mremv), PostMutation(mnout, NeuronSelect()), MutationFilter(g -> nv(g) < 100, maddv)))
 end
+
+struct MapArchSpace <: AbstractArchSpace
+    f::Function
+    s::AbstractArchSpace
+end
+(s::MapArchSpace)(in::AbstractVertex, rng=NaiveGAflux.rng_default; outsize=missing) = s.f(s.s(in, rng, outsize=outsize))
+(s::MapArchSpace)(name::String, in::AbstractVertex, rng=NaiveGAflux.rng_default; outsize=missing) = s.f(s.s(name, in, rng, outsize=outsize))
+
+Flux.mapchildren(f, aa::AbstractArray{<:Integer, 1}) = aa
 
 function add_vertex_mutation()
     acts = [identity, relu, elu, selu]
@@ -113,17 +99,30 @@ is_globpool(v::CompVertex) = is_globpool(v.computation)
 is_globpool(l::ActivationContribution) = is_globpool(NaiveNASflux.wrapped(l))
 is_globpool(f) = f == globalpooling2d
 
-function initial_models(nr)
+function initial_models(nr, fitnessgen)
     iv(i) = inputvertex(join(["model", i, ".input"]), 3, FluxConv{2}())
     as = initial_archspace()
-    return map(i -> create_model(join(["model", i]), as, iv(i)), 1:nr)
+    return map(i -> create_model(join(["model", i]), as, iv(i), fitnessgen), 1:nr)
 end
+create_model(name, as, in, fg) = CandidateModel(CompGraph(in, as(name, in)) |> gpu, Descent(0.01), Flux.logitcrossentropy, fg())
 modelname(g) = split(name(g.inputs[]),'.')[1]
-create_model(name, as, in) = Model(CompGraph(in, as(name, in)) |> gpu, Descent(0.00001))
+
+function fitnessfun(dataset, accdigits=3)
+    acc = AccuracyFitness(dataset)
+    truncacc = MapFitness(x -> round(x, digits=accdigits), acc)
+
+    # TODO: Enable turn off for testing stability
+    time = TimeFitness(NaiveGAflux.Validate())
+    timefit = MapFitness(x -> min(10.0^-accdigits, 1/(x * 10.0^(5+accdigits))), time)
+
+    tot = AggFitness(sum, truncacc, timefit)
+
+    cache = FitnessCache(tot)
+    return NanGuard(cache)
+end
+
 
 default_layerconf() = LayerVertexConf(ActivationContribution ∘ LazyMutable, NaiveGAflux.default_logging())
-
-
 function initial_archspace()
 
     layerconf = default_layerconf()

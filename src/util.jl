@@ -100,34 +100,45 @@ function check_apply(t, v) end
     RepeatPartitionIterator
     RepeatPartitionIterator(base, nrep)
 
-Stateful iterator which repeats a partition of size `nrep` elements in `base` each time iterated over until [`advance!`](@ref) is called.
+Iteratates over iterators of a subset of size `nrep` elements in `base`.
 
-Useful for training all models in a population with the same data in each evolution epoch.
+Generally useful for training all models in a population with the same data in each evolution epoch.
 
-Calling `advance!(itr)` will advance the state so that the next time `itr` is iterated over it will start from the element after `e` in base where `e` is the last element from previous iteration.
+Tailored for situations where iterating over models is more expensive than iterating over data, for example if candidates are stored in host RAM or on disk.
+
+Example training loop:
+```julia
+
+for partiter in iter
+
+    for model in population
+        for data in partiter
+            train!(model, data)
+        end
+    end
+
+    evolvepopulation(population)
+end
+```
+
 """
-mutable struct RepeatPartitionIterator{T,VS}
+mutable struct RepeatPartitionIterator{T}
     base::T
-    curr::VS
-    RepeatPartitionIterator(base::Stateful{B, VS}, nrep) where {B,VS} = new{Take{Stateful{B,VS}}, VS}(Take(base, nrep), base.nextvalstate)
+    ntake::Int
 end
-RepeatPartitionIterator(base::B, nrep) where B = RepeatPartitionIterator(Stateful(base), nrep)
+RepeatPartitionIterator(base, nrep) = RepeatPartitionIterator(base, nrep)
 
-function Base.iterate(itr::RepeatPartitionIterator)
-    itr.base.xs.nextvalstate = itr.curr
-    return iterate(itr.base)
+function Base.iterate(itr::RepeatPartitionIterator, ndrop=0)
+    ndrop >= length(itr.base) && return nothing
+    return Iterators.take(Iterators.drop(itr.base, ndrop), itr.ntake), ndrop + itr.ntake
 end
-Base.iterate(itr::RepeatPartitionIterator, state) = iterate(itr.base, state)
 
-Base.length(itr::RepeatPartitionIterator) = length(itr.base)
+Base.length(itr::RepeatPartitionIterator) = ceil(Int, length(itr.base) / itr.ntake)
 Base.eltype(itr::RepeatPartitionIterator) = eltype(itr.base)
 
-# Workaround for https://github.com/JuliaLang/julia/issues/33349
-repeatiter(itr, nreps) = Iterators.take(Iterators.cycle(itr), nreps * length(itr))
-
 """
-    advance!(itr::RepeatPartitionIterator)
+    cycle(itr, nreps)
 
-Advances itr to the next partition of the wrapped iterator.
+An iterator that cycles through `itr nreps` times.
 """
-advance!(itr::RepeatPartitionIterator) = itr.curr = itr.base.xs.nextvalstate
+Base.Iterators.cycle(itr, nreps) = Iterators.take(Iterators.cycle(itr), nreps * length(itr))

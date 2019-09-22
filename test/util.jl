@@ -84,71 +84,40 @@ end
 
 @testset "RepeatPartitionIterator" begin
 
-    testiter(itr, exp) = for (act,exp) in zip(itr, exp)
-        @test act == exp
-    end
-
     @testset "RepeatPartitionIterator basic" begin
 
-        itr = RepeatPartitionIterator(1:20, 5)
+        bitr = RepeatPartitionIterator(1:20, 5)
 
-        testiter(itr, 1:5)
-        testiter(itr, 1:5)
-
-        advance!(itr)
-
-        testiter(itr, 6:10)
-        testiter(itr, 6:10)
+        for (itr, exp) in zip(bitr, [1:5, 6:10, 11:15, 16:20])
+            @test collect(itr) == exp
+            @test collect(itr) == exp
+            @test collect(itr) == exp
+        end
     end
 
     @testset "RepeatPartitionIterator partition" begin
 
-        itr = RepeatPartitionIterator(Iterators.partition(1:20, 5), 2)
+        bitr = RepeatPartitionIterator(Iterators.partition(1:20, 5), 2)
 
-        testiter(itr,[1:5, 6:10])
-        testiter(itr,[1:5, 6:10])
-        testiter(itr,[1:5, 6:10])
-        testiter(itr,[1:5, 6:10])
+        for (itr, exp) in zip(bitr, [[1:5, 6:10], [11:15, 16:20]])
+            @test collect(itr) == exp
+            @test collect(itr) == exp
+            @test collect(itr) == exp
+        end
 
-        advance!(itr)
-
-        testiter(itr, [11:15, 16:20])
-        testiter(itr, [11:15, 16:20])
-        testiter(itr, [11:15, 16:20])
-        testiter(itr, [11:15, 16:20])
-
-        advance!(itr)
-
-        testiter(itr, [])
     end
 
     @testset "RepeatPartitionIterator repeated partition" begin
-        itr = RepeatPartitionIterator(repeatiter(Iterators.partition(1:20, 5), 3), 2)
+        bitr = RepeatPartitionIterator(Iterators.cycle(Iterators.partition(1:20, 5), 3), 2)
 
-        testiter(itr,[1:5, 6:10])
-        testiter(itr,[1:5, 6:10])
+        cnt = 0;
+        for (itr, exp) in zip(bitr, [[1:5, 6:10], [11:15, 16:20],[1:5, 6:10], [11:15, 16:20],[1:5, 6:10], [11:15, 16:20]])
+            @test collect(itr) == exp
+            @test collect(itr) == exp
+            @test collect(itr) == exp
+            cnt += 1
+        end
 
-        advance!(itr)
-        testiter(itr, [11:15, 16:20])
-        testiter(itr, [11:15, 16:20])
-
-        advance!(itr)
-        testiter(itr,[1:5, 6:10])
-        testiter(itr,[1:5, 6:10])
-
-        advance!(itr)
-        testiter(itr, [11:15, 16:20])
-        testiter(itr, [11:15, 16:20])
-
-        advance!(itr)
-        testiter(itr,[1:5, 6:10])
-        testiter(itr,[1:5, 6:10])
-
-        advance!(itr)
-        testiter(itr, [11:15, 16:20])
-        testiter(itr, [11:15, 16:20])
-
-        advance!(itr)
-        testiter(itr, [])
+        @test cnt == length(bitr) == 6
     end
 end

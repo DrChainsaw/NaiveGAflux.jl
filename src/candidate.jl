@@ -71,7 +71,7 @@ reset!(s::MapFitness) = reset!(s.base)
 
 """
     TimeFitness{T} <: AbstractFitness where T <: AbstractFunLabel
-    TimeFitness()
+    TimeFitness(t::T) where T <: AbstractFunLabel
 
 Measure fitness as time to evaluate a function.
 
@@ -123,6 +123,8 @@ function reset!(s::FitnessCache)
     reset!(s.base)
 end
 
+instrument(l::AbstractFunLabel, s::FitnessCache, f::Function) = instrument(l, s.base, f)
+
 """
     NanGuard{T} <: AbstractFitness where T <: AbstractFunLabel
     NanGuard(base::AbstractFitness, replaceval = 0.0)
@@ -131,9 +133,10 @@ end
 Instruments functions labeled with type `T` with a NaN guard.
 
 The NaN guard checks for NaNs in the output of the instrumented function and
-    1. Replaces the NaN with a configured value (default 0.0)
-    2. Prevents the function from being called again and instead returns the same output as last time
-    3. Returns fitness value of 0.0 without calling the base fitness function
+
+    1. Replaces the NaN with a configured value (default 0.0).
+    2. Prevents the function from being called again. Returns the same output as last time.
+    3. Returns fitness value of 0.0 without calling the base fitness function.
 
 Rationale for 2 is that models tend to become very slow to evalute if when producing NaNs.
 """
@@ -143,7 +146,7 @@ mutable struct NanGuard{T} <: AbstractFitness where T <: AbstractFunLabel
     replaceval
     lastout
 end
-NanGuard(base::AbstractFitness, replaceval = 0.0) = NanGuard{AbstractFitness}(base, false, replaceval, nothing)
+NanGuard(base::AbstractFitness, replaceval = 0.0) = NanGuard{AbstractFunLabel}(base, false, replaceval, nothing)
 NanGuard(t::T, base::AbstractFitness, replaceval = 0.0) where T <: AbstractFunLabel = NanGuard{T}(base, false, replaceval, nothing)
 
 fitness(s::NanGuard, f) = s.nandetected ? 0.0 : fitness(s.base, f)
@@ -154,7 +157,7 @@ function reset!(s::NanGuard)
 end
 
 function instrument(l::T, s::NanGuard{T}, f::Function) where T <: AbstractFunLabel
-    return function(x...)
+    function nanguard(x...)
         s.nandetected && return s.lastout
 
         y = f(x...)
@@ -164,9 +167,10 @@ function instrument(l::T, s::NanGuard{T}, f::Function) where T <: AbstractFunLab
         end
         return s.lastout
     end
+    return instrument(l, s.base, nanguard)
 end
 
-nanreplace(x::Real; replaceval) = isnan(x) ? (true, replaceval) : (false, x)
+nanreplace(x::T; replaceval) where T <:Real = isnan(x) ? (true, T(replaceval)) : (false, x)
 nanreplace(x::Union{Tuple, AbstractArray}; replaceval) = any(isnan, x), map(xi -> isnan(xi) ? replaceval : xi, x)
 
 """
