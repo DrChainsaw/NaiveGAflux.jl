@@ -84,7 +84,14 @@
 
         import NaiveGAflux: Train
         nanfun(x::Real) = NaN
-        nanfun(x::AbstractArray) = repeat([NaN], size(x)...)
+        function nanfun(x::AbstractArray)
+            x[1] = NaN
+            return x
+        end
+        function nanfun(x::TrackedArray)
+            nanfun(x.data)
+            return x
+        end
 
         ng = NanGuard(Train(), MockFitness(1))
 
@@ -113,7 +120,7 @@
         @test okfun(5) == 5
         @test fitness(ng, identity) == 1
 
-        @test (@test_logs (:warn, r"NaN detected") nokfun(param([1,2,3]))) == [0,0,0]
+        @test (@test_logs (:warn, r"NaN detected") nokfun(param([1,2,3]))) == [0,2,3]
         @test fitness(ng, identity) == 0
     end
 

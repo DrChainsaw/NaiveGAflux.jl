@@ -5,7 +5,6 @@ using Reexport
 using Random
 using Logging
 using Statistics
-import Base.Iterators: Take, Stateful
 
 const rng_default = Random.GLOBAL_RNG
 

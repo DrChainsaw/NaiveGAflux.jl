@@ -49,7 +49,8 @@ end
 function fitness(s::AccuracyFitness, f)
     acc,cnt = 0, 0
     for (x,y) in s.dataset
-        acc += mean(Flux.onecold(f(x)) .== Flux.onecold(y))
+
+        acc += mean(Flux.onecold(f(x |> gpu)) .== Flux.onecold(y))
         cnt += 1
     end
     return acc / cnt
@@ -172,6 +173,13 @@ end
 
 nanreplace(x::T; replaceval) where T <:Real = isnan(x) ? (true, T(replaceval)) : (false, x)
 nanreplace(x::Union{Tuple, AbstractArray}; replaceval) = any(isnan, x), map(xi -> isnan(xi) ? replaceval : xi, x)
+function nanreplace(x::TrackedArray; replaceval)
+    nans = isnan.(x)
+    if any(nans)
+        x.data[nans] .= replaceval
+    end
+    return any(nans), x
+end
 
 """
     AggFitness <: AbstractFitness
