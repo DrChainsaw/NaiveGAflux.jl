@@ -12,7 +12,28 @@ NaiveNASlib.minΔninfactor(::ActivationContribution) = 1
 NaiveNASlib.minΔnoutfactor(::ActivationContribution) = 1
 
 
-function run_experiment(popsize, datatrain::RepeatPartitionIterator, datafitness; nelites = 2, baseseed=666, cb = () -> nothing)
+function run(popsize, (train_x,train_y)::Tuple; nepochs=200, batchsize=64, nelites=2, baseseed=666, cb = gpu_gc)
+    batch(data) = BatchIterator(data, batchsize)
+    dataiter(x,y) = zip(batch(x), Flux.onehotbatch(batch(y), 0:9))
+
+    nevo = 5000;
+    fit_x, fit_y = train_x[:,:,:,1:end-nevo], train_y[1:end-nevo]
+    evo_x, evo_y = train_x[:,:,:,end-nevo:end], train_y[end-nevo:end]
+
+
+    fit_iter = RepeatPartitionIterator(GpuIterator(Iterators.cycle(dataiter(fit_x, fit_y), nepochs)), 200)
+    evo_iter = GpuIterator(dataiter(evo_x, evo_y))
+
+    run_experiment(popsize, GpuIterator(fit_iter), GpuIterator(evo_iter), nelites=nelites, baseseed=baseseed, cb=gpu_gc)
+end
+
+function gpu_gc()
+    GC.gc()
+    CuArrays.reclaim(true)
+    CuArrays.pool_status()
+end
+
+function run_experiment(popsize, datatrain, datafitness; nelites = 2, baseseed=666, cb = () -> nothing)
     Random.seed!(NaiveGAflux.rng_default, baseseed)
 
     population = initial_models(popsize, () -> fitnessfun(datafitness))
@@ -23,8 +44,8 @@ function run_experiment(popsize, datatrain::RepeatPartitionIterator, datafitness
 
         for (i, cand) in enumerate(population)
             @info "\tTrain model $i"
-            for (x,y) in iter
-                Flux.train!(cand, [(x, onehot(y)) |> gpu])
+            for data in iter
+                Flux.train!(cand, [data])
             end
         end
 
@@ -39,9 +60,6 @@ function run_experiment(popsize, datatrain::RepeatPartitionIterator, datafitness
 
     return population
 end
-
-# Workaround as losses fail with Flux.OneHotMatrix on Appveyor x86 (works everywhere else)
-onehot(y) = Float32.(Flux.onehotbatch(y, 0:9))
 
 
 function evolutionstrategy(popsize, nelites=2)

@@ -229,7 +229,7 @@ struct CandidateModel <: AbstractCandidate
 end
 
 
-function Flux.train!(model::CandidateModel, data)
+function Flux.train!(model::CandidateModel, data::AbstractArray{<:Tuple})
     f = instrument(Train(), model.fitness, x -> model.graph(x))
     loss(x,y) = model.lossfun(f(x), y)
     iloss = instrument(TrainLoss(), model.fitness, loss)

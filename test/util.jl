@@ -104,7 +104,6 @@ end
             @test collect(itr) == exp
             @test collect(itr) == exp
         end
-
     end
 
     @testset "RepeatPartitionIterator repeated partition" begin
@@ -119,5 +118,26 @@ end
         end
 
         @test cnt == length(bitr) == 6
+    end
+end
+
+@testset "MapIterator" begin
+    itr = MapIterator(x -> 2x, [1,2,3,4,5])
+    @test collect(itr) == [2,4,6,8,10]
+end
+
+@testset "GpuIterator" begin
+    dorg = 1:100;
+    itr = GpuIterator(zip([view(dorg,1:10)], [dorg]))
+    d1,d2 = first(itr)
+    @test !isa(d1, SubArray)
+    @test d1 == dorg[1:10]
+    @test d2 == dorg
+end
+
+@testset "BatchIterator" begin
+    itr = BatchIterator(collect(reshape(1:2*3*4*5,2,3,4,5)), 2)
+    for (i, batch) in enumerate(itr)
+        @test size(batch) == (2,3,4,i==3 ? 1 : 2)
     end
 end
