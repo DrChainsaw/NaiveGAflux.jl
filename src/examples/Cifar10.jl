@@ -12,7 +12,7 @@ NaiveNASlib.minΔninfactor(::ActivationContribution) = 1
 NaiveNASlib.minΔnoutfactor(::ActivationContribution) = 1
 
 
-function run(popsize, (train_x,train_y)::Tuple; nepochs=200, batchsize=64, nelites=2, baseseed=666, cb = gpu_gc)
+function run(popsize, (train_x,train_y)::Tuple; nepochs=200, batchsize=32, nelites=2, baseseed=666, cb = () -> nothing)
     batch(data) = BatchIterator(data, batchsize)
     dataiter(x,y) = zip(batch(x), Flux.onehotbatch(batch(y), 0:9))
 
@@ -24,13 +24,7 @@ function run(popsize, (train_x,train_y)::Tuple; nepochs=200, batchsize=64, nelit
     fit_iter = RepeatPartitionIterator(GpuIterator(Iterators.cycle(dataiter(fit_x, fit_y), nepochs)), 200)
     evo_iter = GpuIterator(dataiter(evo_x, evo_y))
 
-    run_experiment(popsize, GpuIterator(fit_iter), GpuIterator(evo_iter), nelites=nelites, baseseed=baseseed, cb=gpu_gc)
-end
-
-function gpu_gc()
-    GC.gc()
-    CuArrays.reclaim(true)
-    CuArrays.pool_status()
+    run_experiment(popsize, GpuIterator(fit_iter), GpuIterator(evo_iter), nelites=nelites, baseseed=baseseed, cb=cb)
 end
 
 function run_experiment(popsize, datatrain, datafitness; nelites = 2, baseseed=666, cb = () -> nothing)
@@ -66,6 +60,7 @@ function evolutionstrategy(popsize, nelites=2)
     elite = EliteSelection(nelites)
 
     # Looks like a complete mess because mutation is stateful -> we need to create a new instance each time we mutate
+    # Want: EvolveCandidates(evolvemodel(mutation())
     mutate = EvolveCandidates(c -> evolvemodel(mutation())(c))
     evolve = SusSelection(popsize - nelites, mutate)
 
@@ -74,16 +69,16 @@ function evolutionstrategy(popsize, nelites=2)
 end
 
 function mutation()
-    mutate_nout = NeuronSelectMutation(NoutMutation(-0.1, 0.05)) # Max 10% change in output size
+    mutate_nout = NeuronSelectMutation(NoutMutation(-0.05, 0.05)) # Max 5% change in output size
     add_vertex = add_vertex_mutation()
     rem_vertex = RemoveVertexMutation()
 
     # Create a shorthand alias for MutationProbability
     mp(m,p) = VertexMutation(MutationProbability(m, Probability(p)))
 
-    mnout = mp(LogMutation(v -> "\tChange size of vertex $(name(v))", mutate_nout), 0.05)
-    maddv = mp(LogMutation(v -> "\tAdd vertex after $(name(v))", add_vertex), 0.01)
-    mremv = mp(LogMutation(v -> "\tRemove vertex $(name(v))", rem_vertex), 0.04)
+    mnout = mp(LogMutation(v -> "\tChange size of vertex $(name(v))", mutate_nout), 0.02)
+    maddv = mp(LogMutation(v -> "\tAdd vertex after $(name(v))", add_vertex), 0.005)
+    mremv = mp(LogMutation(v -> "\tRemove vertex $(name(v))", rem_vertex), 0.01)
 
     # Add mutation last as new vertices with neuron_value == 0 screws up outputs selection as per https://github.com/DrChainsaw/NaiveNASlib.jl/issues/39
     return LogMutation(g -> "Mutate model $(modelname(g))", MutationList(MutationFilter(g -> nv(g) > 5, mremv), PostMutation(mnout, NeuronSelect()), MutationFilter(g -> nv(g) < 100, maddv)))
@@ -104,8 +99,8 @@ function add_vertex_mutation()
     wrapitup(as) = AddVertexMutation(MapArchSpace(gpu, rep_fork_res(as, 1,loglevel=Logging.Info)))
 
     # TODO: New layers to have identity mapping
-    add_conv = wrapitup(convspace(default_layerconf(), 8:128, 1:2:7, acts,loglevel=Logging.Info))
-    add_dense = wrapitup(LoggingArchSpace(Logging.Info, VertexSpace(default_layerconf(), NamedLayerSpace("dense", DenseSpace(BaseLayerSpace(16:512, acts))))))
+    add_conv = wrapitup(convspace(default_layerconf(), 8:128, 1:2:7, acts,loglevel=Logging.Info, lspacewrap=IdSpace))
+    add_dense = wrapitup(LoggingArchSpace(Logging.Info, VertexSpace(default_layerconf(), NamedLayerSpace("dense", IdSpace(DenseSpace(BaseLayerSpace(16:512, acts)))))))
 
     return MutationList(MutationFilter(is_convtype, add_conv), MutationFilter(!is_convtype, add_dense))
 end
@@ -207,11 +202,11 @@ function rep_fork_res(s, n, min_rp=1;loglevel=Logging.Debug)
     return rep_fork_res(ArchSpace(ParSpace([rep, fork, res])), n-1, 0, loglevel=loglevel)
 end
 
-function convspace(conf, outsizes, kernelsizes, acts; loglevel=Logging.Debug)
+function convspace(conf, outsizes, kernelsizes, acts; loglevel=Logging.Debug, lspacewrap=identity)
     # CoupledParSpace due to CuArrays issue# 356
     msgfun(v) = "Created $(name(v)), nin: $(nin(v)), nout: $(nout(v))"
-    conv2d = LoggingArchSpace(loglevel, msgfun, VertexSpace(conf, NamedLayerSpace("conv2d", ConvSpace(BaseLayerSpace(outsizes, acts), CoupledParSpace(kernelsizes, 2)))))
-    bn = LoggingArchSpace(loglevel, msgfun, VertexSpace(conf, NamedLayerSpace("batchnorm", BatchNormSpace(acts))))
+    conv2d = LoggingArchSpace(loglevel, msgfun, VertexSpace(conf, NamedLayerSpace("conv2d", lspacewrap(ConvSpace(BaseLayerSpace(outsizes, acts), CoupledParSpace(kernelsizes, 2))))))
+    bn = LoggingArchSpace(loglevel, msgfun, VertexSpace(conf, NamedLayerSpace("batchnorm", lspacewrap(BatchNormSpace(acts)))))
 
     # Make sure that each alternative has the option to change output size
     # This is important to make fork and res play nice together

@@ -50,7 +50,7 @@ function fitness(s::AccuracyFitness, f)
     acc,cnt = 0, 0
     for (x,y) in s.dataset
 
-        acc += mean(Flux.onecold(f(x |> gpu)) .== Flux.onecold(y))
+        acc += mean(Flux.onecold(cpu(f(x))) .== Flux.onecold(cpu(y)))
         cnt += 1
     end
     return acc / cnt
