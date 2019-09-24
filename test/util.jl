@@ -140,4 +140,6 @@ end
     for (i, batch) in enumerate(itr)
         @test size(batch) == (2,3,4,i==3 ? 1 : 2)
     end
+
+    @test "biter: $itr" == "biter: BatchIterator(size=(2, 3, 4, 5), batchsize=2)"
 end

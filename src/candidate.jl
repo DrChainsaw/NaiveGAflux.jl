@@ -168,7 +168,7 @@ function instrument(l::T, s::NanGuard{T}, f::Function) where T <: AbstractFunLab
         s.shield = wasnan || wasinf
         s.lastout = y
         if s.shield
-            @warn "NaN/Inf detected in function $f with label $l"
+            @warn "NaN/Inf detected for function with label $l"
         end
         return s.lastout
     end

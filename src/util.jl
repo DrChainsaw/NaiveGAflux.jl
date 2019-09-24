@@ -235,4 +235,6 @@ function batch(a, start, stop)
     return view(itr.base, access...)
 end
 
+Base.print(io::IO, itr::BatchIterator) = print(io, "BatchIterator(size=$(size(itr.base)), batchsize=$(itr.batchsize))")
+
 Flux.onehotbatch(itr::BatchIterator, labels) = MapIterator(x -> Flux.onehotbatch(x, labels), itr)
