@@ -133,52 +133,57 @@ instrument(l::AbstractFunLabel, s::FitnessCache, f::Function) = instrument(l, s.
 
 Instruments functions labeled with type `T` with a NaN guard.
 
-The NaN guard checks for NaNs in the output of the instrumented function and
+The NaN guard checks for NaNs or Infs in the output of the instrumented function and
 
-    1. Replaces the NaN with a configured value (default 0.0).
+    1. Replaces the them with a configured value (default 0.0).
     2. Prevents the function from being called again. Returns the same output as last time.
     3. Returns fitness value of 0.0 without calling the base fitness function.
 
-Rationale for 2 is that models tend to become very slow to evalute if when producing NaNs.
+Rationale for 2 is that models tend to become very slow to evalute if when producing NaN/Inf.
 """
 mutable struct NanGuard{T} <: AbstractFitness where T <: AbstractFunLabel
     base::AbstractFitness
-    nandetected::Bool
+    shield::Bool
     replaceval
     lastout
 end
 NanGuard(base::AbstractFitness, replaceval = 0.0) = NanGuard{AbstractFunLabel}(base, false, replaceval, nothing)
 NanGuard(t::T, base::AbstractFitness, replaceval = 0.0) where T <: AbstractFunLabel = NanGuard{T}(base, false, replaceval, nothing)
 
-fitness(s::NanGuard, f) = s.nandetected ? 0.0 : fitness(s.base, f)
+fitness(s::NanGuard, f) = s.shield ? 0.0 : fitness(s.base, f)
 
 function reset!(s::NanGuard)
-    s.nandetected = false
+    s.shield = false
     reset!(s.base)
 end
 
 function instrument(l::T, s::NanGuard{T}, f::Function) where T <: AbstractFunLabel
-    function nanguard(x...)
-        s.nandetected && return s.lastout
+    function guard(x...)
+        s.shield && return s.lastout
 
         y = f(x...)
-        s.nandetected, s.lastout = nanreplace(y; replaceval = s.replaceval)
-        if s.nandetected
-            @warn "NaN detected in function $f with label $l"
+        wasnan, y = checkreplace(isnan, y; replaceval = s.replaceval)
+        wasinf, y = checkreplace(isinf, y; replaceval = s.replaceval)
+
+        s.shield = wasnan || wasinf
+        s.lastout = y
+        if s.shield
+            @warn "NaN/Inf detected in function $f with label $l"
         end
         return s.lastout
     end
-    return instrument(l, s.base, nanguard)
+    return instrument(l, s.base, guard)
 end
 
-nanreplace(x::T; replaceval) where T <:Real = isnan(x) ? (true, T(replaceval)) : (false, x)
-nanreplace(x::Union{Tuple, AbstractArray}; replaceval) = any(isnan, x), map(xi -> isnan(xi) ? replaceval : xi, x)
-function nanreplace(x::TrackedArray; replaceval)
-    nans = isnan.(x)
-    if any(nans)
-        x.data[nans] .= replaceval
+checkreplace(f, x::T; replaceval) where T <:Real = f(x) ? (true, T(replaceval)) : (false, x)
+checkreplace(f, x::Union{Tuple, AbstractArray}; replaceval) = any(f, x), map(xi -> f(xi) ? replaceval : xi, x)
+function checkreplace(f, x::TrackedArray; replaceval)
+    invalid = f.(x)
+    anyinvalid = any(invalid)
+    if anyinvalid
+        x.data[invalid] .= replaceval
     end
-    return any(nans), x
+    return anyinvalid, x
 end
 
 """

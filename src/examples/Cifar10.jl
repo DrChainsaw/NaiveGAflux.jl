@@ -11,7 +11,6 @@ export run_experiment, initial_models
 NaiveNASlib.minΔninfactor(::ActivationContribution) = 1
 NaiveNASlib.minΔnoutfactor(::ActivationContribution) = 1
 
-
 function run(popsize, (train_x,train_y)::Tuple; nepochs=200, batchsize=32, nelites=2, baseseed=666, cb = () -> nothing)
     batch(data) = BatchIterator(data, batchsize)
     dataiter(x,y) = zip(batch(x), Flux.onehotbatch(batch(y), 0:9))
@@ -48,7 +47,7 @@ function run_experiment(popsize, datatrain, datafitness; nelites = 2, baseseed=6
             @info "\tFitness model $i: $(fitness(cand))"
         end
 
-        population= evolve!(evostrategy, population)
+        population = evolve!(evostrategy, population)
         cb()
     end
 

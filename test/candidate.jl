@@ -58,45 +58,44 @@
         @test fitness(cf, identity) != val
     end
 
-    @testset "nanreplace" begin
-        import NaiveGAflux: nanreplace
+    @testset "checkreplace $val" for (val, fun) in ((NaN, isnan), (Inf, isinf))
+        import NaiveGAflux: checkreplace
 
-        nr(x) = nanreplace(x, replaceval=0)
+        nr(x) = checkreplace(fun, x, replaceval=0)
 
         @test nr(3) == (false, 3)
-        @test nr(NaN) == (true, 0)
+        @test nr(val) == (true, 0)
 
         # Tuples
         @test nr((3,4)) == (false, (3,4))
-        @test nr((3,NaN)) == (true, (3,0))
+        @test nr((3,val)) == (true, (3,0))
 
         # Arrays
         @test nr([1,2,3]) == (false, [1,2,3])
-        @test nr([1,NaN,3]) == (true, [1,0,3])
+        @test nr([1,val,3]) == (true, [1,0,3])
 
         # Flux parameter arrays
         @test nr(param([1,2,3])) == (false, [1,2,3])
-        @test nr(param([1,NaN,3])) == (true, [1,0,3])
-
+        @test nr(param([1,val,3])) == (true, [1,0,3])
     end
 
-    @testset "NanGuard" begin
+    @testset "NanGuard $val" for val in (NaN, Inf)
 
         import NaiveGAflux: Train
-        nanfun(x::Real) = NaN
-        function nanfun(x::AbstractArray)
-            x[1] = NaN
+        badfun(x::Real) = val
+        function badfun(x::AbstractArray)
+            x[1] = val
             return x
         end
-        function nanfun(x::TrackedArray)
-            nanfun(x.data)
+        function badfun(x::TrackedArray)
+            badfun(x.data)
             return x
         end
 
         ng = NanGuard(Train(), MockFitness(1))
 
         okfun = instrument(Train(), ng, identity)
-        nokfun = instrument(Train(), ng, nanfun)
+        nokfun = instrument(Train(), ng, badfun)
 
         @test okfun(5) == 5
         @test fitness(ng, identity) == 1
@@ -105,7 +104,7 @@
         @test fitness(ng, identity) == 1
 
         # Overwritten by NanGuard
-        @test (@test_logs (:warn, r"NaN detected") nokfun(3)) == 0
+        @test (@test_logs (:warn, r"NaN/Inf detected") nokfun(3)) == 0
         @test fitness(ng, identity) == 0
 
         @test okfun(3) == 0
@@ -120,7 +119,7 @@
         @test okfun(5) == 5
         @test fitness(ng, identity) == 1
 
-        @test (@test_logs (:warn, r"NaN detected") nokfun(param([1,2,3]))) == [0,2,3]
+        @test (@test_logs (:warn, r"NaN/Inf detected") nokfun(param([1,2,3]))) == [0,2,3]
         @test fitness(ng, identity) == 0
     end
 
