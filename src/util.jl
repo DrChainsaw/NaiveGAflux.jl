@@ -221,7 +221,7 @@ Base.IteratorEltype(itr::BatchIterator) = Base.IteratorEltype(itr.base)
 function Base.iterate(itr::BatchIterator, start=1)
     start > size(itr.base)[end] && return nothing
     stop = min(size(itr.base)[end], start + itr.batchsize-1)
-    return batch(itr.base, start,stop), start+stop
+    return batch(itr.base, start,stop), start+itr.batchsize
 end
 
 ## I *think* speed matters here, so...

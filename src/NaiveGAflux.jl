@@ -12,7 +12,7 @@ const rng_default = Random.GLOBAL_RNG
 export fitness, instrument, reset!, AbstractFitness, AccuracyFitness, MapFitness, TimeFitness, FitnessCache, NanGuard, AggFitness
 
 # Candidate
-export evolvemodel, AbstractCandidate, CandidateModel
+export evolvemodel, AbstractCandidate, CandidateModel, HostCandidate
 
 # Evolution
 export evolve!, AbstractEvolution, NoOpEvolution, AfterEvolution, ResetAfterEvolution, EliteSelection, SusSelection, CombinedEvolution, EvolveCandidates

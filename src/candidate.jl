@@ -228,6 +228,8 @@ struct CandidateModel <: AbstractCandidate
     fitness::AbstractFitness
 end
 
+Flux.children(c::CandidateModel) = (c.graph, c.opt, c.lossfun, c.fitness)
+Flux.mapchildren(f, c::CandidateModel) = CandidateModel(f(c.graph), f(c.opt), f(c.lossfun), c.fitness)
 
 function Flux.train!(model::CandidateModel, data::AbstractArray{<:Tuple})
     f = instrument(Train(), model.fitness, x -> model.graph(x))
@@ -240,11 +242,31 @@ fitness(model::CandidateModel) = fitness(model.fitness, instrument(Validate(), m
 
 reset!(model::CandidateModel) = reset!(model.fitness)
 
-function mapmodel(newgraph::Function, newfields::Function=deepcopy)
-    mapfield(g::CompGraph) = newgraph(g)
-    mapfield(f) = newfields(f)
-    return c::CandidateModel -> CandidateModel(map(mapfield, getproperty.(c, fieldnames(CandidateModel)))...)
+
+"""
+    HostCandidate <: AbstractCandidate
+    HostCandidate(c::AbstractCandidate)
+
+Keeps `c` in host memory and transfers to GPU when training or calculating fitness.
+"""
+struct HostCandidate <: AbstractCandidate
+    c::AbstractCandidate
 end
+
+Flux.@treelike HostCandidate
+
+function Flux.train!(c::HostCandidate, data::AbstractArray{<:Tuple})
+    Flux.train!(c.c |> gpu, data)
+    c.c |> cpu # As some parts, namely CompGraph change internal state when mapping to GPU
+end
+
+function fitness(c::HostCandidate)
+    fitval = fitness(c.c |> gpu)
+    c.c |> cpu # As some parts, namely CompGraph change internal state when mapping to GPU
+    return fitval
+end
+
+reset!(c::HostCandidate) = reset!(c.c)
 
 """
     evolvemodel(m::AbstractMutation{CompGraph})
@@ -261,9 +283,17 @@ function evolvemodel(m::AbstractMutation{CompGraph})
         m(ng)
         return ng
     end
-     mapmodel(copymutate)
- end
+    mapmodel(copymutate)
+end
 
+function mapmodel(newgraph::Function, newfields::Function=deepcopy)
+    mapfield(g::CompGraph) = newgraph(g)
+    mapfield(f) = newfields(f)
+    # Bleh! This is not sustainable. Will refactor when I find the time
+    newcand(c::CandidateModel) = CandidateModel(map(mapfield, getproperty.(c, fieldnames(CandidateModel)))...)
+    newcand(c::HostCandidate) = HostCandidate(newcand(c.c))
+    return newcand
+end
 
 """
     AbstractEvolution

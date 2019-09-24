@@ -48,7 +48,7 @@ function run_experiment(popsize, datatrain, datafitness; nelites = 2, baseseed=6
             @info "\tFitness model $i: $(fitness(cand))"
         end
 
-        evolve!(evostrategy, population)
+        population= evolve!(evostrategy, population)
         cb()
     end
 
@@ -84,19 +84,12 @@ function mutation()
     return LogMutation(g -> "Mutate model $(modelname(g))", MutationList(MutationFilter(g -> nv(g) > 5, mremv), PostMutation(mnout, NeuronSelect()), MutationFilter(g -> nv(g) < 100, maddv)))
 end
 
-struct MapArchSpace <: AbstractArchSpace
-    f::Function
-    s::AbstractArchSpace
-end
-(s::MapArchSpace)(in::AbstractVertex, rng=NaiveGAflux.rng_default; outsize=missing) = s.f(s.s(in, rng, outsize=outsize))
-(s::MapArchSpace)(name::String, in::AbstractVertex, rng=NaiveGAflux.rng_default; outsize=missing) = s.f(s.s(name, in, rng, outsize=outsize))
-
 Flux.mapchildren(f, aa::AbstractArray{<:Integer, 1}) = aa
 
 function add_vertex_mutation()
     acts = [identity, relu, elu, selu]
 
-    wrapitup(as) = AddVertexMutation(MapArchSpace(gpu, rep_fork_res(as, 1,loglevel=Logging.Info)))
+    wrapitup(as) = AddVertexMutation(rep_fork_res(as, 1,loglevel=Logging.Info))
 
     # TODO: New layers to have identity mapping
     add_conv = wrapitup(convspace(default_layerconf(), 8:128, 1:2:7, acts,loglevel=Logging.Info, lspacewrap=IdSpace))
@@ -117,7 +110,7 @@ function initial_models(nr, fitnessgen)
     as = initial_archspace()
     return map(i -> create_model(join(["model", i]), as, iv(i), fitnessgen), 1:nr)
 end
-create_model(name, as, in, fg) = CandidateModel(CompGraph(in, as(name, in)) |> gpu, Descent(0.01), Flux.logitcrossentropy, fg())
+create_model(name, as, in, fg) = HostCandidate(CandidateModel(CompGraph(in, as(name, in)), Descent(0.01), Flux.logitcrossentropy, fg()))
 modelname(g) = split(name(g.inputs[]),'.')[1]
 
 function fitnessfun(dataset, accdigits=3)
