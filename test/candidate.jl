@@ -105,6 +105,7 @@
 
         # Overwritten by NanGuard
         @test (@test_logs (:warn, r"NaN/Inf detected") nokfun(3)) == 0
+        @test nokfun(3) == 0
         @test fitness(ng, identity) == 0
 
         @test okfun(3) == 0
@@ -120,6 +121,8 @@
         @test fitness(ng, identity) == 1
 
         @test (@test_logs (:warn, r"NaN/Inf detected") nokfun(param([1,2,3]))) == [0,2,3]
+        @test nokfun(param([1,2,3])) == [0,0,0]
+
         @test fitness(ng, identity) == 0
     end
 

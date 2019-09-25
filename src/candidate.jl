@@ -159,21 +159,25 @@ end
 
 function instrument(l::T, s::NanGuard{T}, f::Function) where T <: AbstractFunLabel
     function guard(x...)
-        s.shield && return s.lastout
+        s.shield && return s.lastout(s.replaceval)
 
         y = f(x...)
         wasnan, y = checkreplace(isnan, y; replaceval = s.replaceval)
         wasinf, y = checkreplace(isinf, y; replaceval = s.replaceval)
 
         s.shield = wasnan || wasinf
-        s.lastout = y
+        s.lastout = val -> dummyfun(typeof(y), size(y), val)
         if s.shield
             @warn "NaN/Inf detected for function with label $l"
         end
-        return s.lastout
+        return y
     end
     return instrument(l, s.base, guard)
 end
+
+dummyfun(::Type{<:TrackedArray{<:Any, <:Any, <:AbstractArray{T}}}, shape, val) where T = param(val * ones(T, shape)) |> gpu
+dummyfun(::Type{<:AbstractArray{T}}, shape, val) where T = val * ones(T, shape)
+dummyfun(::Type{T}, shape, val) where T <: Number = T(val)
 
 checkreplace(f, x::T; replaceval) where T <:Real = f(x) ? (true, T(replaceval)) : (false, x)
 checkreplace(f, x::Union{Tuple, AbstractArray}; replaceval) = any(f, x), map(xi -> f(xi) ? replaceval : xi, x)

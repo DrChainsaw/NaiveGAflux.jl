@@ -19,7 +19,6 @@ function run(popsize, (train_x,train_y)::Tuple; nepochs=200, batchsize=32, nelit
     fit_x, fit_y = train_x[:,:,:,1:end-nevo], train_y[1:end-nevo]
     evo_x, evo_y = train_x[:,:,:,end-nevo:end], train_y[end-nevo:end]
 
-
     fit_iter = RepeatPartitionIterator(GpuIterator(Iterators.cycle(dataiter(fit_x, fit_y), nepochs)), 200)
     evo_iter = GpuIterator(dataiter(evo_x, evo_y))
 
