@@ -79,51 +79,100 @@
         @test nr(param([1,val,3])) == (true, [1,0,3])
     end
 
-    @testset "NanGuard $val" for val in (NaN, Inf)
+    @testset "NanGuard" begin
 
-        import NaiveGAflux: Train
-        badfun(x::Real) = val
-        function badfun(x::AbstractArray)
+        import NaiveGAflux: Train, TrainLoss, Validate
+
+        badfun(x::Real, val=NaN) = val
+        function badfun(x::AbstractArray, val=NaN)
             x[1] = val
             return x
         end
-        function badfun(x::TrackedArray)
-            badfun(x.data)
+        function badfun(x::TrackedArray, val=NaN)
+            badfun(x.data, val)
             return x
         end
 
-        ng = NanGuard(Train(), MockFitness(1))
+        @testset "NanGuard $val" for val in (NaN, Inf)
 
-        okfun = instrument(Train(), ng, identity)
-        nokfun = instrument(Train(), ng, badfun)
+            ng = NanGuard(Train(), MockFitness(1))
 
-        @test okfun(5) == 5
-        @test fitness(ng, identity) == 1
+            okfun = instrument(Train(), ng, identity)
+            nokfun = instrument(Train(), ng, x -> badfun(x, val))
 
-        @test okfun([3,4,5]) == [3,4,5]
-        @test fitness(ng, identity) == 1
+            @test okfun(5) == 5
+            @test fitness(ng, identity) == 1
 
-        # Overwritten by NanGuard
-        @test (@test_logs (:warn, r"NaN/Inf detected") nokfun(3)) == 0
-        @test nokfun(3) == 0
-        @test fitness(ng, identity) == 0
+            @test okfun([3,4,5]) == [3,4,5]
+            @test fitness(ng, identity) == 1
 
-        @test okfun(3) == 0
-        @test fitness(ng, identity) == 0
+            # Overwritten by NanGuard
+            @test (@test_logs (:warn, r"NaN/Inf detected") nokfun(3)) == 0
+            @test nokfun(3) == 0
+            @test fitness(ng, identity) == 0
 
-        wasreset = false
-        NaiveGAflux.reset!(::MockFitness) = wasreset = true
-        reset!(ng)
+            @test okfun(3) == 0
+            @test fitness(ng, identity) == 0
 
-        @test wasreset
+            wasreset = false
+            NaiveGAflux.reset!(::MockFitness) = wasreset = true
+            reset!(ng)
 
-        @test okfun(5) == 5
-        @test fitness(ng, identity) == 1
+            @test wasreset
 
-        @test (@test_logs (:warn, r"NaN/Inf detected") nokfun(param([1,2,3]))) == [0,2,3]
-        @test nokfun(param([1,2,3])) == [0,0,0]
+            @test okfun(5) == 5
+            @test fitness(ng, identity) == 1
 
-        @test fitness(ng, identity) == 0
+            @test (@test_logs (:warn, r"NaN/Inf detected") nokfun(param([1,2,3]))) == [0,2,3]
+            @test nokfun(param([1,2,3])) == [0,0,0]
+
+            @test fitness(ng, identity) == 0
+        end
+
+        @testset "NanGuard all" begin
+            ng = NanGuard(MockFitness(1))
+
+            okfun(t) = instrument(t, ng, identity)
+            nokfun(t) = instrument(t, ng, badfun)
+
+            @test okfun(Train())(3) == 3
+            @test okfun(TrainLoss())([1,2,3]) == [1,2,3]
+            @test okfun(Validate())(param([1,2,3])) == [1,2,3]
+
+            @test fitness(ng, identity) == 1
+
+            @test (@test_logs (:warn, r"NaN/Inf detected") nokfun(Train())(3)) == 0
+            @test okfun(TrainLoss())([1,2,3]) == [1,2,3]
+            @test okfun(Validate())(param([1,2,3])) == [1,2,3]
+
+            @test fitness(ng, identity) == 0
+
+            @test okfun(Train())(3) == 0
+            @test (@test_logs (:warn, r"NaN/Inf detected") nokfun(TrainLoss())(Float32[1,2,3])) == [0,2,3]
+            @test okfun(Validate())(param([1,2,3])) == [1,2,3]
+
+            @test fitness(ng, identity) == 0
+
+            @test okfun(Train())(3) == 0
+            @test okfun(TrainLoss())([1,2,3]) == [0,0,0]
+            @test (@test_logs (:warn, r"NaN/Inf detected") nokfun(Validate())(param([1,2,3]))) == [0,2,3]
+
+            @test fitness(ng, identity) == 0
+
+            @test okfun(Train())(3) == 0
+            @test okfun(TrainLoss())([1,2,3]) == [0,0,0]
+            @test okfun(Validate())(param([1,2,3])) == [0,0,0]
+
+            @test fitness(ng, identity) == 0
+
+            reset!(ng)
+
+            @test okfun(Train())(3) == 3
+            @test okfun(TrainLoss())([1,2,3]) == [1,2,3]
+            @test okfun(Validate())(param([1,2,3])) == [1,2,3]
+
+            @test fitness(ng, identity) == 1
+        end
     end
 
     @testset "AggFitness" begin

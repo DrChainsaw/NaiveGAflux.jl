@@ -147,8 +147,8 @@ mutable struct NanGuard{T} <: AbstractFitness where T <: AbstractFunLabel
     replaceval
     lastout
 end
-NanGuard(base::AbstractFitness, replaceval = 0.0) = NanGuard{AbstractFunLabel}(base, false, replaceval, nothing)
-NanGuard(t::T, base::AbstractFitness, replaceval = 0.0) where T <: AbstractFunLabel = NanGuard{T}(base, false, replaceval, nothing)
+NanGuard(base::AbstractFitness, replaceval = 0.0) = foldl((b, l) -> NanGuard(l, b, replaceval), (Train(), TrainLoss(), Validate()), init=base)
+NanGuard(t::T, base::AbstractFitness, replaceval = 0.0) where T <: AbstractFunLabel = NanGuard{T}(base, false, replaceval, identity)
 
 fitness(s::NanGuard, f) = s.shield ? 0.0 : fitness(s.base, f)
 
@@ -166,7 +166,7 @@ function instrument(l::T, s::NanGuard{T}, f::Function) where T <: AbstractFunLab
         wasinf, y = checkreplace(isinf, y; replaceval = s.replaceval)
 
         s.shield = wasnan || wasinf
-        s.lastout = val -> dummyfun(typeof(y), size(y), val)
+        s.lastout = val -> dummyvalue(typeof(y), size(y), val)
         if s.shield
             @warn "NaN/Inf detected for function with label $l"
         end
@@ -174,10 +174,11 @@ function instrument(l::T, s::NanGuard{T}, f::Function) where T <: AbstractFunLab
     end
     return instrument(l, s.base, guard)
 end
+instrument(l::AbstractFunLabel, s::NanGuard, f::Function) = instrument(l, s.base, f)
 
-dummyfun(::Type{<:TrackedArray{<:Any, <:Any, <:AbstractArray{T}}}, shape, val) where T = param(val * ones(T, shape)) |> gpu
-dummyfun(::Type{<:AbstractArray{T}}, shape, val) where T = val * ones(T, shape)
-dummyfun(::Type{T}, shape, val) where T <: Number = T(val)
+dummyvalue(::Type{<:TrackedArray{<:Any, <:Any, <:AbstractArray{T}}}, shape, val) where T = param(val * ones(T, shape)) |> gpu
+dummyvalue(::Type{<:AbstractArray{T}}, shape, val) where T = val * ones(T, shape)
+dummyvalue(::Type{T}, shape, val) where T <: Number = T(val)
 
 checkreplace(f, x::T; replaceval) where T <:Real = f(x) ? (true, T(replaceval)) : (false, x)
 checkreplace(f, x::Union{Tuple, AbstractArray}; replaceval) = any(f, x), map(xi -> f(xi) ? replaceval : xi, x)
