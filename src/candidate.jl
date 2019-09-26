@@ -250,9 +250,20 @@ function Flux.train!(model::CandidateModel, data::AbstractArray{<:Tuple})
     Flux.train!(iloss, params(model.graph), data, model.opt)
 end
 
+Flux.train!(model::CandidateModel, data::Tuple{<:AbstractArray, <:AbstractArray}) = Flux.train!(model, [data])
+
+# Assume iterator in the general case
+function Flux.train!(model::CandidateModel, iter)
+    for data in iter
+        Flux.train!(model, [data])
+    end
+end
+
 fitness(model::CandidateModel) = fitness(model.fitness, instrument(Validate(), model.fitness, x -> model.graph(x)))
 
 reset!(model::CandidateModel) = reset!(model.fitness)
+
+graph(model::CandidateModel) = model.graph
 
 
 """
@@ -267,7 +278,7 @@ end
 
 Flux.@treelike HostCandidate
 
-function Flux.train!(c::HostCandidate, data::AbstractArray{<:Tuple})
+function Flux.train!(c::HostCandidate, data)
     Flux.train!(c.c |> gpu, data)
     c.c |> cpu # As some parts, namely CompGraph change internal state when mapping to GPU
 end
@@ -279,6 +290,8 @@ function fitness(c::HostCandidate)
 end
 
 reset!(c::HostCandidate) = reset!(c.c)
+
+graph(c::HostCandidate) = graph(c.c)
 
 """
     evolvemodel(m::AbstractMutation{CompGraph})
@@ -295,10 +308,10 @@ function evolvemodel(m::AbstractMutation{CompGraph})
         m(ng)
         return ng
     end
-    mapmodel(copymutate)
+    mapcandidate(copymutate)
 end
 
-function mapmodel(newgraph::Function, newfields::Function=deepcopy)
+function mapcandidate(newgraph::Function, newfields::Function=deepcopy)
     mapfield(g::CompGraph) = newgraph(g)
     mapfield(f) = newfields(f)
     # Bleh! This is not sustainable. Will refactor when I find the time
@@ -332,7 +345,7 @@ evolve!(::NoOpEvolution, pop) = pop
 
 """
     AfterEvolution <: AbstractEvolution
-    AfterSelection(evo::AbstractEvolution, fun::Function)
+    AfterEvolution(evo::AbstractEvolution, fun::Function)
 
 Calls `fun(newpop)` where `newpop = evolve!(e.evo, pop)` where `pop` is original population to evolve.
 """
@@ -343,8 +356,7 @@ end
 
 function evolve!(e::AfterEvolution, pop)
     newpop = evolve!(e.evo, pop)
-    e.fun(newpop)
-    return newpop
+    return e.fun(newpop)
 end
 
 """
@@ -352,8 +364,11 @@ end
 
 Alias for `AfterEvolution` with `fun == reset!`.
 """
-ResetAfterEvolution(evo::AbstractEvolution) = AfterEvolution(evo, np -> reset!.(np))
-
+ResetAfterEvolution(evo::AbstractEvolution) = AfterEvolution(evo, resetandreturn)
+function resetandreturn(pop)
+    foreach(reset!, pop)
+    return pop
+end
 
 """
     EliteSelection <: AbstractEvolution

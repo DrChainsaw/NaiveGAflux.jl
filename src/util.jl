@@ -112,9 +112,7 @@ Example training loop:
 for partiter in iter
 
     for model in population
-        for data in partiter
-            train!(model, data)
-        end
+        train!(model, partiter)
     end
 
     evolvepopulation(population)

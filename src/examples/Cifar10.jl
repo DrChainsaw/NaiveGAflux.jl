@@ -11,15 +11,17 @@ export run_experiment, initial_models
 NaiveNASlib.minΔninfactor(::ActivationContribution) = 1
 NaiveNASlib.minΔnoutfactor(::ActivationContribution) = 1
 
+NaiveNASlib.clone(v::NaiveNASflux.InputShapeVertex, ins::AbstractVertex...;cf=clone) = NaiveNASflux.InputShapeVertex(cf(base(v), ins...;cf=cf), layertype(v))
+
 function run(popsize, (train_x,train_y)::Tuple; nepochs=200, batchsize=32, nelites=2, baseseed=666, cb = () -> nothing)
     batch(data) = BatchIterator(data, batchsize)
     dataiter(x,y) = zip(batch(x), Flux.onehotbatch(batch(y), 0:9))
 
-    nevo = 5000;
+    nevo = 1024;
     fit_x, fit_y = train_x[:,:,:,1:end-nevo], train_y[1:end-nevo]
     evo_x, evo_y = train_x[:,:,:,end-nevo:end], train_y[end-nevo:end]
 
-    fit_iter = RepeatPartitionIterator(GpuIterator(Iterators.cycle(dataiter(fit_x, fit_y), nepochs)), 200)
+    fit_iter = RepeatPartitionIterator(GpuIterator(Iterators.cycle(dataiter(fit_x, fit_y), nepochs)), 2)
     evo_iter = GpuIterator(dataiter(evo_x, evo_y))
 
     run_experiment(popsize, GpuIterator(fit_iter), GpuIterator(evo_iter), nelites=nelites, baseseed=baseseed, cb=cb)
@@ -35,10 +37,8 @@ function run_experiment(popsize, datatrain, datafitness; nelites = 2, baseseed=6
         @info "Begin generation $gen"
 
         for (i, cand) in enumerate(population)
-            @info "\tTrain model $i"
-            for data in iter
-                Flux.train!(cand, [data])
-            end
+            @info "\tTrain model $i with $(nv(NaiveGAflux.graph(cand))) vertices"
+            Flux.train!(cand, iter)
         end
 
         # TODO: Bake into evolution? Would anyways like to log selected models...
@@ -63,7 +63,16 @@ function evolutionstrategy(popsize, nelites=2)
     evolve = SusSelection(popsize - nelites, mutate)
 
     combine = CombinedEvolution(elite, evolve)
-    return ResetAfterEvolution(combine)
+    reset = ResetAfterEvolution(combine)
+    return AfterEvolution(reset, rename_models)
+end
+
+rename_models(pop) = map(rename_model, enumerate(pop))
+function rename_model((i, cand)::Tuple)
+    rename_model(str::String; cf) = replace(str, r"^model\d+\.*" => "model$i.")
+    rename_model(x...;cf) = clone(x...; cf=cf)
+    rename_model(m::AbstractMutableComp; cf) = m # No need to copy below this level
+    return NaiveGAflux.mapcandidate(g -> copy(g, rename_model))(cand)
 end
 
 function mutation()
@@ -109,7 +118,9 @@ function initial_models(nr, fitnessgen)
     return map(i -> create_model(join(["model", i]), as, iv(i), fitnessgen), 1:nr)
 end
 create_model(name, as, in, fg) = HostCandidate(CandidateModel(CompGraph(in, as(name, in)), Descent(0.01), Flux.logitcrossentropy, fg()))
-modelname(g) = split(name(g.inputs[]),'.')[1]
+
+modelname(c::AbstractCandidate) = modelname(NaiveGAflux.graph(c))
+modelname(g::CompGraph) = split(name(g.inputs[]),'.')[1]
 
 function fitnessfun(dataset, accdigits=3)
     acc = AccuracyFitness(dataset)
@@ -206,21 +217,5 @@ function convspace(conf, outsizes, kernelsizes, acts; loglevel=Logging.Debug, ls
 
     return ArchSpace(ParSpace([conv2d, convbn, bnconv]))
 end
-
-
- # TODO Debugging utils. To be removed
-inout_info(g) = [name.(vertices(g)) nin.(vertices(g)) nout.(vertices(g))]
-
-function sizecheck(g)
-    for v in vertices(g)
-        nins1 = nin(v)
-        nins2 = nout.(inputs(v))
-        if nins1 != nins2
-            @warn "Size fail for $(name(v))! $nins1 vs $nins2"
-        end
-    end
-end
-
-changed(g) = filter(v -> nin(v) != nin_org(v) || nout(v) != nout_org(v), vertices(g))
 
 end  # module cifar10
