@@ -5,7 +5,9 @@ import NaiveGAflux:globalpooling2d
 using Random
 import Logging
 
-export run_experiment, initial_models
+export run_experiment, iterators
+
+defaultdir(this="CIFAR10") = joinpath(NaiveGAflux.modeldir, this)
 
 # TODO: Need to handle this somehow...
 NaiveNASlib.minΔninfactor(::ActivationContribution) = 1
@@ -13,27 +15,34 @@ NaiveNASlib.minΔnoutfactor(::ActivationContribution) = 1
 
 NaiveNASlib.clone(v::NaiveNASflux.InputShapeVertex, ins::AbstractVertex...;cf=clone) = NaiveNASflux.InputShapeVertex(cf(base(v), ins...;cf=cf), layertype(v))
 
-function run(popsize, (train_x,train_y)::Tuple; nepochs=200, batchsize=32, nelites=2, baseseed=666, cb = () -> nothing)
+
+function iterators((train_x,train_y)::Tuple; nepochs=200, batchsize=32, fitnessize=2048, nbatches_per_gen=200)
     batch(data) = BatchIterator(data, batchsize)
     dataiter(x,y) = zip(batch(x), Flux.onehotbatch(batch(y), 0:9))
 
-    nevo = 1024;
-    fit_x, fit_y = train_x[:,:,:,1:end-nevo], train_y[1:end-nevo]
-    evo_x, evo_y = train_x[:,:,:,end-nevo:end], train_y[end-nevo:end]
+    fit_x, fit_y = train_x[:,:,:,1:end-fitnessize], train_y[1:end-fitnessize]
+    evo_x, evo_y = train_x[:,:,:,end-fitnessize:end], train_y[end-fitnessize:end]
 
-    fit_iter = RepeatPartitionIterator(GpuIterator(Iterators.cycle(dataiter(fit_x, fit_y), nepochs)), 2)
+    fit_iter = RepeatPartitionIterator(GpuIterator(Iterators.cycle(dataiter(fit_x, fit_y), nepochs)), nbatches_per_gen)
     evo_iter = GpuIterator(dataiter(evo_x, evo_y))
 
-    run_experiment(popsize, GpuIterator(fit_iter), GpuIterator(evo_iter), nelites=nelites, baseseed=baseseed, cb=cb)
+    return GpuIterator(fit_iter), GpuIterator(evo_iter)
 end
 
-function run_experiment(popsize, datatrain, datafitness; nelites = 2, baseseed=666, cb = () -> nothing)
+function run_experiment(popsize, fit_iter, evo_iter; nelites = 2, baseseed=666, cb = identity, mdir = defaultdir(), newpop = false)
     Random.seed!(NaiveGAflux.rng_default, baseseed)
 
-    population = initial_models(popsize, () -> fitnessfun(datafitness))
+    population = initial_models(popsize, mdir, newpop, () -> fitnessfun(evo_iter))
     evostrategy = evolutionstrategy(popsize, nelites)
 
-    for (gen, iter) in enumerate(datatrain)
+    evolutionloop(population, evostrategy, fit_iter, cb)
+
+    return population
+end
+
+
+function evolutionloop(population, evostrategy, trainingiter, cb)
+    for (gen, iter) in enumerate(trainingiter)
         @info "Begin generation $gen"
 
         for (i, cand) in enumerate(population)
@@ -45,12 +54,10 @@ function run_experiment(popsize, datatrain, datafitness; nelites = 2, baseseed=6
         for (i, cand) in enumerate(population)
             @info "\tFitness model $i: $(fitness(cand))"
         end
+        cb(population)
 
         population = evolve!(evostrategy, population)
-        cb()
     end
-
-    return population
 end
 
 
@@ -67,8 +74,14 @@ function evolutionstrategy(popsize, nelites=2)
     return AfterEvolution(reset, rename_models)
 end
 
-rename_models(pop) = map(rename_model, enumerate(pop))
-function rename_model((i, cand)::Tuple)
+function rename_models(pop)
+    for i in eachindex(pop)
+        pop[i] = rename_model(i, pop[i])
+    end
+    return pop
+ end
+
+function rename_model(i, cand)
     rename_model(str::String; cf) = replace(str, r"^model\d+\.*" => "model$i.")
     rename_model(x...;cf) = clone(x...; cf=cf)
     rename_model(m::AbstractMutableComp; cf) = m # No need to copy below this level
@@ -112,10 +125,14 @@ is_globpool(v::CompVertex) = is_globpool(v.computation)
 is_globpool(l::ActivationContribution) = is_globpool(NaiveNASflux.wrapped(l))
 is_globpool(f) = f == globalpooling2d
 
-function initial_models(nr, fitnessgen)
+function initial_models(nr, mdir, newpop, fitnessgen)
+    if newpop
+        rm(mdir, force=true, recursive=true)
+    end
+
     iv(i) = inputvertex(join(["model", i, ".input"]), 3, FluxConv{2}())
     as = initial_archspace()
-    return map(i -> create_model(join(["model", i]), as, iv(i), fitnessgen), 1:nr)
+    return PersistentArray(mdir, nr, i -> create_model(join(["model", i]), as, iv(i), fitnessgen))
 end
 create_model(name, as, in, fg) = HostCandidate(CandidateModel(CompGraph(in, as(name, in)), Descent(0.01), Flux.logitcrossentropy, fg()))
 

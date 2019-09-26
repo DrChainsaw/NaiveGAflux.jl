@@ -236,3 +236,42 @@ end
 Base.print(io::IO, itr::BatchIterator) = print(io, "BatchIterator(size=$(size(itr.base)), batchsize=$(itr.batchsize))")
 
 Flux.onehotbatch(itr::BatchIterator, labels) = MapIterator(x -> Flux.onehotbatch(x, labels), itr)
+
+"""
+    PersistentArray{T, N} <: AbstractArray{T, N}
+    PersistentArray(savedir::String, nr::Integer, generator;suffix=".jls")
+    PersistentArray(savedir::String, suffix::String, data::Array)
+
+Simple persistent array. Can be created from serialized data and can be asked to persist its elements.
+
+Note that once initialized, the array is not backed by the serialized data. Adding/deleting files is not reflected in data and vice versa.
+"""
+struct PersistentArray{T, N} <: AbstractArray{T, N}
+    savedir::String
+    suffix::String
+    data::Array{T,N}
+end
+function PersistentArray(savedir::String, nr::Integer, generator;suffix=".jls")
+    data = map(1:nr) do i
+        filename = joinpath(savedir, "$i$suffix")
+        isfile(filename) && return deserialize(filename)
+        return generator(i)
+    end
+    return PersistentArray(savedir, suffix, data)
+end
+function persist(a::PersistentArray)
+    mkpath(a.savedir)
+    for (i, v) in enumerate(a)
+        serialize(filename(a, i), v)
+    end
+end
+filename(a::PersistentArray, i::Int) = joinpath(a.savedir, "$i$(a.suffix)")
+Base.rm(a::PersistentArray; force=true, recursive=true) = rm(a.savedir, force=force, recursive=recursive)
+Base.rm(a::PersistentArray, i::Int, force=false, recursive=true) = rm(filename(a,i), force=force, recursive=recursive)
+
+Base.size(a::PersistentArray) = size(a.data)
+Base.getindex(a::PersistentArray, i::Int) = getindex(a.data, i)
+Base.getindex(a::PersistentArray, I::Vararg{Int, N}) where N = getindex(a.data, I...)
+Base.setindex!(a::PersistentArray, v, i::Int) = setindex!(a.data, v, i)
+Base.setindex!(a::PersistentArray, v, I::Vararg{Int, N}) where N = setindex!(a.data, v, I...)
+Base.similar(a::PersistentArray, t::Type{S}, dims::Dims) where S = PersistentArray(a.savedir, a.suffix, similar(a.data,t, dims))

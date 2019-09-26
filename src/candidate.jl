@@ -347,7 +347,7 @@ evolve!(::NoOpEvolution, pop) = pop
     AfterEvolution <: AbstractEvolution
     AfterEvolution(evo::AbstractEvolution, fun::Function)
 
-Calls `fun(newpop)` where `newpop = evolve!(e.evo, pop)` where `pop` is original population to evolve.
+Return `fun(newpop)` where `newpop = evolve!(e.evo, pop)` where `pop` is original population to evolve.
 """
 struct AfterEvolution <: AbstractEvolution
     evo::AbstractEvolution

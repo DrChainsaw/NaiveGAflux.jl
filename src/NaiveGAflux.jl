@@ -5,8 +5,10 @@ using Reexport
 using Random
 using Logging
 using Statistics
+using Serialization
 
 const rng_default = Random.GLOBAL_RNG
+const modeldir = "models"
 
 # Fitness
 export fitness, instrument, reset!, AbstractFitness, AccuracyFitness, MapFitness, TimeFitness, FitnessCache, NanGuard, AggFitness
@@ -18,7 +20,7 @@ export evolvemodel, AbstractCandidate, CandidateModel, HostCandidate
 export evolve!, AbstractEvolution, NoOpEvolution, AfterEvolution, ResetAfterEvolution, EliteSelection, SusSelection, CombinedEvolution, EvolveCandidates
 
 # misc types
-export Probability, MutationShield, ApplyIf, RemoveIfSingleInput, RepeatPartitionIterator, MapIterator, GpuIterator, BatchIterator
+export Probability, MutationShield, ApplyIf, RemoveIfSingleInput, RepeatPartitionIterator, MapIterator, GpuIterator, BatchIterator, PersistentArray, persist
 
 # Vertex selection types
 export AbstractVertexSelection, AllVertices, FilterMutationAllowed
