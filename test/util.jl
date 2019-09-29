@@ -129,7 +129,7 @@ end
 @testset "GpuIterator" begin
     dorg = 1:100;
     itr = GpuIterator(zip([view(dorg,1:10)], [dorg]))
-    d1,d2 = first(itr)
+    d1,d2 = first(itr) |> cpu
     @test !isa(d1, SubArray)
     @test d1 == dorg[1:10]
     @test d2 == dorg

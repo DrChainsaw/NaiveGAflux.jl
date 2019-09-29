@@ -160,7 +160,6 @@ end
 function instrument(l::T, s::NanGuard{T}, f::Function) where T <: AbstractFunLabel
     function guard(x...)
         s.shield && return s.lastout(s.replaceval)
-
         y = f(x...)
         wasnan, y = checkreplace(isnan, y; replaceval = s.replaceval)
         wasinf, y = checkreplace(isinf, y; replaceval = s.replaceval)
@@ -178,12 +177,19 @@ function instrument(l::T, s::NanGuard{T}, f::Function) where T <: AbstractFunLab
 end
 instrument(l::AbstractFunLabel, s::NanGuard, f::Function) = instrument(l, s.base, f)
 
-dummyvalue(::Type{<:TrackedArray{<:Any, <:Any, <:AbstractArray{T}}}, shape, val) where T = param(val * ones(T, shape)) |> gpu
-dummyvalue(::Type{<:AbstractArray{T}}, shape, val) where T = val * ones(T, shape)
+dummyvalue(::Type{<:TrackedArray{<:Any, <:Any, <:AT}}, shape, val) where AT <: AbstractArray = param(dummyvalue(AT, shape, val))
+dummyvalue(::Type{<:AT}, shape, val) where AT <: AbstractArray = fill!(similar(AT, shape), val)
 dummyvalue(::Type{T}, shape, val) where T <: Number = T(val)
 
 checkreplace(f, x::T; replaceval) where T <:Real = f(x) ? (true, T(replaceval)) : (false, x)
-checkreplace(f, x::Union{Tuple, AbstractArray}; replaceval) = any(f, x), map(xi -> f(xi) ? replaceval : xi, x)
+function checkreplace(f, x::Union{Tuple, AbstractArray}; replaceval)
+    invalid = f.(x)
+    anyinvalid = any(invalid)
+    if anyinvalid
+        return true, map(xi -> f(xi) ? replaceval : xi, x)
+    end
+    return false, x
+end
 function checkreplace(f, x::TrackedArray; replaceval)
     invalid = f.(x)
     anyinvalid = any(invalid)
@@ -281,13 +287,25 @@ Flux.@treelike HostCandidate
 function Flux.train!(c::HostCandidate, data)
     Flux.train!(c.c |> gpu, data)
     c.c |> cpu # As some parts, namely CompGraph change internal state when mapping to GPU
+    gpu_gc()
 end
 
 function fitness(c::HostCandidate)
     fitval = fitness(c.c |> gpu)
     c.c |> cpu # As some parts, namely CompGraph change internal state when mapping to GPU
+    gpu_gc()
     return fitval
 end
+
+const gpu_gc = if Flux.has_cuarrays()
+    function()
+        GC.gc()
+        CuArrays.reclaim(true)
+    end
+else
+    () -> nothing
+end
+
 
 reset!(c::HostCandidate) = reset!(c.c)
 

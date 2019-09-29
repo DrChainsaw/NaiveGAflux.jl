@@ -36,10 +36,10 @@
         @test fitness(tf, identity) == 0
 
         @test instrument(Train(), tf, sleepret)(0.02) == 0.02
-        @test instrument(Validate(), tf, sleepret)(0.1) == 0.1
+        @test instrument(Validate(), tf, sleepret)(0.5) == 0.5
         @test instrument(Train(), tf, sleepret)(0.04) == 0.04
 
-        @test fitness(tf, identity) ≈ 0.03 rtol=0.5
+        @test fitness(tf, identity) < 0.5 / 3
 
         reset!(tf)
 

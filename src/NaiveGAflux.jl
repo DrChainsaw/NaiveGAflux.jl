@@ -7,6 +7,10 @@ using Logging
 using Statistics
 using Serialization
 
+if Flux.has_cuarrays()
+    using CuArrays
+end
+
 const rng_default = Random.GLOBAL_RNG
 const modeldir = "models"
 

@@ -13,10 +13,8 @@ defaultdir(this="CIFAR10") = joinpath(NaiveGAflux.modeldir, this)
 NaiveNASlib.minΔninfactor(::ActivationContribution) = 1
 NaiveNASlib.minΔnoutfactor(::ActivationContribution) = 1
 
-NaiveNASlib.clone(v::NaiveNASflux.InputShapeVertex, ins::AbstractVertex...;cf=clone) = NaiveNASflux.InputShapeVertex(cf(base(v), ins...;cf=cf), layertype(v))
 
-
-function iterators((train_x,train_y)::Tuple; nepochs=200, batchsize=32, fitnessize=2048, nbatches_per_gen=200)
+function iterators((train_x,train_y)::Tuple; nepochs=200, batchsize=32, fitnessize=2048, nbatches_per_gen=100)
     batch(data) = BatchIterator(data, batchsize)
     dataiter(x,y) = zip(batch(x), Flux.onehotbatch(batch(y), 0:9))
 
@@ -26,7 +24,7 @@ function iterators((train_x,train_y)::Tuple; nepochs=200, batchsize=32, fitnessi
     fit_iter = RepeatPartitionIterator(GpuIterator(Iterators.cycle(dataiter(fit_x, fit_y), nepochs)), nbatches_per_gen)
     evo_iter = GpuIterator(dataiter(evo_x, evo_y))
 
-    return GpuIterator(fit_iter), GpuIterator(evo_iter)
+    return fit_iter, evo_iter
 end
 
 function run_experiment(popsize, fit_iter, evo_iter; nelites = 2, baseseed=666, cb = identity, mdir = defaultdir(), newpop = false)
@@ -44,6 +42,8 @@ end
 function evolutionloop(population, evostrategy, trainingiter, cb)
     for (gen, iter) in enumerate(trainingiter)
         @info "Begin generation $gen"
+
+        #data = collect(iter)
 
         for (i, cand) in enumerate(population)
             @info "\tTrain model $i with $(nv(NaiveGAflux.graph(cand))) vertices"
@@ -90,6 +90,7 @@ end
 
 function mutation()
     mutate_nout = NeuronSelectMutation(NoutMutation(-0.05, 0.05)) # Max 5% change in output size
+    decrease_nout = NeuronSelectMutation(NoutMutation(-0.05, 0))
     add_vertex = add_vertex_mutation()
     rem_vertex = RemoveVertexMutation()
 
@@ -97,12 +98,27 @@ function mutation()
     mp(m,p) = VertexMutation(MutationProbability(m, Probability(p)))
 
     mnout = mp(LogMutation(v -> "\tChange size of vertex $(name(v))", mutate_nout), 0.02)
+    dnout = mp(LogMutation(v -> "\tChange size of vertex $(name(v))", mutate_nout), 0.02)
     maddv = mp(LogMutation(v -> "\tAdd vertex after $(name(v))", add_vertex), 0.005)
     mremv = mp(LogMutation(v -> "\tRemove vertex $(name(v))", rem_vertex), 0.01)
 
+    mremv = MutationFilter(g -> nv(g) > 5, mremv)
+
+    # Create two possible mutations: One which is guaranteed to not increase the size:
+    dsize = MutationList(mremv, PostMutation(dnout, NeuronSelect()))
+    # ...and another which can either decrease or increase the size:
+    msize = MutationList(mremv, PostMutation(mnout, NeuronSelect()), maddv)
     # Add mutation last as new vertices with neuron_value == 0 screws up outputs selection as per https://github.com/DrChainsaw/NaiveNASlib.jl/issues/39
-    return LogMutation(g -> "Mutate model $(modelname(g))", MutationList(MutationFilter(g -> nv(g) > 5, mremv), PostMutation(mnout, NeuronSelect()), MutationFilter(g -> nv(g) < 100, maddv)))
+
+    # If isbig then perform the mutation operation which is guaranteed to not increase the size
+    # Otherwise perform the mutation which might decrease or increase the size
+    # This is done mostly to avoid OOM or time outs. Doesn't hurt that it also speeds things up
+    mall = MutationList(MutationFilter(isbig, dsize), MutationFilter(!isbig, msize))
+
+    return LogMutation(g -> "Mutate model $(modelname(g))", mall)
 end
+
+isbig(g) = mapreduce(prod ∘ size, +, params(g).order) > 20e7
 
 Flux.mapchildren(f, aa::AbstractArray{<:Integer, 1}) = aa
 
@@ -212,7 +228,7 @@ function rep_fork_res(s, n, min_rp=1;loglevel=Logging.Debug)
     resconf = VertexConf(outwrap = ActivationContribution, traitdecoration = MutationShield ∘ NaiveGAflux.default_logging())
     concconf = ConcConf(ActivationContribution,  MutationShield ∘ NaiveGAflux.default_logging())
 
-    msgfun(v) = "Created $(name(v)), nin: $(nin(v)), nout: $(nout(v))"
+    msgfun(v) = "\tCreated $(name(v)), nin: $(nin(v)), nout: $(nout(v))"
 
     rep = RepeatArchSpace(s, min_rp:3)
     fork = LoggingArchSpace(loglevel, msgfun, ForkArchSpace(rep, min_rp:3, conf=concconf))
@@ -223,7 +239,7 @@ end
 
 function convspace(conf, outsizes, kernelsizes, acts; loglevel=Logging.Debug, lspacewrap=identity)
     # CoupledParSpace due to CuArrays issue# 356
-    msgfun(v) = "Created $(name(v)), nin: $(nin(v)), nout: $(nout(v))"
+    msgfun(v) = "\tCreated $(name(v)), nin: $(nin(v)), nout: $(nout(v))"
     conv2d = LoggingArchSpace(loglevel, msgfun, VertexSpace(conf, NamedLayerSpace("conv2d", lspacewrap(ConvSpace(BaseLayerSpace(outsizes, acts), CoupledParSpace(kernelsizes, 2))))))
     bn = LoggingArchSpace(loglevel, msgfun, VertexSpace(conf, NamedLayerSpace("batchnorm", lspacewrap(BatchNormSpace(acts)))))
 

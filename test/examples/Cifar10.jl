@@ -13,8 +13,8 @@
     Base.iterate(d::DummyDataIter, s=0) = s==d.n ? nothing : ((randn(rng, Float32, 32,32,3,2), onehot(rand(rng, 0:9,2))), s+1)
     Base.length(d::DummyDataIter) = d.n
 
-    trainiter = RepeatPartitionIterator(Iterators.cycle(DummyDataIter(1), 3), 1)
-    valiter = DummyDataIter(1)
+    trainiter = RepeatPartitionIterator(GpuIterator(Iterators.cycle(DummyDataIter(1), 3)), 1)
+    valiter = GpuIterator(DummyDataIter(1))
 
     @test_logs (:info, "Begin generation 1") (:info, "Begin generation 2") (:info, "Begin generation 3") match_mode=:any run_experiment(2, trainiter, valiter, nelites = 0, baseseed=12345)
 end
