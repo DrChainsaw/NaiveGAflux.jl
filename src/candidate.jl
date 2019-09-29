@@ -306,37 +306,66 @@ else
     () -> nothing
 end
 
-
 reset!(c::HostCandidate) = reset!(c.c)
-
 graph(c::HostCandidate) = graph(c.c)
 
 """
-    evolvemodel(m::AbstractMutation{CompGraph})
+    CacheCandidate <: AbstractCandidate
+    CacheCandidate(c::AbstractCandidate)
+
+Caches fitness values produced by `c` until `reset!` is called.
+
+Useful with `HostCandidate` to pervent models from being pushed to/from GPU just to fetch fitness values.
+"""
+mutable struct CacheCandidate <: AbstractCandidate
+    fitnesscache
+    c::AbstractCandidate
+end
+CacheCandidate(c::AbstractCandidate) = CacheCandidate(nothing, c)
+
+Flux.train!(c::CacheCandidate, data) = Flux.train!(c.c, data)
+
+function fitness(c::CacheCandidate)
+    if isnothing(c.fitnesscache)
+        c.fitnesscache = fitness(c.c)
+    end
+    return c.fitnesscache
+end
+
+function reset!(c::CacheCandidate)
+    c.fitnesscache = nothing
+    reset!(c.c)
+end
+graph(c::CacheCandidate) = graph(c.c)
+
+
+"""
+    evolvemodel(m::AbstractMutation{CompGraph}, newfields::Function=deepcopy)
 
 Return a function which maps a `CandidateModel c1` to a new `CandidateModel c2` where `c2.graph = m(copy(c1.graph))`.
 
-All other fields are copied "as is".
+All other fields are mapped through the function `newfields`.
 
 Intended use is together with [`EvolveCandidates`](@ref).
 """
-function evolvemodel(m::AbstractMutation{CompGraph})
+function evolvemodel(m::AbstractMutation{CompGraph}, newfields::Function=deepcopy)
     function copymutate(g::CompGraph)
         ng = copy(g)
         m(ng)
         return ng
     end
-    mapcandidate(copymutate)
+    mapcandidate(copymutate, newfields)
 end
 
 function mapcandidate(newgraph::Function, newfields::Function=deepcopy)
     mapfield(g::CompGraph) = newgraph(g)
     mapfield(f) = newfields(f)
-    # Bleh! This is not sustainable. Will refactor when I find the time
-    newcand(c::CandidateModel) = CandidateModel(map(mapfield, getproperty.(c, fieldnames(CandidateModel)))...)
-    newcand(c::HostCandidate) = HostCandidate(newcand(c.c))
-    return newcand
+    return c -> newcand(c, mapfield)
 end
+
+newcand(c::CandidateModel, mapfield) = CandidateModel(map(mapfield, getproperty.(c, fieldnames(CandidateModel)))...)
+newcand(c::HostCandidate, mapfield) = HostCandidate(newcand(c.c, mapfield))
+newcand(c::CacheCandidate, mapfield) = CacheCandidate(newcand(c.c, mapfield))
 
 """
     AbstractEvolution

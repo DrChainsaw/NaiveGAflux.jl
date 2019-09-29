@@ -14,7 +14,7 @@ NaiveNASlib.minΔninfactor(::ActivationContribution) = 1
 NaiveNASlib.minΔnoutfactor(::ActivationContribution) = 1
 
 
-function iterators((train_x,train_y)::Tuple; nepochs=200, batchsize=32, fitnessize=2048, nbatches_per_gen=100)
+function iterators((train_x,train_y)::Tuple; nepochs=200, batchsize=64, fitnessize=2048, nbatches_per_gen=100)
     batch(data) = BatchIterator(data, batchsize)
     dataiter(x,y) = zip(batch(x), Flux.onehotbatch(batch(y), 0:9))
 
@@ -43,8 +43,6 @@ function evolutionloop(population, evostrategy, trainingiter, cb)
     for (gen, iter) in enumerate(trainingiter)
         @info "Begin generation $gen"
 
-        #data = collect(iter)
-
         for (i, cand) in enumerate(population)
             @info "\tTrain model $i with $(nv(NaiveGAflux.graph(cand))) vertices"
             Flux.train!(cand, iter)
@@ -64,9 +62,7 @@ end
 function evolutionstrategy(popsize, nelites=2)
     elite = EliteSelection(nelites)
 
-    # Looks like a complete mess because mutation is stateful -> we need to create a new instance each time we mutate
-    # Want: EvolveCandidates(evolvemodel(mutation())
-    mutate = EvolveCandidates(c -> evolvemodel(mutation())(c))
+    mutate = EvolveCandidates(evolvecandidate())
     evolve = SusSelection(popsize - nelites, mutate)
 
     combine = CombinedEvolution(elite, evolve)
@@ -86,6 +82,15 @@ function rename_model(i, cand)
     rename_model(x...;cf) = clone(x...; cf=cf)
     rename_model(m::AbstractMutableComp; cf) = m # No need to copy below this level
     return NaiveGAflux.mapcandidate(g -> copy(g, rename_model))(cand)
+end
+
+function evolvecandidate()
+    function mutate_lr(opt::Descent)
+        newlr = clamp(opt.eta + (rand() - 0.5) * opt.eta, 1e-6, 0.3)
+        return Descent(newlr)
+    end
+    mutate_lr(x) = deepcopy(x)
+    return evolvemodel(mutation(), mutate_lr)
 end
 
 function mutation()
@@ -148,9 +153,9 @@ function initial_models(nr, mdir, newpop, fitnessgen)
 
     iv(i) = inputvertex(join(["model", i, ".input"]), 3, FluxConv{2}())
     as = initial_archspace()
-    return PersistentArray(mdir, nr, i -> create_model(join(["model", i]), as, iv(i), fitnessgen))
+    return map(CacheCandidate, PersistentArray(mdir, nr, i -> create_model(join(["model", i]), as, iv(i), fitnessgen)))
 end
-create_model(name, as, in, fg) = HostCandidate(CandidateModel(CompGraph(in, as(name, in)), Descent(0.01), Flux.logitcrossentropy, fg()))
+create_model(name, as, in, fg) = CacheCandidate(HostCandidate(CandidateModel(CompGraph(in, as(name, in)), Descent(0.01), Flux.logitcrossentropy, fg())))
 
 modelname(c::AbstractCandidate) = modelname(NaiveGAflux.graph(c))
 modelname(g::CompGraph) = split(name(g.inputs[]),'.')[1]
@@ -230,8 +235,8 @@ function rep_fork_res(s, n, min_rp=1;loglevel=Logging.Debug)
 
     msgfun(v) = "\tCreated $(name(v)), nin: $(nin(v)), nout: $(nout(v))"
 
-    rep = RepeatArchSpace(s, min_rp:3)
-    fork = LoggingArchSpace(loglevel, msgfun, ForkArchSpace(rep, min_rp:3, conf=concconf))
+    rep = RepeatArchSpace(s, min_rp:2)
+    fork = LoggingArchSpace(loglevel, msgfun, ForkArchSpace(rep, min_rp:2, conf=concconf))
     res = LoggingArchSpace(loglevel, msgfun, ResidualArchSpace(rep, resconf))
     rep = LoggingArchSpace(loglevel, msgfun, rep)
     return rep_fork_res(ArchSpace(ParSpace([rep, fork, res])), n-1, 0, loglevel=loglevel)

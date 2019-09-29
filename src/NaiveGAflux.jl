@@ -18,7 +18,7 @@ const modeldir = "models"
 export fitness, instrument, reset!, AbstractFitness, AccuracyFitness, MapFitness, TimeFitness, FitnessCache, NanGuard, AggFitness
 
 # Candidate
-export evolvemodel, AbstractCandidate, CandidateModel, HostCandidate
+export evolvemodel, AbstractCandidate, CandidateModel, HostCandidate, CacheCandidate
 
 # Evolution
 export evolve!, AbstractEvolution, NoOpEvolution, AfterEvolution, ResetAfterEvolution, EliteSelection, SusSelection, CombinedEvolution, EvolveCandidates
