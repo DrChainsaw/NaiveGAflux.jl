@@ -4,8 +4,12 @@ using ..NaiveGAflux
 import NaiveGAflux:globalpooling2d
 using Random
 import Logging
+using Statistics
+using Serialization
 
 export run_experiment, iterators
+
+export PlotFitness, ScatterPop, ScatterOpt, MultiPlot, CbAll
 
 defaultdir(this="CIFAR10") = joinpath(NaiveGAflux.modeldir, this)
 
@@ -14,7 +18,7 @@ NaiveNASlib.minΔninfactor(::ActivationContribution) = 1
 NaiveNASlib.minΔnoutfactor(::ActivationContribution) = 1
 
 
-function iterators((train_x,train_y)::Tuple; nepochs=200, batchsize=64, fitnessize=2048, nbatches_per_gen=100)
+function iterators((train_x,train_y)::Tuple; nepochs=200, batchsize=32, fitnessize=2048, nbatches_per_gen=300)
     batch(data) = BatchIterator(data, batchsize)
     dataiter(x,y) = zip(batch(x), Flux.onehotbatch(batch(y), 0:9))
 
@@ -43,9 +47,11 @@ function evolutionloop(population, evostrategy, trainingiter, cb)
     for (gen, iter) in enumerate(trainingiter)
         @info "Begin generation $gen"
 
+        data = collect(iter)
+
         for (i, cand) in enumerate(population)
             @info "\tTrain model $i with $(nv(NaiveGAflux.graph(cand))) vertices"
-            Flux.train!(cand, iter)
+            @time Flux.train!(cand, data)
         end
 
         # TODO: Bake into evolution? Would anyways like to log selected models...
@@ -85,13 +91,19 @@ function rename_model(i, cand)
 end
 
 function evolvecandidate()
-    function mutate_lr(opt::Descent)
-        newlr = clamp(opt.eta + (rand() - 0.5) * opt.eta, 1e-6, 0.3)
-        return Descent(newlr)
+    function mutate_opt(opt::Flux.Optimise.Optimiser)
+        return newopt(opt)
     end
-    mutate_lr(x) = deepcopy(x)
-    return evolvemodel(mutation(), mutate_lr)
+    mutate_opt(x) = deepcopy(x)
+    return evolvemodel(mutation(), mutate_opt)
 end
+
+newlr(o::Flux.Optimise.Optimiser) = newlr(o.os[].eta)
+newlr(lr::Number) = clamp(lr + (rand() - 0.5) * lr, 1e-6, 0.3)
+
+newopt(lr::Number) = Flux.Optimise.Optimiser([rand([Descent, Momentum, Nesterov, ADAM, NADAM])(lr)])
+newopt(opt::Flux.Optimise.Optimiser) = NaiveGAflux.apply(Probability(0.05)) ? newopt(newlr(opt)) : sameopt(opt.os[], newlr(opt))
+sameopt(::T, lr) where T = Flux.Optimise.Optimiser([T(lr)])
 
 function mutation()
     mutate_nout = NeuronSelectMutation(NoutMutation(-0.05, 0.05)) # Max 5% change in output size
@@ -103,7 +115,7 @@ function mutation()
     mp(m,p) = VertexMutation(MutationProbability(m, Probability(p)))
 
     mnout = mp(LogMutation(v -> "\tChange size of vertex $(name(v))", mutate_nout), 0.02)
-    dnout = mp(LogMutation(v -> "\tChange size of vertex $(name(v))", mutate_nout), 0.02)
+    dnout = mp(LogMutation(v -> "\tReduce size of vertex $(name(v))", decrease_nout), 0.02)
     maddv = mp(LogMutation(v -> "\tAdd vertex after $(name(v))", add_vertex), 0.005)
     mremv = mp(LogMutation(v -> "\tRemove vertex $(name(v))", rem_vertex), 0.01)
 
@@ -123,7 +135,10 @@ function mutation()
     return LogMutation(g -> "Mutate model $(modelname(g))", mall)
 end
 
-isbig(g) = mapreduce(prod ∘ size, +, params(g).order) > 20e7
+nparams(c::AbstractCandidate) = nparams(NaiveGAflux.graph(c))
+nparams(g::CompGraph) = mapreduce(prod ∘ size, +, params(g).order)
+isbig(g) = nparams(g) > 20e7
+
 
 Flux.mapchildren(f, aa::AbstractArray{<:Integer, 1}) = aa
 
@@ -153,9 +168,9 @@ function initial_models(nr, mdir, newpop, fitnessgen)
 
     iv(i) = inputvertex(join(["model", i, ".input"]), 3, FluxConv{2}())
     as = initial_archspace()
-    return map(CacheCandidate, PersistentArray(mdir, nr, i -> create_model(join(["model", i]), as, iv(i), fitnessgen)))
+    return PersistentArray(mdir, nr, i -> create_model(join(["model", i]), as, iv(i), fitnessgen))
 end
-create_model(name, as, in, fg) = CacheCandidate(HostCandidate(CandidateModel(CompGraph(in, as(name, in)), Descent(0.01), Flux.logitcrossentropy, fg())))
+create_model(name, as, in, fg) = CacheCandidate(HostCandidate(CandidateModel(CompGraph(in, as(name, in)), newopt(newlr(0.01)), Flux.logitcrossentropy, fg())))
 
 modelname(c::AbstractCandidate) = modelname(NaiveGAflux.graph(c))
 modelname(g::CompGraph) = split(name(g.inputs[]),'.')[1]
@@ -236,7 +251,7 @@ function rep_fork_res(s, n, min_rp=1;loglevel=Logging.Debug)
     msgfun(v) = "\tCreated $(name(v)), nin: $(nin(v)), nout: $(nout(v))"
 
     rep = RepeatArchSpace(s, min_rp:2)
-    fork = LoggingArchSpace(loglevel, msgfun, ForkArchSpace(rep, min_rp:2, conf=concconf))
+    fork = LoggingArchSpace(loglevel, msgfun, ForkArchSpace(rep, min_rp:3, conf=concconf))
     res = LoggingArchSpace(loglevel, msgfun, ResidualArchSpace(rep, resconf))
     rep = LoggingArchSpace(loglevel, msgfun, rep)
     return rep_fork_res(ArchSpace(ParSpace([rep, fork, res])), n-1, 0, loglevel=loglevel)
@@ -255,5 +270,175 @@ function convspace(conf, outsizes, kernelsizes, acts; loglevel=Logging.Debug, ls
 
     return ArchSpace(ParSpace([conv2d, convbn, bnconv]))
 end
+
+
+## Plotting stuff. Maybe move to own file if reusable...
+
+loadifpresent(filename, default=Float32[]) = isfile(filename) ? deserialize(filename) : default
+
+"""
+    PlotFitness(plotfun, basedir=joinpath(defaultdir(), "PlotFitness"))
+
+Plots best and average fitness for each generation.
+
+Also serializes data so that plotting can be resumed if evolution is aborted.
+
+# Examples
+```julia-repl
+julia> using NaiveGAflux, NaiveGAflux.Cifar10, MLDatasets, Plots
+
+julia> gr();
+
+julia> run_experiment(50, iterators(CIFAR10.traindata())...; cb=PlotFitness(plot));
+```
+"""
+struct PlotFitness
+    best::Vector{Float32}
+    avg::Vector{Float32}
+    plt
+    basedir
+end
+
+function PlotFitness(plotfun, basedir=joinpath(defaultdir(), "PlotFitness"))
+    best = loadifpresent(joinpath(basedir, "best.jls"))
+    avg = loadifpresent(joinpath(basedir, "avg.jls"))
+    plt = plotfun(hcat(best,avg), label=["Best", "Avg"], xlabel="Generation", ylabel="Fitness", m=[:circle, :circle])
+    return PlotFitness(best, avg, plt, basedir)
+end
+
+function plotfitness(p::PlotFitness, population)
+    fits = fitness.(population)
+    best = maximum(fits)
+    avg = mean(fits)
+    push!(p.best, best)
+    push!(p.avg, avg)
+    push!(p.plt, length(p.best), [best, avg])
+end
+
+function (p::PlotFitness)(population)
+    plotfitness(p, population)
+    mkpath(p.basedir)
+    serialize(joinpath(p.basedir, "best.jls"), p.best)
+    serialize(joinpath(p.basedir, "avg.jls"), p.avg)
+    return p.plt
+end
+
+"""
+    ScatterPop(plotfun, basedir=joinpath(defaultdir(), "ScatterPop"))
+
+Scatter plot of number of vertices in model vs fitness vs number of parameters for each candidate.
+
+Also serializes data so that plotting can be resumed if evolution is aborted.
+
+# Examples
+```julia-repl
+julia> using NaiveGAflux, NaiveGAflux.Cifar10, MLDatasets, Plots
+
+julia> gr();
+
+julia> run_experiment(50, iterators(CIFAR10.traindata())...; cb=ScatterPop(scatter));
+```
+"""
+struct ScatterPop
+    plotfun
+    data::Vector{Array{Float32, 2}}
+    basedir
+end
+
+function ScatterPop(plotfun, basedir=joinpath(defaultdir(), "ScatterPop"))
+    data = loadifpresent(joinpath(basedir, "nvfitnp.jls"), [zeros(Float32,0,0)])
+    return ScatterPop(plotfun, data, basedir)
+end
+
+function plotfitness(p::ScatterPop, population)
+    fits = fitness.(population)
+    nverts = nv.(NaiveGAflux.graph.(population))
+    npars = nparams.(population)
+    push!(p.data, hcat(nverts, fits, npars))
+    return p.plotfun(nverts, fits, zcolor=npars/1e6, m=(:heat, 0.8), xlabel="Number of vertices", ylabel="Fitness", colorbar_title="Number of parameters (1e6)", label="")
+end
+
+function(p::ScatterPop)(population)
+    plt = plotfitness(p, population)
+    mkpath(p.basedir)
+    serialize(joinpath(p.basedir, "nvfitnp.jls"), p.data)
+    return plt
+end
+
+"""
+    ScatterOpt(plotfun, basedir=joinpath(defaultdir(), "ScatterOpt"))
+
+Scatter plot of learning rate vs fitness vs optimizer type for each candidate.
+
+Also serializes data so that plotting can be resumed if evolution is aborted.
+
+# Examples
+```julia-repl
+julia> using NaiveGAflux, NaiveGAflux.Cifar10, MLDatasets, Plots
+
+julia> gr();
+
+julia> run_experiment(50, iterators(CIFAR10.traindata())...; cb=ScatterOpt(scatter));
+```
+"""
+struct ScatterOpt
+    plotfun
+end
+
+function plotfitness(p::ScatterOpt, population)
+
+    opt(c::AbstractCandidate) = opt(c.c)
+    opt(c::CandidateModel) = c.opt
+
+    fits = fitness.(population)
+    opts = opt.(population)
+    lrs = map(o -> o.os[].eta, opts)
+    ots = map(o -> typeof(o.os[]), opts)
+
+    uots = unique(ots)
+    inds = map(o -> o .== ots, uots)
+
+    fitso = map(indv -> fits[indv], inds)
+    lrso = map(indv -> lrs[indv], inds)
+
+    return p.plotfun(lrso, fitso, xlabel="Learning rate", ylabel="Fitness", label=string.(uots), legend=:outerright, legendfontsize=5)
+end
+
+function(p::ScatterOpt)(population)
+    plt = plotfitness(p, population)
+    #mkpath(p.basedir)
+    #serialize(joinpath(p.basedir, "lrfitopt.jls"), p.data)
+    return plt
+end
+
+"""
+    MultiPlot(plotfun, plts...)
+
+Multiple plots in the same figure.
+
+# Examples
+```julia-repl
+julia> using NaiveGAflux, NaiveGAflux.Cifar10, MLDatasets, Plots
+
+julia> gr();
+
+julia> run_experiment(50, iterators(CIFAR10.traindata())...; cb=MultiPlot(display ∘ plot, PlotFitness(plot), ScatterPop(scatter), ScatterOpt(scatter)));
+```
+"""
+struct MultiPlot
+    plotfun
+    plts
+end
+MultiPlot(plotfun, plts...) = MultiPlot(plotfun, plts)
+
+(p::MultiPlot)(population) = p.plotfun(map(pp -> pp(population), p.plts)...)
+
+struct CbAll
+    cbs
+end
+CbAll(cbs...) = CbAll(cbs)
+
+(cba::CbAll)(population) = foreach(cb -> cb(population), cba.cbs)
+
 
 end  # module cifar10
