@@ -286,6 +286,7 @@ Flux.@treelike HostCandidate
 
 function Flux.train!(c::HostCandidate, data)
     Flux.train!(c.c |> gpu, data)
+    cleanopt(c) # As optimizer state does not survive transfer from gpu -> cpu
     c.c |> cpu # As some parts, namely CompGraph change internal state when mapping to GPU
     gpu_gc()
 end
@@ -366,6 +367,20 @@ end
 newcand(c::CandidateModel, mapfield) = CandidateModel(map(mapfield, getproperty.(c, fieldnames(CandidateModel)))...)
 newcand(c::HostCandidate, mapfield) = HostCandidate(newcand(c.c, mapfield))
 newcand(c::CacheCandidate, mapfield) = CacheCandidate(newcand(c.c, mapfield))
+
+function clearstate(s) end
+clearstate(s::AbstractDict) = foreach(k -> delete!(s, k), keys(s))
+function clearstate(s::IdDict)
+    s.ht = []
+    s.count = 0
+    s.ndel = 0
+end
+
+cleanopt(o::T) where T = foreach(fn -> clearstate(getfield(o, fn)), fieldnames(T))
+cleanopt(o::Flux.Optimise.Optimiser) = foreach(cleanopt, o.os)
+cleanopt(c::CandidateModel) = cleanopt(c.opt)
+cleanopt(c::HostCandidate) = cleanopt(c.c)
+cleanopt(c::CacheCandidate) = cleanopt(c.c)
 
 """
     AbstractEvolution

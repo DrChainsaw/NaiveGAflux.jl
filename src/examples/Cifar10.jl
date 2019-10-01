@@ -47,11 +47,9 @@ function evolutionloop(population, evostrategy, trainingiter, cb)
     for (gen, iter) in enumerate(trainingiter)
         @info "Begin generation $gen"
 
-        data = collect(iter)
-
         for (i, cand) in enumerate(population)
             @info "\tTrain model $i with $(nv(NaiveGAflux.graph(cand))) vertices"
-            @time Flux.train!(cand, data)
+            Flux.train!(cand, iter)
         end
 
         # TODO: Bake into evolution? Would anyways like to log selected models...
@@ -99,7 +97,7 @@ function evolvecandidate()
 end
 
 newlr(o::Flux.Optimise.Optimiser) = newlr(o.os[].eta)
-newlr(lr::Number) = clamp(lr + (rand() - 0.5) * lr, 1e-6, 0.3)
+newlr(lr::Number) = clamp(lr + (rand() - 0.5) * lr, 1e-6, 0.3) +  (NaiveGAflux.apply(Probability(0.05)) ? 0.2*rand() : 0)
 
 newopt(lr::Number) = Flux.Optimise.Optimiser([rand([Descent, Momentum, Nesterov, ADAM, NADAM])(lr)])
 newopt(opt::Flux.Optimise.Optimiser) = NaiveGAflux.apply(Probability(0.05)) ? newopt(newlr(opt)) : sameopt(opt.os[], newlr(opt))
