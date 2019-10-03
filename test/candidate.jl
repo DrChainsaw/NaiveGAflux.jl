@@ -107,7 +107,7 @@
             @test fitness(ng, identity) == 1
 
             # Overwritten by NanGuard
-            @test (@test_logs (:warn, r"NaN/Inf detected") nokfun(3)) == 0
+            @test (@test_logs (:warn, Regex("$val detected")) nokfun(3)) == 0
             @test nokfun(3) == 0
             @test fitness(ng, identity) == 0
 
@@ -123,7 +123,7 @@
             @test okfun(5) == 5
             @test fitness(ng, identity) == 1
 
-            @test (@test_logs (:warn, r"NaN/Inf detected") nokfun(param([1,2,3]))) == [0,2,3]
+            @test (@test_logs (:warn, Regex("$val detected")) nokfun(param([1,2,3]))) == [0,2,3]
             @test nokfun(param([1,2,3])) == [0,0,0]
 
             @test fitness(ng, identity) == 0
@@ -141,21 +141,21 @@
 
             @test fitness(ng, identity) == 1
 
-            @test (@test_logs (:warn, r"NaN/Inf detected") nokfun(Train())(3)) == 0
+            @test (@test_logs (:warn, r"NaN detected") nokfun(Train())(3)) == 0
             @test okfun(TrainLoss())([1,2,3]) == [1,2,3]
             @test okfun(Validate())(param([1,2,3])) == [1,2,3]
 
             @test fitness(ng, identity) == 0
 
             @test okfun(Train())(3) == 0
-            @test (@test_logs (:warn, r"NaN/Inf detected") nokfun(TrainLoss())(Float32[1,2,3])) == [0,2,3]
+            @test (@test_logs (:warn, r"NaN detected") nokfun(TrainLoss())(Float32[1,2,3])) == [0,2,3]
             @test okfun(Validate())(param([1,2,3])) == [1,2,3]
 
             @test fitness(ng, identity) == 0
 
             @test okfun(Train())(3) == 0
             @test okfun(TrainLoss())([1,2,3]) == [0,0,0]
-            @test (@test_logs (:warn, r"NaN/Inf detected") nokfun(Validate())(param([1,2,3]))) == [0,2,3]
+            @test (@test_logs (:warn, r"NaN detected") nokfun(Validate())(param([1,2,3]))) == [0,2,3]
 
             @test fitness(ng, identity) == 0
 

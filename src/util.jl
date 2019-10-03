@@ -120,15 +120,16 @@ end
 ```
 
 """
-mutable struct RepeatPartitionIterator{T}
-    base::T
+struct RepeatPartitionIterator{T, VS}
+    base::Iterators.Stateful{T, VS}
     ntake::Int
 end
-RepeatPartitionIterator(base, nrep) = RepeatPartitionIterator(base, nrep)
+RepeatPartitionIterator(base, nrep) = RepeatPartitionIterator(Iterators.Stateful(base), nrep)
+RepeatPartitionIterator(base::Iterators.Stateful, nrep) = RepeatPartitionIterator(base, nrep)
 
-function Base.iterate(itr::RepeatPartitionIterator, ndrop=0)
-    hasmore(ndrop, itr.base) && return nothing
-    return Iterators.take(Iterators.drop(itr.base, ndrop), itr.ntake), ndrop + itr.ntake
+function Base.iterate(itr::RepeatPartitionIterator, state=nothing)
+    length(itr) == 0 && return nothing
+    return Iterators.take(RepeatStatefulIterator(itr.base), itr.ntake), nothing
 end
 
 Base.length(itr::RepeatPartitionIterator) = ceil(Int, length(itr.base) / itr.ntake)
@@ -137,11 +138,6 @@ Base.eltype(itr::RepeatPartitionIterator{T}) where T = T
 Base.IteratorSize(itr::RepeatPartitionIterator) = Base.IteratorSize(itr.base)
 Base.IteratorEltype(itr::RepeatPartitionIterator) = Base.HasEltype()
 
-hasmore(than, itr) = hasmore(Base.IteratorSize(itr), than, itr)
-hasmore(::Union{Base.HasLength, Base.HasShape}, than, itr) = than >= length(itr)
-hasmore(::Base.IsInfinite, than, itr) = true
-# Can maybe work by just taking the first item, but chances are this iterator will anyway be very inefficient
-hasmore(::Base.SizeUnknown, than, itr) = error("Iterator can not work with unkown size!")
 
 """
     cycle(itr, nreps)
@@ -149,6 +145,30 @@ hasmore(::Base.SizeUnknown, than, itr) = error("Iterator can not work with unkow
 An iterator that cycles through `itr nreps` times.
 """
 Base.Iterators.cycle(itr, nreps) = Iterators.take(Iterators.cycle(itr), nreps * length(itr))
+
+struct RepeatStatefulIterator{T, VS}
+    base::Iterators.Stateful{T, VS}
+    start::VS
+    taken::Int
+end
+RepeatStatefulIterator(base) = RepeatStatefulIterator(base, base.nextvalstate, base.taken)
+
+function Base.iterate(itr::RepeatStatefulIterator, reset=true)
+    if reset
+        itr.base.nextvalstate = itr.start
+        itr.base.taken = itr.taken
+    end
+    valstate = iterate(itr.base)
+    isnothing(valstate) && return valstate
+    return valstate[1], false
+end
+
+Base.length(itr::RepeatStatefulIterator) = length(itr.base.itr) - itr.taken
+Base.eltype(itr::RepeatStatefulIterator) = eltype(itr.base)
+
+Base.IteratorSize(itr::RepeatStatefulIterator) = Base.IteratorSize(itr.base)
+Base.IteratorEltype(itr::RepeatStatefulIterator) = Base.HasEltype()
+
 
 """
     MapIterator{F, T}

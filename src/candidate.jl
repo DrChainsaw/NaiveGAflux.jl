@@ -169,7 +169,8 @@ function instrument(l::T, s::NanGuard{T}, f::Function) where T <: AbstractFunLab
         ss = size(y)
         s.lastout = val -> dummyvalue(tt, ss, val)
         if s.shield
-            @warn "NaN/Inf detected for function with label $l"
+            badtype = wasnan ? "NaN" : "Inf"
+            @warn "$badtype detected for function with label $l"
         end
         return y
     end

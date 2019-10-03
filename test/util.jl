@@ -116,8 +116,6 @@ end
             @test collect(itr) == exp
             cnt += 1
         end
-
-        @test cnt == length(bitr) == 6
     end
 end
 
