@@ -142,6 +142,14 @@ end
     @test "biter: $itr" == "biter: BatchIterator(size=(2, 3, 4, 5), batchsize=2)"
 end
 
+@testset "FlipIterator" begin
+    itr = FlipIterator([[1 2 3 4; 5 6 7 8]], 1.0, 2)
+    @test first(itr) == [4 3 2 1; 8 7 6 5]
+
+    itr = FlipIterator([[1 2 3 4; 5 6 7 8]], 0.0, 2)
+    @test first(itr) == [1 2 3 4; 5 6 7 8]
+end
+
 @testset "PersistentArray" begin
     testdir = "testPersistentArray"
     pa = PersistentArray(testdir, 5, identity)

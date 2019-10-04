@@ -228,7 +228,6 @@ struct BatchIterator{T}
     base::T
     batchsize::Int
 end
-#BatchIterator(base::T, batchsize) where T <: AbstractArray = BatchIterator{T}(base, batchsize)
 
 Base.length(itr::BatchIterator) = ceil(Int, size(itr.base)[end] / itr.batchsize)
 Base.size(itr::BatchIterator) = tuple(length(itr))
@@ -256,6 +255,34 @@ end
 Base.print(io::IO, itr::BatchIterator) = print(io, "BatchIterator(size=$(size(itr.base)), batchsize=$(itr.batchsize))")
 
 Flux.onehotbatch(itr::BatchIterator, labels) = MapIterator(x -> Flux.onehotbatch(x, labels), itr)
+
+"""
+    FlipIterator{T}
+    FlipIterator(base, p::Real=0.5, dim::Int=1)
+
+Flips data from `base` along dimension `dim` with probability `p`.
+"""
+struct FlipIterator{T}
+    p::Probability
+    dim::Int
+    base::T
+end
+FlipIterator(base, p::Real=0.5, dim::Int=1) = FlipIterator(Probability(p), dim, base)
+
+Base.length(itr::FlipIterator) = length(itr.base)
+Base.size(itr::FlipIterator) = size(itr.base)
+
+Base.IteratorSize(itr::FlipIterator) = Base.IteratorSize(itr.base)
+Base.IteratorEltype(itr::FlipIterator) = Base.IteratorEltype(itr.base)
+
+Base.iterate(itr::FlipIterator) = flip(itr, iterate(itr.base))
+Base.iterate(itr::FlipIterator, state) = flip(itr, iterate(itr.base, state))
+
+flip(itr::FlipIterator, valstate) = apply(itr.p) ? flip(itr.dim, valstate) : valstate
+flip(::Nothing) = nothing
+flip(dim::Integer, (data,state)::Tuple) = reverse(data, dims=dim), state
+
+
 
 """
     PersistentArray{T, N} <: AbstractArray{T, N}

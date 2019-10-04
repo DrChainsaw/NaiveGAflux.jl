@@ -24,7 +24,7 @@ export evolvemodel, AbstractCandidate, CandidateModel, HostCandidate, CacheCandi
 export evolve!, AbstractEvolution, NoOpEvolution, AfterEvolution, ResetAfterEvolution, EliteSelection, SusSelection, CombinedEvolution, EvolveCandidates
 
 # misc types
-export Probability, MutationShield, ApplyIf, RemoveIfSingleInput, RepeatPartitionIterator, MapIterator, GpuIterator, BatchIterator, PersistentArray, persist
+export Probability, MutationShield, ApplyIf, RemoveIfSingleInput, RepeatPartitionIterator, MapIterator, GpuIterator, BatchIterator, FlipIterator, PersistentArray, persist
 
 # Vertex selection types
 export AbstractVertexSelection, AllVertices, FilterMutationAllowed
