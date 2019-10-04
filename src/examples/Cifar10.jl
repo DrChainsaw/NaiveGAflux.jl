@@ -37,8 +37,6 @@ function run_experiment(popsize, fit_iter, evo_iter; nelites = 2, baseseed=666, 
     population = initial_models(popsize, mdir, newpop, () -> fitnessfun(evo_iter))
     evostrategy = evolutionstrategy(popsize, nelites)
 
-    population = map(fixcorruptopt, population)
-
     evolutionloop(population, evostrategy, fit_iter, cb)
 
     return population
@@ -174,11 +172,6 @@ create_model(name, as, in, fg) = CacheCandidate(HostCandidate(CandidateModel(Com
 
 modelname(c::AbstractCandidate) = modelname(NaiveGAflux.graph(c))
 modelname(g::CompGraph) = split(name(g.inputs[]),'.')[1]
-
-function fixcorruptopt(cand)
-    oo = cand.c.c.opt.os[]
-    return CacheCandidate(HostCandidate(CandidateModel(NaiveGAflux.graph(cand), Flux.Optimise.Optimiser([typeof(oo)(oo.eta)]), cand.c.c.lossfun, cand.c.c.fitness)))
-end
 
 function fitnessfun(dataset, accdigits=3)
     acc = AccuracyFitness(dataset)

@@ -58,27 +58,6 @@
         @test fitness(cf, identity) != val
     end
 
-    @testset "checkreplace $val" for (val, fun) in ((NaN, isnan), (Inf, isinf))
-        import NaiveGAflux: checkreplace
-
-        nr(x) = checkreplace(fun, x, replaceval=0)
-
-        @test nr(3) == (false, 3)
-        @test nr(val) == (true, 0)
-
-        # Tuples
-        @test nr((3,4)) == (false, (3,4))
-        @test nr((3,val)) == (true, (3,0))
-
-        # Arrays
-        @test nr([1,2,3]) == (false, [1,2,3])
-        @test nr([1,val,3]) == (true, [1,0,3])
-
-        # Flux parameter arrays
-        @test nr(param([1,2,3])) == (false, [1,2,3])
-        @test nr(param([1,val,3])) == (true, [1,0,3])
-    end
-
     @testset "NanGuard" begin
 
         import NaiveGAflux: Train, TrainLoss, Validate
@@ -123,7 +102,7 @@
             @test okfun(5) == 5
             @test fitness(ng, identity) == 1
 
-            @test (@test_logs (:warn, Regex("$val detected")) nokfun(param([1,2,3]))) == [0,2,3]
+            @test (@test_logs (:warn, Regex("$val detected")) nokfun(param([1,2,3]))) == [0,0,0]
             @test nokfun(param([1,2,3])) == [0,0,0]
 
             @test fitness(ng, identity) == 0
@@ -148,14 +127,14 @@
             @test fitness(ng, identity) == 0
 
             @test okfun(Train())(3) == 0
-            @test (@test_logs (:warn, r"NaN detected") nokfun(TrainLoss())(Float32[1,2,3])) == [0,2,3]
+            @test (@test_logs (:warn, r"NaN detected") nokfun(TrainLoss())(Float32[1,2,3])) == [0,0,0]
             @test okfun(Validate())(param([1,2,3])) == [1,2,3]
 
             @test fitness(ng, identity) == 0
 
             @test okfun(Train())(3) == 0
             @test okfun(TrainLoss())([1,2,3]) == [0,0,0]
-            @test (@test_logs (:warn, r"NaN detected") nokfun(Validate())(param([1,2,3]))) == [0,2,3]
+            @test (@test_logs (:warn, r"NaN detected") nokfun(Validate())(param([1,2,3]))) == [0,0,0]
 
             @test fitness(ng, identity) == 0
 
