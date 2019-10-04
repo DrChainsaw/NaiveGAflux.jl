@@ -18,7 +18,7 @@ NaiveNASlib.minΔninfactor(::ActivationContribution) = 1
 NaiveNASlib.minΔnoutfactor(::ActivationContribution) = 1
 
 
-function iterators((train_x,train_y)::Tuple; nepochs=200, batchsize=32, fitnessize=2048, nbatches_per_gen=3)
+function iterators((train_x,train_y)::Tuple; nepochs=200, batchsize=32, fitnessize=2048, nbatches_per_gen=300)
     batch(data) = BatchIterator(data, batchsize)
     dataiter(x,y, wrap = FlipIterator ∘ ShiftIterator) = zip(wrap(batch(x)), Flux.onehotbatch(batch(y), 0:9))
 
@@ -107,7 +107,9 @@ function mutation()
     mutate_nout = NeuronSelectMutation(NoutMutation(-0.05, 0.05)) # Max 5% change in output size
     decrease_nout = NeuronSelectMutation(NoutMutation(-0.05, 0))
     add_vertex = add_vertex_mutation()
+    add_maxpool = AddVertexMutation(VertexSpace(default_layerconf(), NamedLayerSpace("maxpool", MaxPoolSpace(PoolSpace2D([2])))))
     rem_vertex = RemoveVertexMutation()
+
 
     # Create a shorthand alias for MutationProbability
     mp(m,p) = VertexMutation(MutationProbability(m, Probability(p)))
@@ -115,14 +117,15 @@ function mutation()
     mnout = mp(LogMutation(v -> "\tChange size of vertex $(name(v))", mutate_nout), 0.02)
     dnout = mp(LogMutation(v -> "\tReduce size of vertex $(name(v))", decrease_nout), 0.02)
     maddv = mp(LogMutation(v -> "\tAdd vertex after $(name(v))", add_vertex), 0.005)
+    maddm = mp(MutationFilter(canaddmaxpool, LogMutation(v -> "\tAdd maxpool after $(name(v))", add_maxpool)), 0.0005)
     mremv = mp(LogMutation(v -> "\tRemove vertex $(name(v))", rem_vertex), 0.01)
 
     mremv = MutationFilter(g -> nv(g) > 5, mremv)
 
     # Create two possible mutations: One which is guaranteed to not increase the size:
-    dsize = MutationList(mremv, PostMutation(dnout, NeuronSelect()))
+    dsize = MutationList(mremv, PostMutation(dnout, NeuronSelect()), maddm)
     # ...and another which can either decrease or increase the size:
-    msize = MutationList(mremv, PostMutation(mnout, NeuronSelect()), maddv)
+    msize = MutationList(mremv, PostMutation(mnout, NeuronSelect()), maddm, maddv)
     # Add mutation last as new vertices with neuron_value == 0 screws up outputs selection as per https://github.com/DrChainsaw/NaiveNASlib.jl/issues/39
 
     # If isbig then perform the mutation operation which is guaranteed to not increase the size
@@ -137,6 +140,7 @@ nparams(c::AbstractCandidate) = nparams(NaiveGAflux.graph(c))
 nparams(g::CompGraph) = mapreduce(prod ∘ size, +, params(g).order)
 isbig(g) = nparams(g) > 20e7
 
+canaddmaxpool(v::AbstractVertex) = is_convtype(v) && !occursin.(r"(path|res|maxpool)", name(v)) && sum(endswith.(name.(all_in_graph(v)), "maxpool")) < 5
 
 Flux.mapchildren(f, aa::AbstractArray{<:Integer, 1}) = aa
 
@@ -209,7 +213,6 @@ function initial_archspace()
     rfr2 = rep_fork_res(conv2,2)
 
     # Each "block" is finished with a maxpool to downsample
-    # TODO: Maxpools can currently be removed, but are never added. Care needs to be taken to not insert too many so shape is subsampled below 1. MutationFilter and then count number of maxpools in graph?
     maxpoolvertex = VertexSpace(layerconf, NamedLayerSpace("maxpool", MaxPoolSpace(PoolSpace2D([2]))))
     red1 = ListArchSpace(rfr1, maxpoolvertex)
     red2 = ListArchSpace(rfr2, maxpoolvertex)
