@@ -24,7 +24,7 @@ export evolvemodel, AbstractCandidate, CandidateModel, HostCandidate, CacheCandi
 export evolve!, AbstractEvolution, NoOpEvolution, AfterEvolution, ResetAfterEvolution, EliteSelection, SusSelection, CombinedEvolution, EvolveCandidates
 
 # misc types
-export Probability, MutationShield, ApplyIf, RemoveIfSingleInput, RepeatPartitionIterator, MapIterator, GpuIterator, BatchIterator, FlipIterator, PersistentArray, persist
+export Probability, MutationShield, ApplyIf, RemoveIfSingleInput, RepeatPartitionIterator, MapIterator, GpuIterator, BatchIterator, FlipIterator, ShiftIterator, PersistentArray, persist
 
 # Vertex selection types
 export AbstractVertexSelection, AllVertices, FilterMutationAllowed
@@ -51,6 +51,7 @@ include("util.jl")
 include("archspace.jl")
 include("mutation.jl")
 include("candidate.jl")
+include("iterators.jl")
 include("examples/Cifar10.jl")
 
 end # module

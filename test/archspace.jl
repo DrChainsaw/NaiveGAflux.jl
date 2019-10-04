@@ -1,15 +1,5 @@
 @testset "Architecture Spaces" begin
 
-    mutable struct SeqRng
-        ind
-        SeqRng(ind) = new(ind)
-        SeqRng() = new(0)
-    end
-    function Random.rand(rng::SeqRng, vec)
-        rng.ind = rng.ind % length(vec) + 1
-        return vec[rng.ind]
-    end
-
     @testset "BasicLayerSpace" begin
         import NaiveGAflux: outsize, activation
         rng = SeqRng()
