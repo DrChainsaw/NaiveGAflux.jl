@@ -18,15 +18,15 @@ NaiveNASlib.minΔninfactor(::ActivationContribution) = 1
 NaiveNASlib.minΔnoutfactor(::ActivationContribution) = 1
 
 
-function iterators((train_x,train_y)::Tuple; nepochs=200, batchsize=32, fitnessize=2048, nbatches_per_gen=300)
+function iterators((train_x,train_y)::Tuple; nepochs=200, batchsize=32, fitnessize=2048, nbatches_per_gen=3)
     batch(data) = BatchIterator(data, batchsize)
-    dataiter(x,y) = zip(batch(x), Flux.onehotbatch(batch(y), 0:9))
+    dataiter(x,y, wrap = FlipIterator ∘ ShiftIterator) = zip(wrap(batch(x)), Flux.onehotbatch(batch(y), 0:9))
 
     fit_x, fit_y = train_x[:,:,:,1:end-fitnessize], train_y[1:end-fitnessize]
     evo_x, evo_y = train_x[:,:,:,end-fitnessize:end], train_y[end-fitnessize:end]
 
     fit_iter = RepeatPartitionIterator(GpuIterator(Iterators.cycle(dataiter(fit_x, fit_y), nepochs)), nbatches_per_gen)
-    evo_iter = GpuIterator(dataiter(evo_x, evo_y))
+    evo_iter = GpuIterator(dataiter(evo_x, evo_y, identity))
 
     return fit_iter, evo_iter
 end
@@ -381,6 +381,13 @@ julia> run_experiment(50, iterators(CIFAR10.traindata())...; cb=ScatterOpt(scatt
 """
 struct ScatterOpt
     plotfun
+    data::Vector{Array{Any, 2}}
+    basedir
+end
+
+function ScatterOpt(plotfun, basedir=joinpath(defaultdir(), "ScatterOpt"))
+    data = loadifpresent(joinpath(basedir, "fitlropt.jls"), [zeros(0,0)])
+    return ScatterOpt(plotfun, data, basedir)
 end
 
 function plotfitness(p::ScatterOpt, population)
@@ -393,6 +400,8 @@ function plotfitness(p::ScatterOpt, population)
     lrs = map(o -> o.os[].eta, opts)
     ots = map(o -> typeof(o.os[]), opts)
 
+    push!(p.data, hcat(fits, lrs, ots))
+
     uots = unique(ots)
     inds = map(o -> o .== ots, uots)
 
@@ -404,8 +413,8 @@ end
 
 function(p::ScatterOpt)(population)
     plt = plotfitness(p, population)
-    #mkpath(p.basedir)
-    #serialize(joinpath(p.basedir, "lrfitopt.jls"), p.data)
+    mkpath(p.basedir)
+    serialize(joinpath(p.basedir, "fitlropt.jls"), p.data)
     return plt
 end
 
