@@ -93,13 +93,13 @@
 
     @testset "ConvSpace" begin
         rng = SeqRng()
-        space = ConvSpace2D(BaseLayerSpace(5, relu), 2:5)
+        space = ConvSpace2D(5, relu, 2:5)
         l = space(4, rng)
         @test size(l.weight) == (2,3,4,5)
         @test size(l(ones(5,5,4,1))) == (5,5,5,1)
 
         rng.ind = 0
-        space = ConvSpace(BaseLayerSpace(4, elu), 2:5)
+        space = ConvSpace(4, elu, 2:5)
         l = space(3, rng)
         @test size(l.weight) == (2,3,4)
         @test size(l(ones(5,3,1))) == (5,4,1)
@@ -233,7 +233,7 @@
     end
 
     @testset "ListArchSpace" begin
-        space = ListArchSpace(VertexSpace.(DenseSpace.(BaseLayerSpace.((2,3), relu)))...)
+        space = ListArchSpace(VertexSpace.(DenseSpace.((2,3), relu))...)
         inpt = inputvertex("in", 3)
 
         v = space(inpt)
