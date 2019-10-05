@@ -151,7 +151,7 @@ function add_vertex_mutation()
 
     # TODO: New layers to have identity mapping
     add_conv = wrapitup(convspace(default_layerconf(), 8:128, 1:2:7, acts,loglevel=Logging.Info))
-    add_dense = wrapitup(LoggingArchSpace(Logging.Info, VertexSpace(default_layerconf(), NamedLayerSpace("dense", DenseSpace(BaseLayerSpace(16:512, acts))))))
+    add_dense = wrapitup(LoggingArchSpace(Logging.Info, VertexSpace(default_layerconf(), NamedLayerSpace("dense", DenseSpace(16:512, acts)))))
 
     return MutationList(MutationFilter(is_convtype, add_conv), MutationFilter(!is_convtype, add_dense))
 end
@@ -231,9 +231,9 @@ function initial_archspace()
     blockcout = ListArchSpace(convout, GpVertex2D())
 
     # Option 2: 1-3 Dense layers after the global pool
-    dense = VertexSpace(layerconf, NamedLayerSpace("dense", DenseSpace(BaseLayerSpace(16:512, acts))))
+    dense = VertexSpace(layerconf, NamedLayerSpace("dense", DenseSpace(16:512, acts)))
     drep = RepeatArchSpace(dense, 0:2)
-    dout=VertexSpace(outconf, NamedLayerSpace("dense", DenseSpace(BaseLayerSpace(10, identity))))
+    dout=VertexSpace(outconf, NamedLayerSpace("dense", DenseSpace(10, identity)))
     blockdout = ListArchSpace(GpVertex2D(), drep, dout)
 
     blockout = ArchSpace(ParSpace([blockdout, blockcout]))

@@ -44,7 +44,7 @@
 
     @testset "NamedLayerSpace" begin
         rng = SeqRng()
-        s1 = DenseSpace(BaseLayerSpace(2, identity))
+        s1 = DenseSpace(2, identity)
         s2 = NamedLayerSpace("test", s1)
 
         @test name(s1) == ""
@@ -63,7 +63,7 @@
 
     @testset "LoggingLayerSpace" begin
         rng = SeqRng()
-        s1 = DenseSpace(BaseLayerSpace(2, identity))
+        s1 = DenseSpace(2, identity)
         s2 = LoggingLayerSpace(NamedLayerSpace("test", s1))
 
         @test name(s2) == "test"
@@ -82,7 +82,7 @@
 
     @testset "DenseSpace" begin
         rng = SeqRng()
-        space = DenseSpace(BaseLayerSpace(3, σ))
+        space = DenseSpace(3, σ)
         l = space(2, rng)
         @test l.σ == σ
         @test size(l.W) == (3,2)
@@ -140,7 +140,7 @@
     end
 
     @testset "VertexSpace" begin
-        space = VertexSpace(DenseSpace(BaseLayerSpace(3,relu)))
+        space = VertexSpace(DenseSpace(3,relu))
         inpt = inputvertex("in", 2)
         v = space(inpt)
         @test nin(v) == [2]
@@ -149,13 +149,13 @@
         v = space("v", inpt)
         @test name(v) == "v"
 
-        space = VertexSpace(NamedLayerSpace("dense", DenseSpace(BaseLayerSpace(3,relu))))
+        space = VertexSpace(NamedLayerSpace("dense", DenseSpace(3,relu)))
         v = space("v", inpt)
         @test name(v) == "v.dense"
     end
 
     @testset "LoggingArchSpace" begin
-        space = LoggingArchSpace(VertexSpace(NamedLayerSpace("dense", DenseSpace(BaseLayerSpace(3, identity)))))
+        space = LoggingArchSpace(VertexSpace(NamedLayerSpace("dense", DenseSpace(3, identity))))
         inpt = inputvertex("in", 2)
 
         v = (@test_logs (:debug, "Created test.dense") min_level=Logging.Debug space("test", inpt))
@@ -218,7 +218,7 @@
         v = space(inpt, rng)
         @test nv(CompGraph(inpt, v)) == 6
 
-        space = RepeatArchSpace(VertexSpace(DenseSpace(BaseLayerSpace(3, relu))), 2)
+        space = RepeatArchSpace(VertexSpace(DenseSpace(3, relu)), 2)
         v = space(inpt, outsize=4)
         @test nout(v) == 4
         @test nin(v) == [4]
@@ -282,7 +282,7 @@
         v = space(inpt, rng)
         @test length(inputs(v)) == 5
 
-        space = ForkArchSpace(VertexSpace(DenseSpace(BaseLayerSpace(3, relu))), 3)
+        space = ForkArchSpace(VertexSpace(DenseSpace(3, relu)), 3)
         v = space(inpt, outsize=13)
         @test nout(v) == 13
         @test nin(v) == [4, 4, 5]
@@ -301,12 +301,12 @@
         @test nout(v) == 2
         @test nin(v) == [1, 1]
 
-        space = ForkArchSpace(VertexSpace(DenseSpace(BaseLayerSpace(3, relu))), 0)
+        space = ForkArchSpace(VertexSpace(DenseSpace(3, relu)), 0)
         @test space(inpt) == inpt
     end
 
     @testset "ResidualArchSpace" begin
-        space = ResidualArchSpace(DenseSpace(BaseLayerSpace(3, relu)))
+        space = ResidualArchSpace(DenseSpace(3, relu))
         inpt = inputvertex("in", 4)
 
         v = space(inpt)

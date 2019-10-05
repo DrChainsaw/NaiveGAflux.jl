@@ -122,7 +122,7 @@
 
         @test inputs(v1) == [inpt]
 
-        space = ArchSpace(DenseSpace(BaseLayerSpace(4, relu)))
+        space = ArchSpace(DenseSpace(4, relu))
 
         AddVertexMutation(space)(inpt)
 
