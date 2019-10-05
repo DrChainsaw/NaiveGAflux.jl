@@ -150,8 +150,8 @@ function add_vertex_mutation()
     wrapitup(as) = AddVertexMutation(rep_fork_res(as, 1,loglevel=Logging.Info))
 
     # TODO: New layers to have identity mapping
-    add_conv = wrapitup(convspace(default_layerconf(), 8:128, 1:2:7, acts,loglevel=Logging.Info, lspacewrap=IdSpace))
-    add_dense = wrapitup(LoggingArchSpace(Logging.Info, VertexSpace(default_layerconf(), NamedLayerSpace("dense", IdSpace(DenseSpace(BaseLayerSpace(16:512, acts)))))))
+    add_conv = wrapitup(convspace(default_layerconf(), 8:128, 1:2:7, acts,loglevel=Logging.Info))
+    add_dense = wrapitup(LoggingArchSpace(Logging.Info, VertexSpace(default_layerconf(), NamedLayerSpace("dense", DenseSpace(BaseLayerSpace(16:512, acts))))))
 
     return MutationList(MutationFilter(is_convtype, add_conv), MutationFilter(!is_convtype, add_dense))
 end
@@ -258,11 +258,11 @@ function rep_fork_res(s, n, min_rp=1;loglevel=Logging.Debug)
     return rep_fork_res(ArchSpace(ParSpace([rep, fork, res])), n-1, 0, loglevel=loglevel)
 end
 
-function convspace(conf, outsizes, kernelsizes, acts; loglevel=Logging.Debug, lspacewrap=identity)
+function convspace(conf, outsizes, kernelsizes, acts; loglevel=Logging.Debug)
     # CoupledParSpace due to CuArrays issue# 356
     msgfun(v) = "\tCreated $(name(v)), nin: $(nin(v)), nout: $(nout(v))"
-    conv2d = LoggingArchSpace(loglevel, msgfun, VertexSpace(conf, NamedLayerSpace("conv2d", lspacewrap(ConvSpace(BaseLayerSpace(outsizes, acts), CoupledParSpace(kernelsizes, 2))))))
-    bn = LoggingArchSpace(loglevel, msgfun, VertexSpace(conf, NamedLayerSpace("batchnorm", lspacewrap(BatchNormSpace(acts)))))
+    conv2d = LoggingArchSpace(loglevel, msgfun, VertexSpace(conf, NamedLayerSpace("conv2d", ConvSpace(BaseLayerSpace(outsizes, acts), CoupledParSpace(kernelsizes, 2)))))
+    bn = LoggingArchSpace(loglevel, msgfun, VertexSpace(conf, NamedLayerSpace("batchnorm", BatchNormSpace(acts))))
 
     # Make sure that each alternative has the option to change output size
     # This is important to make fork and res play nice together

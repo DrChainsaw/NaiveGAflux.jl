@@ -16,5 +16,5 @@
     trainiter = RepeatPartitionIterator(GpuIterator(Iterators.cycle(DummyDataIter(1), 3)), 1)
     valiter = GpuIterator(DummyDataIter(1))
 
-    @test_logs (:info, "Begin generation 1") (:info, "Begin generation 2") (:info, "Begin generation 3") match_mode=:any run_experiment(2, trainiter, valiter, nelites = 0, baseseed=12345)
+    @test_logs (:info, "Begin generation 1") (:info, "Begin generation 2") (:info, "Begin generation 3") match_mode=:any run_experiment(2, trainiter, valiter, nelites = 0, baseseed=12345, mdir = joinpath(NaiveGAflux.modeldir, "Cifar10_smoketest"))
 end

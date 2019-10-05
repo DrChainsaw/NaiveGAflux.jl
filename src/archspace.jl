@@ -294,32 +294,6 @@ struct MaxPoolSpace{N} <: AbstractLayerSpace
 end
 (s::MaxPoolSpace)(in::Integer, rng=rng_default;outsize=nothing, wi=nothing) = s.s(in, rng, pooltype=MaxPool)
 
-"""
-    WeightInitLayerSpace <: AbstractLayerSpace
-
-Supply a weight initialization function for an `AbstractLayerSpace`.
-"""
-struct WeightInitLayerSpace <: AbstractLayerSpace
-    wi::Function
-    s::AbstractLayerSpace
-end
-
-(s::WeightInitLayerSpace)(in::Integer,rng=rng_default; outsize=missing, wi=DefaultWeightInit()) = winit(s.s, s.wi, in, rng, outsize)
-
-winit(s::ConvSpace, weightinit, in, rng, outsize) = create(s, outsize, in, rng; convfun=(args...;kwargs...) -> Conv(args...;init=weightinit, kwargs...))
-winit(s::DenseSpace, weightinit, in, rng, outsize) = create(s, outsize, in, rng; densefun=(args...;kwargs...) -> Dense(args...;initW=weightinit, kwargs...))
-winit(s, weightinit, in, rng, outsize) = create(s, outsize, in, rng)
-
-## Yeah,yeah, Instead of if ismissing(outsize) for each layertype. I'm new here, ok?
-create(s::AbstractLayerSpace, ::Missing, args...;kwargs...) = s(args...;kwargs...)
-create(s::AbstractLayerSpace, outsize::Integer, args...;kwargs...) = s(args...;outsize=outsize, kwargs...)
-
-"""
-    IdSpace(s::AbstractLayerSpace)
-
-Weights of layers created by `s` will be initialized with `idmapping` (if applicable).
-"""
-IdSpace(s::AbstractLayerSpace) = WeightInitLayerSpace(idmapping, s)
 
 default_logging() = logged(level=Logging.Debug, info=NameAndIOInfoStr())
 """

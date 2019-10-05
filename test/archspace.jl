@@ -139,22 +139,6 @@
         @test space(2, rng).k == (2,3)
     end
 
-    @testset "IdSpace" begin
-        space = IdSpace(ConvSpace2D(BaseLayerSpace(5, identity), 3:3))
-        l = space(4, outsize=4)
-        indata = reshape(Float32.(1:6*5*4*3), 6,5,4,3)
-        @test l(indata) == indata
-
-        space = IdSpace(BatchNormSpace(identity))
-        l = space(4)
-        @test l(indata) != indata
-
-        space = IdSpace(DenseSpace(BaseLayerSpace(3, identity)))
-        l = space(4, outsize=4)
-        indata = reshape(Float32.(1:3*4), 4,3)
-        @test l(indata) == indata
-    end
-
     @testset "VertexSpace" begin
         space = VertexSpace(DenseSpace(BaseLayerSpace(3,relu)))
         inpt = inputvertex("in", 2)

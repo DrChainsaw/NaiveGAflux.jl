@@ -152,9 +152,10 @@ end
 
 """
     AddVertexMutation <:AbstractMutation{AbstractVertex}
-    AddVertexMutation(s::AbstractArchSpace, outselect::Function, rng::AbstractRNG)
+    AddVertexMutation(s::AbstractArchSpace, outselect::Function, WeightInit::AbstractWeightInit, rng::AbstractRNG)
     AddVertexMutation(s, outselect::Function=identity)
     AddVertexMutation(s, rng::AbstractRNG)
+    AddVertexMutation(s, wi::AbstractWeightInit)
 
 Insert a vertex from the wrapped `AbstractArchSpace` `s` after a given vertex `v`.
 
@@ -163,12 +164,14 @@ The function `outselect` takes an `AbstractVector{AbstractVertex}` representing 
 struct AddVertexMutation <:AbstractMutation{AbstractVertex}
     s::AbstractArchSpace
     outselect::Function
+    weightinit::AbstractWeightInit
     rng::AbstractRNG
 end
-AddVertexMutation(s, outselect::Function=identity) = AddVertexMutation(s, outselect, rng_default)
-AddVertexMutation(s, rng::AbstractRNG) = AddVertexMutation(s, identity, rng)
+AddVertexMutation(s, outselect::Function=identity) = AddVertexMutation(s, outselect, IdentityWeightInit(), rng_default)
+AddVertexMutation(s, rng::AbstractRNG) = AddVertexMutation(s, identity, IdentityWeightInit(), rng)
+AddVertexMutation(s, wi::AbstractWeightInit) = AddVertexMutation(s, identity, wi, rng_default)
 
-(m::AddVertexMutation)(v::AbstractVertex) = insert!(v, vi -> m.s(name(vi), vi, m.rng, outsize=nout(vi)), m.outselect)
+(m::AddVertexMutation)(v::AbstractVertex) = insert!(v, vi -> m.s(name(vi), vi, m.rng, outsize=nout(vi), wi=m.weightinit), m.outselect)
 
 """
     RemoveVertexMutation <:AbstractMutation{AbstractVertex}

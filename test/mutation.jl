@@ -128,6 +128,7 @@
 
         @test inputs(v1) != [inpt]
         @test nin(v1) == [3]
+        @test inputs(v1)[](1:nout(inpt)) == 1:nout(inpt)
 
         v2 = dense(v1, 2)
         v3 = dense(v1, 1)
