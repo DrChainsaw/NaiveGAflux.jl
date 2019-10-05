@@ -28,6 +28,52 @@ Return a tuple of parameters from the search space when invoked. Random number g
 abstract type AbstractParSpace{N, T} end
 
 """
+    AbstractWeightInit
+
+Abstract type for weight initialization strategies
+"""
+abstract type AbstractWeightInit end
+
+"""
+    DefaultWeightInit <: AbstractWeightInit
+
+Use the layer default weight initialization.
+"""
+struct DefaultWeightInit <: AbstractWeightInit end
+
+"""
+    IdentityWeightInit <: AbstractWeightInit
+    IdentityWeightInit()
+
+Initialize weights with an identity mapping.
+"""
+struct IdentityWeightInit <: AbstractWeightInit end
+
+"""
+    PartialIdentityWeightInit <: AbstractWeightInit
+    PartialIdentityWeightInit(inoffset, outoffset)
+
+Initialize weights with an identity mapping.
+
+Parameter `inoffset` and `outoffset` shifts the weigths in case `nin != nout`. This is so that a concatenation can also be an identity mapping as a whole.
+"""
+struct PartialIdentityWeightInit <: AbstractWeightInit
+    inoffset::Int
+    outoffset::Int
+end
+
+"""
+    ZeroWeightInit <: AbstractWeightInit
+    ZeroWeightInit()
+
+Initialize weights as zeros.
+
+Main use case is to let residual layers be and identity mapping
+"""
+struct ZeroWeightInit <: AbstractWeightInit end
+
+
+"""
     BaseLayerSpace
 
 Search space for basic attributes common to all layers.
@@ -120,9 +166,9 @@ struct NamedLayerSpace <:AbstractLayerSpace
 end
 NaiveNASlib.name(::AbstractLayerSpace) = ""
 NaiveNASlib.name(s::NamedLayerSpace) = s.name
-function (s::NamedLayerSpace)(in::Integer,rng=rng_default; outsize=missing)
+function (s::NamedLayerSpace)(in::Integer,rng=rng_default; outsize=missing, wi=DefaultWeightInit())
     ismissing(outsize) && return s.s(in, rng)
-    return s.s(in, rng, outsize=outsize)
+    return s.s(in, rng, outsize=outsize, wi=wi)
 end
 
 """
@@ -141,8 +187,8 @@ end
 LoggingLayerSpace(s::AbstractLayerSpace) = LoggingLayerSpace(Logging.Debug, s)
 LoggingLayerSpace(level::LogLevel, s::AbstractLayerSpace) = LoggingLayerSpace(level, l -> "Create $l from $(name(s))", s)
 NaiveNASlib.name(s::LoggingLayerSpace) = name(s.s)
-function (s::LoggingLayerSpace)(in::Integer,rng=rng_default; outsize=missing)
-    layer = ismissing(outsize) ? s.s(in, rng) : s.s(in, rng, outsize=outsize)
+function (s::LoggingLayerSpace)(in::Integer,rng=rng_default; outsize=missing, wi=DefaultWeightInit())
+    layer = ismissing(outsize) ? s.s(in, rng) : s.s(in, rng, outsize=outsize, wi=wi)
     msg = s.msgfun(layer)
     @logmsg s.level msg
     return layer
@@ -150,16 +196,31 @@ end
 
 """
     DenseSpace <:AbstractLayerSpace
+    DenseSpace(base::BaseLayerSpace)
+    DenseSpace(outsizes, activations)
 
 Search space of Dense layers.
 """
 struct DenseSpace <:AbstractLayerSpace
     base::BaseLayerSpace
 end
-(s::DenseSpace)(in::Integer,rng=rng_default; outsize=outsize(s.base,rng), densefun=Dense) = densefun(in, outsize, activation(s.base,rng))
+DenseSpace(outsizes, activations) = DenseSpace(BaseLayerSpace(outsizes, activations))
+(s::DenseSpace)(in::Integer,rng=rng_default; outsize=outsize(s.base,rng), wi=DefaultWeightInit(), densefun=Dense) = densefun(in, outsize, activation(s.base,rng); denseinitW(wi)...)
+
+denseinitW(::DefaultWeightInit) = ()
+denseinitW(::IdentityWeightInit) = (initW = idmapping,)
+denseinitW(wi::PartialIdentityWeightInit) = (initW = (args...) -> circshift(idmapping_nowarn(args...),(wi.outoffset, wi.inoffset)),)
+denseinitW(::ZeroWeightInit) = (initW = zeros,)
 
 """
     ConvSpace{N} <:AbstractLayerSpace
+    ConvSpace2D(outsizes, activations, ks)
+    ConvSpace2D(base::BaseLayerSpace, ks::AbstractVector{<:Integer})
+    ConvSpace(outsizes, activations, ks::AbstractVector{<:Integer}...)
+    ConvSpace(base::BaseLayerSpace, ks::AbstractVector{<:Integer}...)
+    ConvSpace(base::BaseLayerSpace, ks::AbstractParSpace)
+    ConvSpace(base::BaseLayerSpace, ks::AbstractParSpace, stride::AbstractParSpace, dilation::AbstractParSpace, padding::AbstractPadSpace)
+
 
 Search space of basic `N`D convolutional layers.
 """
@@ -170,19 +231,25 @@ struct ConvSpace{N} <:AbstractLayerSpace
     dilation::AbstractParSpace
     padding::AbstractPadSpace
 end
-
+ConvSpace2D(outsizes, activations, ks) = ConvSpace2D(BaseLayerSpace(outsizes, activations), ks)
 ConvSpace2D(base::BaseLayerSpace, ks::AbstractVector{<:Integer}) = ConvSpace(base, ks,ks)
+ConvSpace(outsizes, activations, ks::AbstractVector{<:Integer}...) = ConvSpace(BaseLayerSpace(outsizes, activations), ks...)
 ConvSpace(base::BaseLayerSpace, ks::AbstractVector{<:Integer}...) = ConvSpace(base, ParSpace(ks))
 ConvSpace(base::BaseLayerSpace, ks::AbstractParSpace) = ConvSpace(base, ks, SingletonParSpace(1), SingletonParSpace(1), SamePad())
 
-function (s::ConvSpace)(insize::Integer, rng=rng_default; outsize = outsize(s.base, rng), convfun = Conv)
+function (s::ConvSpace)(insize::Integer, rng=rng_default; outsize = outsize(s.base, rng), wi=DefaultWeightInit(), convfun = Conv)
     ks = Tuple(s.kernelsize(rng))
     stride = s.stride(rng)
     dilation = s.dilation(rng)
     pad = s.padding(ks, dilation, rng)
     act = activation(s.base, rng)
-    return convfun(ks, insize=>outsize, act, pad=pad, stride=stride,dilation=dilation)
+    return convfun(ks, insize=>outsize, act; pad=pad, stride=stride,dilation=dilation, convinitW(wi)...)
 end
+
+convinitW(::DefaultWeightInit) = ()
+convinitW(::IdentityWeightInit) = (init=idmapping,)
+convinitW(wi::PartialIdentityWeightInit) = (init = (args...) -> circshift(idmapping_nowarn(args...), (0,0,wi.inoffset, wi.outoffset)),)
+convinitW(::ZeroWeightInit) = (init=(args...) -> zeros(Float32,args...),)
 
 """
     BatchNormSpace <:AbstractLayerSpace
@@ -195,7 +262,7 @@ end
 BatchNormSpace(act::Function) = BatchNormSpace(SingletonParSpace(act))
 BatchNormSpace(act, acts...) = BatchNormSpace(ParSpace1D(act,acts...))
 BatchNormSpace(acts::AbstractVector) = BatchNormSpace(acts...)
-(s::BatchNormSpace)(in::Integer, rng=rng_default;outsize=nothing) = BatchNorm(in, s.acts(rng))
+(s::BatchNormSpace)(in::Integer, rng=rng_default;outsize=nothing, wi=nothing) = BatchNorm(in, s.acts(rng))
 
 """
     PoolSpace{N} <:AbstractLayerSpace
@@ -225,7 +292,7 @@ Search space of `N`D max pooling layers.
 struct MaxPoolSpace{N} <: AbstractLayerSpace
     s::PoolSpace{N}
 end
-(s::MaxPoolSpace)(in::Integer, rng=rng_default;outsize=nothing) = s.s(in, rng, pooltype=MaxPool)
+(s::MaxPoolSpace)(in::Integer, rng=rng_default;outsize=nothing, wi=nothing) = s.s(in, rng, pooltype=MaxPool)
 
 """
     WeightInitLayerSpace <: AbstractLayerSpace
@@ -237,7 +304,7 @@ struct WeightInitLayerSpace <: AbstractLayerSpace
     s::AbstractLayerSpace
 end
 
-(s::WeightInitLayerSpace)(in::Integer,rng=rng_default; outsize=missing) = winit(s.s, s.wi, in, rng, outsize)
+(s::WeightInitLayerSpace)(in::Integer,rng=rng_default; outsize=missing, wi=DefaultWeightInit()) = winit(s.s, s.wi, in, rng, outsize)
 
 winit(s::ConvSpace, weightinit, in, rng, outsize) = create(s, outsize, in, rng; convfun=(args...;kwargs...) -> Conv(args...;init=weightinit, kwargs...))
 winit(s::DenseSpace, weightinit, in, rng, outsize) = create(s, outsize, in, rng; densefun=(args...;kwargs...) -> Dense(args...;initW=weightinit, kwargs...))
@@ -307,13 +374,13 @@ struct LoggingArchSpace <: AbstractArchSpace
 end
 LoggingArchSpace(s::AbstractArchSpace) = LoggingArchSpace(Logging.Debug, s)
 LoggingArchSpace(level::LogLevel, s::AbstractArchSpace) = LoggingArchSpace(level, v -> "Created $(name(v))", s)
-function (s::LoggingArchSpace)(in::AbstractVertex,rng=rng_default; outsize=missing)
-    layer = ismissing(outsize) ? s.s(in, rng) : s.s(in, rng, outsize=outsize)
+function (s::LoggingArchSpace)(in::AbstractVertex,rng=rng_default; outsize=missing, wi=DefaultWeightInit())
+    layer = ismissing(outsize) ? s.s(in, rng) : s.s(in, rng, outsize=outsize, wi=wi)
     @logmsg s.level s.msgfun(layer)
     return layer
 end
-function (s::LoggingArchSpace)(namestr::String, in::AbstractVertex,rng=rng_default; outsize=missing)
-    layer = ismissing(outsize) ? s.s(namestr, in, rng) : s.s(namestr, in, rng, outsize=outsize)
+function (s::LoggingArchSpace)(namestr::String, in::AbstractVertex,rng=rng_default; outsize=missing, wi=DefaultWeightInit())
+    layer = ismissing(outsize) ? s.s(namestr, in, rng) : s.s(namestr, in, rng, outsize=outsize, wi=wi)
     @logmsg s.level s.msgfun(layer)
     return layer
 end
@@ -329,10 +396,10 @@ struct VertexSpace <:AbstractArchSpace
 end
 VertexSpace(lspace::AbstractLayerSpace) = VertexSpace(LayerVertexConf(), lspace)
 
-(s::VertexSpace)(in::AbstractVertex, rng=rng_default; outsize=missing) = s.conf(in,  create_layer(outsize, nout(in), s.lspace, rng))
-(s::VertexSpace)(namestr::String, in::AbstractVertex, rng=rng_default; outsize=missing) = s.conf(join(filter(!isempty, [namestr, name(s.lspace)]), "."), in, create_layer(outsize, nout(in), s.lspace, rng))
-create_layer(::Missing, insize::Integer, ls::AbstractLayerSpace, rng) = ls(insize, rng)
-create_layer(outsize::Integer, insize::Integer, ls::AbstractLayerSpace, rng) = ls(insize, rng, outsize=outsize)
+(s::VertexSpace)(in::AbstractVertex, rng=rng_default; outsize=missing, wi=DefaultWeightInit()) = s.conf(in,  create_layer(outsize, nout(in), s.lspace, wi, rng))
+(s::VertexSpace)(namestr::String, in::AbstractVertex, rng=rng_default; outsize=missing, wi=DefaultWeightInit()) = s.conf(join(filter(!isempty, [namestr, name(s.lspace)]), "."), in, create_layer(outsize, nout(in), s.lspace, wi, rng))
+create_layer(::Missing, insize::Integer, ls::AbstractLayerSpace, wi, rng) = ls(insize, rng, wi=wi)
+create_layer(outsize::Integer, insize::Integer, ls::AbstractLayerSpace, wi, rng) = ls(insize, rng, outsize=outsize, wi=wi)
 
 """
     ArchSpace <:AbstractArchSpace
@@ -345,8 +412,8 @@ end
 ArchSpace(l::AbstractLayerSpace;conf=LayerVertexConf()) = ArchSpace(SingletonParSpace(VertexSpace(conf,l)))
 ArchSpace(l::AbstractLayerSpace, ls::AbstractLayerSpace...;conf=LayerVertexConf()) = ArchSpace(ParSpace(VertexSpace.(conf,[l,ls...])))
 
-(s::ArchSpace)(in::AbstractVertex, rng=rng_default; outsize=missing) = s.s(rng)(in, rng, outsize=outsize)
-(s::ArchSpace)(name::String, in::AbstractVertex, rng=rng_default; outsize=missing) = s.s(rng)(name, in, rng, outsize=outsize)
+(s::ArchSpace)(in::AbstractVertex, rng=rng_default; outsize=missing, wi=DefaultWeightInit()) = s.s(rng)(in, rng, outsize=outsize, wi=wi)
+(s::ArchSpace)(name::String, in::AbstractVertex, rng=rng_default; outsize=missing, wi=DefaultWeightInit()) = s.s(rng)(name, in, rng, outsize=outsize, wi=wi)
 
 """
     RepeatArchSpace <:AbstractArchSpace
@@ -364,8 +431,12 @@ end
 RepeatArchSpace(s::AbstractArchSpace, r::Integer) = RepeatArchSpace(s, SingletonParSpace(r))
 RepeatArchSpace(s::AbstractArchSpace, r::AbstractVector{<:Integer}) = RepeatArchSpace(s, ParSpace(r))
 
-(s::RepeatArchSpace)(in::AbstractVertex, rng=rng_default; outsize=missing) = foldl((next, i) -> s.s(next, rng, outsize=outsize), 1:s.r(rng), init=in)
-(s::RepeatArchSpace)(name::String, in::AbstractVertex, rng=rng_default; outsize=missing) = foldl((next, i) -> s.s(join([name,".", i]), next, rng, outsize=outsize), 1:s.r(rng), init=in)
+(s::RepeatArchSpace)(in::AbstractVertex, rng=rng_default; outsize=missing, wi=DefaultWeightInit()) = foldl((next, i) -> s.s(next, rng, outsize=outsize, wi=repeatinitW(wi, next, outsize)), 1:s.r(rng), init=in)
+(s::RepeatArchSpace)(name::String, in::AbstractVertex, rng=rng_default; outsize=missing, wi=DefaultWeightInit()) = foldl((next, i) -> s.s(join([name,".", i]), next, rng, outsize=outsize, wi=repeatinitW(wi, next, outsize)), 1:s.r(rng), init=in)
+
+repeatinitW(wi::AbstractWeightInit, invertex, outsize) = wi
+repeatinitW(wi::PartialIdentityWeightInit, invertex, outsize) = nout(invertex) == outsize ? IdentityWeightInit() : wi
+repeatinitW(wi::PartialIdentityWeightInit, invertex, ::Missing) = wi
 
 """
     ListArchSpace <:AbstractArchSpace
@@ -378,8 +449,8 @@ struct ListArchSpace <:AbstractArchSpace
     s::AbstractVector{<:AbstractArchSpace}
 end
 ListArchSpace(s::AbstractArchSpace...) = ListArchSpace(collect(s))
-(s::ListArchSpace)(in::AbstractVertex, rng=rng_default; outsize=missing) = foldl((next, ss) -> ss(next, rng, outsize=outsize), s.s, init=in)
-(s::ListArchSpace)(name::String, in::AbstractVertex, rng=rng_default; outsize=missing) = foldl((next, i) -> s.s[i](join([name,".", i]), next, rng, outsize=outsize), eachindex(s.s), init=in)
+(s::ListArchSpace)(in::AbstractVertex, rng=rng_default; outsize=missing, wi=DefaultWeightInit()) = foldl((next, ss) -> ss(next, rng, outsize=outsize, wi=repeatinitW(wi, next, outsize)), s.s, init=in)
+(s::ListArchSpace)(name::String, in::AbstractVertex, rng=rng_default; outsize=missing, wi=DefaultWeightInit()) = foldl((next, i) -> s.s[i](join([name,".", i]), next, rng, outsize=outsize, wi=repeatinitW(wi, next, outsize)), eachindex(s.s), init=in)
 
 
 """
@@ -397,19 +468,19 @@ end
 ForkArchSpace(s::AbstractArchSpace, r::Integer; conf=ConcConf()) = ForkArchSpace(s, SingletonParSpace(r), conf)
 ForkArchSpace(s::AbstractArchSpace, r::AbstractVector{<:Integer}; conf=ConcConf()) = ForkArchSpace(s, ParSpace(r), conf)
 
-function (s::ForkArchSpace)(in::AbstractVertex, rng=rng_default; outsize=missing)
+function (s::ForkArchSpace)(in::AbstractVertex, rng=rng_default; outsize=missing, wi=DefaultWeightInit())
      # Make sure there are no paths with size 0, which is what happens if np > outsize
      np=min_nomissing(s.p(rng), outsize)
      np == 0 && return in
      outsizes = eq_split(outsize, np)
-     return s.c(map(i -> s.s(in, rng, outsize=outsizes[i]), 1:np))
+     return s.c(map(i -> s.s(in, rng, outsize=outsizes[i], wi=forkinitW(wi, outsizes, i)), 1:np))
  end
-function (s::ForkArchSpace)(name::String, in::AbstractVertex, rng=rng_default; outsize=missing)
+function (s::ForkArchSpace)(name::String, in::AbstractVertex, rng=rng_default; outsize=missing, wi=DefaultWeightInit())
     # Make sure there are no paths with size 0, which is what happens if np > outsize
     np=min_nomissing(s.p(rng), outsize)
     np == 0 && return in
     outsizes = eq_split(outsize, np)
-    return s.c(name * ".cat", map(i -> s.s(join([name, ".path", i]), in, rng,outsize=outsizes[i]), 1:np))
+    return s.c(name * ".cat", map(i -> s.s(join([name, ".path", i]), in, rng,outsize=outsizes[i], wi=forkinitW(wi, outsizes, i)), 1:np))
 end
 min_nomissing(x, ::Missing) = x
 min_nomissing(x, y) = min(x,y)
@@ -423,6 +494,9 @@ function eq_split(x, n)
     end
     return out
 end
+
+forkinitW(wi::AbstractWeightInit, outsizes, i) = wi
+forkinitW(wi::IdentityWeightInit, outsizes, i) = PartialIdentityWeightInit(mapreduce(ii -> outsizes[ii], + , 1:i-1, init=0), 0)
 
 """
     ResidualArchSpace <:AbstractArchSpace
@@ -438,8 +512,11 @@ end
 ResidualArchSpace(s::AbstractArchSpace) = ResidualArchSpace(s, VertexConf(traitdecoration = validated() ∘ default_logging(), outwrap = ActivationContribution))
 ResidualArchSpace(l::AbstractLayerSpace) = ResidualArchSpace(VertexSpace(l))
 
-(s::ResidualArchSpace)(in::AbstractVertex, rng=rng_default;outsize=missing) = s.conf >> in + s.s(in, rng,outsize=nout(in))
-(s::ResidualArchSpace)(name::String, in::AbstractVertex, rng=rng_default; outsize=missing) = VertexConf(s.conf.mutation, s.conf.traitdecoration ∘ named(name * ".add"), s.conf.outwrap) >> in + s.s(join([name, ".res"]), in, rng,outsize=nout(in))
+(s::ResidualArchSpace)(in::AbstractVertex, rng=rng_default; outsize=missing, wi=DefaultWeightInit()) = s.conf >> in + s.s(in, rng,outsize=nout(in), wi=resinitW(wi))
+(s::ResidualArchSpace)(name::String, in::AbstractVertex, rng=rng_default; outsize=missing, wi=DefaultWeightInit()) = VertexConf(s.conf.mutation, s.conf.traitdecoration ∘ named(name * ".add"), s.conf.outwrap) >> in + s.s(join([name, ".res"]), in, rng,outsize=nout(in), wi=resinitW(wi))
+
+resinitW(wi::AbstractWeightInit) = wi
+resinitW(::Union{IdentityWeightInit, PartialIdentityWeightInit}) = ZeroWeightInit()
 
 """
     FunVertex <: AbstractArchSpace
@@ -454,8 +531,8 @@ struct FunVertex <: AbstractArchSpace
 end
 FunVertex(fun::Function, namesuff::String, conf=LayerVertexConf(ActivationContribution, validated() ∘ default_logging())) = FunVertex(conf, fun, namesuff)
 
-(s::FunVertex)(in::AbstractVertex, rng=nothing; outsize=nothing) = funvertex(s, in)
-(s::FunVertex)(name::String, in::AbstractVertex, rng=nothing; outsize=nothing) = funvertex(join([name,s.namesuff]), s, in)
+(s::FunVertex)(in::AbstractVertex, rng=nothing; outsize=nothing, wi=nothing) = funvertex(s, in)
+(s::FunVertex)(name::String, in::AbstractVertex, rng=nothing; outsize=nothing, wi=nothing) = funvertex(join([name,s.namesuff]), s, in)
 
 funvertex(s, in::AbstractVertex) = invariantvertex(s.conf.layerfun(s.fun), in, mutation=IoChange, traitdecoration = s.conf.traitfun)
 
