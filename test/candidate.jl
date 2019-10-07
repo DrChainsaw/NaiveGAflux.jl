@@ -12,7 +12,7 @@
     end
 
     @testset "MapFitness" begin
-        NaiveGAflux.instrument(::NaiveGAflux.AbstractFunLabel, s::MockFitness, f::Function) = x -> s.f*f(x)
+        NaiveGAflux.instrument(::NaiveGAflux.AbstractFunLabel, s::MockFitness, f) = x -> s.f*f(x)
 
         @test fitness( MapFitness(f -> 2f, MockFitness(3)), identity) == 6
         @test instrument(NaiveGAflux.Train(), MapFitness(identity, MockFitness(2)), x -> 3x)(5) == 2*3*5
@@ -44,6 +44,27 @@
         reset!(tf)
 
         @test fitness(tf, identity) == 0
+    end
+
+    @testset "SizeFitness" begin
+        import NaiveGAflux: Validate
+
+        sf = SizeFitness()
+        l = Dense(2,3)
+
+        @test fitness(sf, l) == 9
+
+        @test_logs (:warn, "SizeFitness got zero parameters! Check your fitness function!") fitness(sf, identity)
+
+        @test instrument(Validate(), sf, l) == l
+
+        @test fitness(sf, identity) == 9
+
+        sf = NanGuard(Validate(), SizeFitness())
+
+        @test instrument(Validate(), sf, l) != l
+
+        @test fitness(sf, identity) == 9
     end
 
     @testset "FitnessCache" begin
@@ -159,7 +180,7 @@
 
         @test fitness(af, identity) == 5
 
-        NaiveGAflux.instrument(::NaiveGAflux.AbstractFunLabel, s::MockFitness, f::Function) = x -> s.f*f(x)
+        NaiveGAflux.instrument(::NaiveGAflux.AbstractFunLabel, s::MockFitness, f) = x -> s.f*f(x)
         @test instrument(NaiveGAflux.Train(), af, x -> 5x)(7) == 2*3*5*7
 
         nreset = 0
@@ -184,7 +205,7 @@ end
         cand = wrp(CandidateModel(graph, Flux.Descent(0.01), (x,y) -> sum(x .- y), DummyFitness()))
 
         labs = []
-        function NaiveGAflux.instrument(l::AbstractFunLabel, s::DummyFitness, f::Function)
+        function NaiveGAflux.instrument(l::AbstractFunLabel, s::DummyFitness, f)
             push!(labs, l)
             return f
         end

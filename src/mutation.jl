@@ -193,6 +193,70 @@ RemoveVertexMutation() = RemoveVertexMutation(RemoveStrategy(CheckAligned(CheckN
 (m::RemoveVertexMutation)(v::AbstractVertex) = remove!(v, m.s)
 
 """
+    KernelSizeMutation{N} <: AbstractMutation{AbstractVertex}
+    KernelSizeMutation(Δsizespace::AbstractParSpace{N, Int}, padspace::AbstractPadSpace=SamePad(), rng::AbstractRNG=rng_default)
+    KernelSizeMutation2D(absΔ::Integer;pad=SamePad())
+    KernelSizeMutation(absΔ::Integer...;pad=SamePad())
+
+Mutate the size of filter kernels of convolutional layers.
+"""
+struct KernelSizeMutation{N} <: AbstractMutation{AbstractVertex}
+    Δsizespace::AbstractParSpace{N, Int}
+    padspace::AbstractPadSpace
+    rng::AbstractRNG
+end
+KernelSizeMutation(Δsizespace, pad=SamePad(), rng=rng_default) = KernelSizeMutation(Δsizespace, pad, rng)
+KernelSizeMutation2D(absΔ::Integer;pad=SamePad(), rng=rng_default) = KernelSizeMutation(absΔ, absΔ, pad=pad, rng=rng)
+KernelSizeMutation(absΔ::Integer...;pad=SamePad(), rng=rng_default) = KernelSizeMutation(ParSpace(UnitRange.(.-absΔ, absΔ)), pad, rng)
+
+function (m::KernelSizeMutation{N})(v::AbstractVertex) where N
+    layertype(v) isa FluxConvolutional{N} || return
+    l = layer(v)
+
+    currsize = size(NaiveNASflux.weights(l))[1:N]
+    Δsize = max.(1 .- currsize, m.Δsizespace(m.rng)) # ensure new size is > 0
+    pad = m.padspace(currsize .+ Δsize, dilation(l))
+    mutate_weights(v, KernelSizeAligned(Δsize, pad))
+end
+dilation(l) = l.dilation
+
+"""
+    ActivationFunctionMutation{T,R} <: AbstractMutation{AbstractVertex} where {T <: AbstractParSpace{1}, R <: AbstractRNG}
+    ActivationFunctionMutation(actspace::AbstractParSpace{1}, rng::AbstractRNG)
+    ActivationFunctionMutation(acts...;rng=rng_default)
+    ActivationFunctionMutation(acts::AbstractVector;rng=rng_default)
+
+Mutate the activation function of layers which have an activation function.
+"""
+struct ActivationFunctionMutation{T,R} <: AbstractMutation{AbstractVertex} where {T <: AbstractParSpace{1}, R <: AbstractRNG}
+    actspace::T
+    rng::R
+end
+ActivationFunctionMutation(acts...;rng=rng_default) = ActivationFunctionMutation(collect(acts), rng=rng)
+ActivationFunctionMutation(acts::AbstractVector;rng=rng_default) = ActivationFunctionMutation(ParSpace(acts), rng)
+
+(m::ActivationFunctionMutation)(v::AbstractVertex) = m(layertype(v), v)
+function (m::ActivationFunctionMutation)(t, v) end
+(m::ActivationFunctionMutation)(::Union{FluxDense, FluxConvolutional}, v) = setlayer(v, (σ = m.actspace(m.rng),))
+(m::ActivationFunctionMutation)(::FluxParNorm, v) = setlayer(v, (λ = m.actspace(m.rng),))
+function (m::ActivationFunctionMutation)(::FluxRnn, v)
+    newcell = setproperties(layer(v).cell, (σ = m.actspace(m.rng),))
+    setlayer(v, (cell = newcell,))
+end
+
+# TODO: Move to NaiveNASflux??
+function setlayer(x, propval) end
+setlayer(v::AbstractVertex, propval) = setlayer(base(v), propval)
+setlayer(v::CompVertex, propval) = setlayer(v.computation, propval)
+setlayer(m::AbstractMutableComp, propval) = setlayer(NaiveNASflux.wrapped(m), propval)
+setlayer(m::NaiveNASflux.ResetLazyMutable, propval) = setlayer(m.wrapped, propval)
+setlayer(m::NaiveNASflux.MutationTriggered, propval) = setlayer(m.wrapped, propval)
+function setlayer(m::MutableLayer, propval)
+    m.layer = setproperties(m.layer, propval)
+end
+
+
+"""
     NeuronSelectMutation{T} <: AbstractMutation{AbstractVertex}
     NeuronSelectMutation(m::AbstractMutation{AbstractVertex})
     NeuronSelectMutation(rankfun, m::AbstractMutation{AbstractVertex})

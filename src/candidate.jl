@@ -16,7 +16,7 @@ struct TrainLoss <: AbstractFunLabel end
 struct Validate <: AbstractFunLabel end
 
 """
-    instrument(l::AbstractFunLabel, s::AbstractFitness, f::Funtion)
+    instrument(l::AbstractFunLabel, s::AbstractFitness, f)
 
 Instrument `f` for fitness measurement `s`.
 
@@ -26,7 +26,7 @@ Example is to use the result of `f` for fitness calculation, or to add a measure
 
 Basically a necessary (?) evil which complicates things around it quite a bit.
 """
-instrument(::AbstractFunLabel, ::AbstractFitness, f::Function) = f
+instrument(::AbstractFunLabel, ::AbstractFitness, f) = f
 
 """
     reset!(s::AbstractFitness)
@@ -67,7 +67,7 @@ struct MapFitness <: AbstractFitness
     base::AbstractFitness
 end
 fitness(s::MapFitness, f) = fitness(s.base, f) |> s.mapping
-instrument(l::AbstractFunLabel,s::MapFitness,f::Function) = instrument(l, s.base, f)
+instrument(l::AbstractFunLabel,s::MapFitness,f) = instrument(l, s.base, f)
 reset!(s::MapFitness) = reset!(s.base)
 
 """
@@ -85,7 +85,7 @@ end
 TimeFitness(t::T) where T = TimeFitness{T}(0.0, 0)
 fitness(s::TimeFitness, f) = s.neval == 0 ? 0 : s.totaltime / s.neval
 
-function instrument(::T, s::TimeFitness{T}, f::Function) where T <: AbstractFunLabel
+function instrument(::T, s::TimeFitness{T}, f) where T <: AbstractFunLabel
     return function(x...)
         res, t = @timed f(x...)
         s.totaltime += t
@@ -97,6 +97,35 @@ end
 function reset!(s::TimeFitness)
     s.totaltime = 0.0
     s.neval = 0
+end
+
+"""
+    SizeFitness <: AbstractFitness
+    SizeFitness()
+
+Measure fitness as the total number of parameters in the function to be evaluated.
+
+Note: relies on Flux.params which does not work for function which have been instrumented through [`instrument`](@ref).
+
+To handle intrumentation, an attempt to extract the size is also made when intrumenting for `Validation`. Whether this works or not depends on the order in which fitness functions are combined.
+"""
+mutable struct SizeFitness <: AbstractFitness
+    size::Int
+end
+SizeFitness() = SizeFitness(0)
+
+function fitness(s::SizeFitness, f)
+    fsize = mapreduce(prod ∘ size, +, params(f).order, init=0)
+    # Can't do params(f) as f typically is instrumented
+    if fsize == s.size == 0
+        @warn "SizeFitness got zero parameters! Check your fitness function!"
+    end
+
+    return fsize == 0 ? s.size : fsize
+end
+function instrument(l::Validate, s::SizeFitness, f)
+    s.size = mapreduce(prod ∘ size, +, params(f).order, init=0)
+    return f
 end
 
 """
@@ -124,7 +153,7 @@ function reset!(s::FitnessCache)
     reset!(s.base)
 end
 
-instrument(l::AbstractFunLabel, s::FitnessCache, f::Function) = instrument(l, s.base, f)
+instrument(l::AbstractFunLabel, s::FitnessCache, f) = instrument(l, s.base, f)
 
 """
     NanGuard{T} <: AbstractFitness where T <: AbstractFunLabel
@@ -157,11 +186,12 @@ function reset!(s::NanGuard)
     reset!(s.base)
 end
 
-function instrument(l::T, s::NanGuard{T}, f::Function) where T <: AbstractFunLabel
-    function guard(x...)
+function instrument(l::T, s::NanGuard{T}, f) where T <: AbstractFunLabel
+    fi = instrument(l, s.base, f)
+    return function(x...)
         s.shield && return s.lastout(s.replaceval)
-        y = f(x...)
-        # Broadcast to allow scalar operations when using CuArrays
+        y = fi(x...)
+        # Broadcast to avoid scalar operations when using CuArrays
         anynan = any(isnan.(y))
         anyinf = any(isinf.(y))
 
@@ -176,9 +206,8 @@ function instrument(l::T, s::NanGuard{T}, f::Function) where T <: AbstractFunLab
         end
         return y
     end
-    return instrument(l, s.base, guard)
 end
-instrument(l::AbstractFunLabel, s::NanGuard, f::Function) = instrument(l, s.base, f)
+instrument(l::AbstractFunLabel, s::NanGuard, f) = instrument(l, s.base, f)
 
 dummyvalue(::Type{<:TrackedArray{<:Any, <:Any, <:AT}}, shape, val) where AT <: AbstractArray = param(dummyvalue(AT, shape, val))
 dummyvalue(::Type{<:AT}, shape, val) where AT <: AbstractArray = fill!(similar(AT, shape), val)
@@ -200,7 +229,7 @@ fitness(s::AggFitness, f) = s.aggfun(fitness.(s.fitnesses, f))
 
 reset!(s::AggFitness) = foreach(reset!, s.fitnesses)
 
-instrument(l::AbstractFunLabel, s::AggFitness, f::Function) = foldl((ifun, fit) -> instrument(l, fit, ifun), s.fitnesses, init = f)
+instrument(l::AbstractFunLabel, s::AggFitness, f) = foldl((ifun, fit) -> instrument(l, fit, ifun), s.fitnesses, init = f)
 
 
 """
@@ -235,7 +264,7 @@ Flux.children(c::CandidateModel) = (c.graph, c.opt, c.lossfun, c.fitness)
 Flux.mapchildren(f, c::CandidateModel) = CandidateModel(f(c.graph), f(c.opt), f(c.lossfun), c.fitness)
 
 function Flux.train!(model::CandidateModel, data::AbstractArray{<:Tuple})
-    f = instrument(Train(), model.fitness, x -> model.graph(x))
+    f = instrument(Train(), model.fitness, model.graph)
     loss(x,y) = model.lossfun(f(x), y)
     iloss = instrument(TrainLoss(), model.fitness, loss)
     Flux.train!(iloss, params(model.graph), data, model.opt)
@@ -250,7 +279,7 @@ function Flux.train!(model::CandidateModel, iter)
     end
 end
 
-fitness(model::CandidateModel) = fitness(model.fitness, instrument(Validate(), model.fitness, x -> model.graph(x)))
+fitness(model::CandidateModel) = fitness(model.fitness, instrument(Validate(), model.fitness, model.graph))
 
 reset!(model::CandidateModel) = reset!(model.fitness)
 

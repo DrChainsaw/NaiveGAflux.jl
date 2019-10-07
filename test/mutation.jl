@@ -149,6 +149,43 @@
         @test inputs(v2) == [inpt]
     end
 
+    @testset "KernelSizeMutation $convtype" for convtype in (Conv, ConvTranspose, DepthwiseConv)
+        v = mutable(convtype((3,5), 2=>2, pad=(1,1,2,2)), inputvertex("in", 2))
+        indata = ones(Float32, 7,7,2,2)
+        @test size(v(indata)) == size(indata)
+
+        rng = SeqRng()
+        KernelSizeMutation2D(4,rng=rng)(v)
+
+        @test size(v(indata)) == size(indata)
+        @test size(NaiveNASflux.weights(layer(v)))[1:2] == (1, 2)
+    end
+
+    @testset "ActivationFunctionMutation Dense" begin
+        v = mutable(Dense(2,3), inputvertex("in", 2))
+        ActivationFunctionMutation(elu)(v)
+        @test layer(v).σ == elu
+    end
+
+    @testset "ActivationFunctionMutation RNN" begin
+        v = mutable(RNN(2,3), inputvertex("in", 2))
+        ActivationFunctionMutation(elu)(v)
+        @test layer(v).cell.σ == elu
+    end
+
+    @testset "ActivationFunctionMutation $convtype" for convtype in (Conv, ConvTranspose, DepthwiseConv)
+        v = mutable(convtype((3,5), 2=>2), inputvertex("in", 2))
+        ActivationFunctionMutation(elu)(v)
+        @test layer(v).σ == elu
+    end
+
+    Flux.GroupNorm(n) = GroupNorm(n,n)
+    @testset "ActivationFunctionMutation $normtype" for normtype in (BatchNorm, InstanceNorm, GroupNorm)
+        v = mutable(normtype(2), inputvertex("in", 2))
+        ActivationFunctionMutation(elu)(v)
+        @test layer(v).λ == elu
+    end
+
     @testset "NeuronSelectMutation" begin
 
         # Dummy neuron selection function just to mix things up in a predicable way

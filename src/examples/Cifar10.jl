@@ -33,6 +33,7 @@ end
 
 function run_experiment(popsize, fit_iter, evo_iter; nelites = 2, baseseed=666, cb = identity, mdir = defaultdir(), newpop = false)
     Random.seed!(NaiveGAflux.rng_default, baseseed)
+    @info "Start experiment with baseseed: $baseseed."
 
     population = initial_models(popsize, mdir, newpop, () -> fitnessfun(evo_iter))
     evostrategy = evolutionstrategy(popsize, nelites)

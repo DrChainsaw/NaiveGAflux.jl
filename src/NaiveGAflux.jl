@@ -6,6 +6,7 @@ using Random
 using Logging
 using Statistics
 using Serialization
+using Setfield
 
 if Flux.has_cuarrays()
     using CuArrays
@@ -15,7 +16,7 @@ const rng_default = Random.GLOBAL_RNG
 const modeldir = "models"
 
 # Fitness
-export fitness, instrument, reset!, AbstractFitness, AccuracyFitness, MapFitness, TimeFitness, FitnessCache, NanGuard, AggFitness
+export fitness, instrument, reset!, AbstractFitness, AccuracyFitness, MapFitness, TimeFitness, SizeFitness, FitnessCache, NanGuard, AggFitness
 
 # Candidate
 export evolvemodel, AbstractCandidate, CandidateModel, HostCandidate, CacheCandidate
@@ -30,7 +31,7 @@ export Probability, MutationShield, ApplyIf, RemoveIfSingleInput, RepeatPartitio
 export AbstractVertexSelection, AllVertices, FilterMutationAllowed
 
 # mutation types
-export AbstractMutation, MutationProbability, MutationList, RecordMutation, LogMutation, MutationFilter, PostMutation, VertexMutation, NoutMutation, AddVertexMutation, RemoveVertexMutation, NeuronSelectMutation, select, PostMutation, NeuronSelect, RemoveZeroNout
+export AbstractMutation, MutationProbability, MutationList, RecordMutation, LogMutation, MutationFilter, PostMutation, VertexMutation, NoutMutation, AddVertexMutation, RemoveVertexMutation, KernelSizeMutation, KernelSizeMutation2D, ActivationFunctionMutation, NeuronSelectMutation, select, PostMutation, NeuronSelect, RemoveZeroNout
 
 # mutation auxillaries
 export select, NeuronSelect, RemoveZeroNout
