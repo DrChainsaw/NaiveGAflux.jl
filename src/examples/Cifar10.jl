@@ -105,34 +105,43 @@ newopt(opt::Flux.Optimise.Optimiser) = NaiveGAflux.apply(Probability(0.05)) ? ne
 sameopt(::T, lr) where T = Flux.Optimise.Optimiser([T(lr)])
 
 function mutation()
+    acts = [identity, relu, elu, selu]
+
     mutate_nout = NeuronSelectMutation(NoutMutation(-0.05, 0.05)) # Max 5% change in output size
     decrease_nout = NeuronSelectMutation(NoutMutation(-0.05, 0))
-    add_vertex = add_vertex_mutation()
+    add_vertex = add_vertex_mutation(acts)
     add_maxpool = AddVertexMutation(VertexSpace(default_layerconf(), NamedLayerSpace("maxpool", MaxPoolSpace(PoolSpace2D([2])))))
     rem_vertex = RemoveVertexMutation()
+    # CoupledParSpace and [-2, 2] due to CuArrays issue# 356
+    mutate_kernel = KernelSizeMutation(CoupledParSpace([-2, 2], 2))
+    decrease_kernel = KernelSizeMutation(CoupledParSpace([-2], 2))
+    mutate_act = ActivationFunctionMutation(acts)
 
 
     # Create a shorthand alias for MutationProbability
     mp(m,p) = VertexMutation(MutationProbability(m, Probability(p)))
 
-    mnout = mp(LogMutation(v -> "\tChange size of vertex $(name(v))", mutate_nout), 0.02)
-    dnout = mp(LogMutation(v -> "\tReduce size of vertex $(name(v))", decrease_nout), 0.02)
+    mnout = mp(LogMutation(v -> "\tChange size of vertex $(name(v))", mutate_nout), 0.05)
+    dnout = mp(LogMutation(v -> "\tReduce size of vertex $(name(v))", decrease_nout), 0.05)
     maddv = mp(LogMutation(v -> "\tAdd vertex after $(name(v))", add_vertex), 0.005)
     maddm = mp(MutationFilter(canaddmaxpool, LogMutation(v -> "\tAdd maxpool after $(name(v))", add_maxpool)), 0.0005)
     mremv = mp(LogMutation(v -> "\tRemove vertex $(name(v))", rem_vertex), 0.01)
+    mkern = mp(LogMutation(v -> "\tMutate kernel size of $(name(v))", mutate_kernel), 0.02)
+    dkern = mp(LogMutation(v -> "\tDecrease kernel size of $(name(v))", decrease_kernel), 0.02)
+    mactf = mp(LogMutation(v -> "\tMutate activation function of $(name(v))", mutate_act), 0.05)
 
     mremv = MutationFilter(g -> nv(g) > 5, mremv)
 
     # Create two possible mutations: One which is guaranteed to not increase the size:
-    dsize = MutationList(mremv, PostMutation(dnout, NeuronSelect()), maddm)
+    dsize = MutationList(mremv, PostMutation(dnout, NeuronSelect()), dkern, maddm)
     # ...and another which can either decrease or increase the size:
-    msize = MutationList(mremv, PostMutation(mnout, NeuronSelect()), maddm, maddv)
+    msize = MutationList(mremv, PostMutation(mnout, NeuronSelect()), mkern, maddm, maddv)
     # Add mutation last as new vertices with neuron_value == 0 screws up outputs selection as per https://github.com/DrChainsaw/NaiveNASlib.jl/issues/39
 
     # If isbig then perform the mutation operation which is guaranteed to not increase the size
     # Otherwise perform the mutation which might decrease or increase the size
     # This is done mostly to avoid OOM or time outs. Doesn't hurt that it also speeds things up
-    mall = MutationList(MutationFilter(isbig, dsize), MutationFilter(!isbig, msize))
+    mall = MutationList(MutationFilter(isbig, dsize), MutationFilter(!isbig, msize), mactf)
 
     return LogMutation(g -> "Mutate model $(modelname(g))", mall)
 end
@@ -145,8 +154,7 @@ canaddmaxpool(v::AbstractVertex) = is_convtype(v) && !occursin.(r"(path|res|maxp
 
 Flux.mapchildren(f, aa::AbstractArray{<:Integer, 1}) = aa
 
-function add_vertex_mutation()
-    acts = [identity, relu, elu, selu]
+function add_vertex_mutation(acts)
 
     wrapitup(as) = AddVertexMutation(rep_fork_res(as, 1,loglevel=Logging.Info))
 
@@ -182,11 +190,10 @@ function fitnessfun(dataset, accdigits=3)
     acc = AccuracyFitness(dataset)
     truncacc = MapFitness(x -> round(x, digits=accdigits), acc)
 
-    # TODO: Enable turn off for testing stability
-    time = TimeFitness(NaiveGAflux.Validate())
-    timefit = MapFitness(x -> min(10.0^-accdigits, 1/(x * 10.0^(5+accdigits))), time)
+    size = SizeFitness()
+    sizefit = MapFitness(x -> min(10.0^-accdigits, 1 / x), size)
 
-    tot = AggFitness(sum, truncacc, timefit)
+    tot = AggFitness(sum, truncacc, sizefit)
 
     cache = FitnessCache(tot)
     return NanGuard(cache)
