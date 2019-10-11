@@ -18,17 +18,21 @@ Probability(p::Integer, rng) = Probability(p / 100.0, rng)
 
 """
     apply(p::Probability)
+    apply(p::Number)
 
 Return true with a probability of ´p.p´ (subject to `p.rng` behaviour).
 """
 apply(p::Probability) = rand(p.rng) < p.p
+apply(p::Real) = apply(Probability(p))
 
 """
     apply(f, p::Probability)
+    apply(f, p::Real)
 
 Call `f` with probability `p.p` (subject to `p.rng` behaviour).
 """
-apply(f::Function, p::Probability) =  apply(p) && f()
+apply(f, p::Probability) =  apply(p) && f()
+apply(f, p::Real) = apply(p) && f()
 
 """
     MutationShield <: DecoratingTrait

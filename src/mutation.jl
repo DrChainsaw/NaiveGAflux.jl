@@ -10,6 +10,7 @@ abstract type AbstractMutation{T} end
 """
     MutationProbability{T} <:AbstractMutation{T}
     MutationProbability(m::AbstractMutation{T}, p::Probability)
+    MutationProbability(m::AbstractMutation{T}, p::Number)
 
 Applies a wrapped `AbstractMutation` with a configured `Probability`
 """
@@ -17,12 +18,47 @@ struct MutationProbability{T} <:AbstractMutation{T}
     m::AbstractMutation{T}
     p::Probability
 end
+#MutationProbability(m::AbstractMutation{T}, p::Number) where T = MutationProbability(m, Probability(p))
 
 function (m::MutationProbability{T})(e::T) where T
     apply(m.p) do
         m.m(e)
     end
 end
+
+struct WeightedMutationProbability{T,F} <: AbstractMutation{T}
+    m::AbstractMutation{T}
+    pfun::F
+end
+WeightedMutationProbability(m::AbstractMutation, pbase::Real, rng=rng_default) = WeightedMutationProbability(m, weighted_neuron_value(pbase, rng))
+WeightedMutationProbabilityInv(m::AbstractMutation, pbase::Real, rng=rng_default) = WeightedMutationProbability(m, inv_weighted_neuron_value(pbase, rng))
+
+function (m::WeightedMutationProbability{T})(e::T) where T
+    apply(m.pfun(e)) do
+        m.m(e)
+    end
+end
+
+weighted_neuron_value(pbase, rng=rng_default; spread=2) = function(v::AbstractVertex)
+    ismissing(neuron_value(v)) && return pbase
+    return fixnan(pbase .^ (normexp(v) .^spread), pbase)
+end
+
+inv_weighted_neuron_value(pbase, rng=rng_default;spread=4) = function(v::AbstractVertex)
+    ismissing(neuron_value(v)) && return pbase
+    return fixnan(pbase .^ (1 ./ normexp(v) .^spread), pbase)
+end
+
+fixnan(x, rep) = isnan(x) ? rep : clamp(x, 0.0, 1.0)
+
+function normexp(v)
+    allvertices = filter(allow_mutation, all_in_graph(v))
+    allvalues = map(vi -> neuron_value(vi), allvertices)
+    sumvalue = mapreduce(mean, + , skipmissing(allvalues), init=0)
+    value = mean(neuron_value(v))
+    return (sumvalue - value) / (sumvalue - sumvalue / length(allvertices))
+end
+
 
 """
     MutationList{T} <: AbstractMutation{T}

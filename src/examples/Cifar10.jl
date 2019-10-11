@@ -104,10 +104,12 @@ newopt(lr::Number) = Flux.Optimise.Optimiser([rand([Descent, Momentum, Nesterov,
 newopt(opt::Flux.Optimise.Optimiser) = NaiveGAflux.apply(Probability(0.05)) ? newopt(newlr(opt)) : sameopt(opt.os[], newlr(opt))
 sameopt(::T, lr) where T = Flux.Optimise.Optimiser([T(lr)])
 
+
+import NaiveGAflux: WeightedMutationProbability, WeightedMutationProbabilityInv
 function mutation()
     acts = [identity, relu, elu, selu]
 
-    mutate_nout = NeuronSelectMutation(NoutMutation(-0.05, 0.05)) # Max 5% change in output size
+    increase_nout = NeuronSelectMutation(NoutMutation(0, 0.05)) # Max 5% change in output size
     decrease_nout = NeuronSelectMutation(NoutMutation(-0.05, 0))
     add_vertex = add_vertex_mutation(acts)
     add_maxpool = AddVertexMutation(VertexSpace(default_layerconf(), NamedLayerSpace("maxpool", MaxPoolSpace(PoolSpace2D([2])))))
@@ -119,23 +121,24 @@ function mutation()
 
 
     # Create a shorthand alias for MutationProbability
-    mp(m,p) = VertexMutation(MutationProbability(m, Probability(p)))
+    mp(m,p) = VertexMutation(WeightedMutationProbability(m, p))
+    mpi(m, p) = VertexMutation(WeightedMutationProbabilityInv(m, p))
 
-    mnout = mp(LogMutation(v -> "\tChange size of vertex $(name(v))", mutate_nout), 0.05)
-    dnout = mp(LogMutation(v -> "\tReduce size of vertex $(name(v))", decrease_nout), 0.05)
+    inout = mp(LogMutation(v -> "\tChange size of vertex $(name(v))", increase_nout), 0.02)
+    dnout = mpi(LogMutation(v -> "\tReduce size of vertex $(name(v))", decrease_nout), 0.02)
     maddv = mp(LogMutation(v -> "\tAdd vertex after $(name(v))", add_vertex), 0.005)
     maddm = mp(MutationFilter(canaddmaxpool, LogMutation(v -> "\tAdd maxpool after $(name(v))", add_maxpool)), 0.0005)
-    mremv = mp(LogMutation(v -> "\tRemove vertex $(name(v))", rem_vertex), 0.01)
-    mkern = mp(LogMutation(v -> "\tMutate kernel size of $(name(v))", mutate_kernel), 0.02)
-    dkern = mp(LogMutation(v -> "\tDecrease kernel size of $(name(v))", decrease_kernel), 0.02)
-    mactf = mp(LogMutation(v -> "\tMutate activation function of $(name(v))", mutate_act), 0.05)
+    mremv = mpi(LogMutation(v -> "\tRemove vertex $(name(v))", rem_vertex), 0.01)
+    mkern = mpi(LogMutation(v -> "\tMutate kernel size of $(name(v))", mutate_kernel), 0.02)
+    dkern = mpi(LogMutation(v -> "\tDecrease kernel size of $(name(v))", decrease_kernel), 0.01)
+    mactf = mpi(LogMutation(v -> "\tMutate activation function of $(name(v))", mutate_act), 0.01)
 
     mremv = MutationFilter(g -> nv(g) > 5, mremv)
 
     # Create two possible mutations: One which is guaranteed to not increase the size:
     dsize = MutationList(mremv, PostMutation(dnout, NeuronSelect()), dkern, maddm)
     # ...and another which can either decrease or increase the size:
-    msize = MutationList(mremv, PostMutation(mnout, NeuronSelect()), mkern, maddm, maddv)
+    msize = MutationList(mremv, PostMutation(inout, NeuronSelect()), PostMutation(dnout, NeuronSelect()), mkern, maddm, maddv)
     # Add mutation last as new vertices with neuron_value == 0 screws up outputs selection as per https://github.com/DrChainsaw/NaiveNASlib.jl/issues/39
 
     # If isbig then perform the mutation operation which is guaranteed to not increase the size
