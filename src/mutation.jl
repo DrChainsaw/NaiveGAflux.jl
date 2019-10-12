@@ -12,13 +12,13 @@ abstract type AbstractMutation{T} end
     MutationProbability(m::AbstractMutation{T}, p::Probability)
     MutationProbability(m::AbstractMutation{T}, p::Number)
 
-Applies a wrapped `AbstractMutation` with a configured `Probability`
+Applies `m` with probability `p`.
 """
 struct MutationProbability{T} <:AbstractMutation{T}
     m::AbstractMutation{T}
     p::Probability
 end
-#MutationProbability(m::AbstractMutation{T}, p::Number) where T = MutationProbability(m, Probability(p))
+MutationProbability(m::AbstractMutation{T}, p::Number) where T = MutationProbability(m, Probability(p))
 
 function (m::MutationProbability{T})(e::T) where T
     apply(m.p) do
@@ -26,12 +26,16 @@ function (m::MutationProbability{T})(e::T) where T
     end
 end
 
+"""
+    WeightedMutationProbability{T,F} <: AbstractMutation{T}
+    WeightedMutationProbability(m::AbstractMutation::T, pfun::F)
+
+Applies `m` to an entity `e` with a probability `pfun(e)`.
+"""
 struct WeightedMutationProbability{T,F} <: AbstractMutation{T}
     m::AbstractMutation{T}
     pfun::F
 end
-WeightedMutationProbability(m::AbstractMutation, pbase::Real, rng=rng_default) = WeightedMutationProbability(m, weighted_neuron_value(pbase, rng))
-WeightedMutationProbabilityInv(m::AbstractMutation, pbase::Real, rng=rng_default) = WeightedMutationProbability(m, inv_weighted_neuron_value(pbase, rng))
 
 function (m::WeightedMutationProbability{T})(e::T) where T
     apply(m.pfun(e)) do
@@ -39,24 +43,47 @@ function (m::WeightedMutationProbability{T})(e::T) where T
     end
 end
 
-weighted_neuron_value(pbase, rng=rng_default; spread=2) = function(v::AbstractVertex)
+"""
+    HighValueMutationProbability(m::AbstractMutation{T}, pbase::Real, rng=rng_default; spread=0.5)
+
+Return a `WeightedMutationProbability` which applies `m` to vertices with an (approximately) average probability of `pbase` and where high `neuron_value` compared to other vertices in same graph means higher probability.
+
+Parameter `spread` can be used to control how much the difference in probability is between high and low values. High spread means high difference while low spread means low difference.
+"""
+HighValueMutationProbability(m::AbstractMutation{T}, pbase::Real, rng=rng_default;spread=0.5) where T <: AbstractVertex = WeightedMutationProbability(m, weighted_neuron_value_high(pbase, rng,spread=spread))
+
+"""
+    LowValueMutationProbability(m::AbstractMutation{T}, pbase::Real, rng=rng_default; spread=2)
+
+Return a `WeightedMutationProbability` which applies `m` to vertices with an (approximately) average probability of `pbase` and where low `neuron_value` compared to other vertices in same graph means higher probability.
+
+Parameter `spread` can be used to control how much the difference in probability is between high and low values. High spread means high difference while low spread means low difference.
+"""
+LowValueMutationProbability(m::AbstractMutation{T}, pbase::Real, rng=rng_default;spread=2) where T <: AbstractVertex = WeightedMutationProbability(m, weighted_neuron_value_low(pbase, rng, spread=spread))
+
+
+weighted_neuron_value_high(pbase, rng=rng_default; spread=0.5) = function(v::AbstractVertex)
     ismissing(neuron_value(v)) && return pbase
-    return fixnan(pbase .^ (normexp(v) .^spread), pbase)
+    return Probability(fixnan(pbase ^ normexp(v, spread), pbase), rng)
 end
 
-inv_weighted_neuron_value(pbase, rng=rng_default;spread=4) = function(v::AbstractVertex)
+weighted_neuron_value_low(pbase, rng=rng_default;spread=2) = function(v::AbstractVertex)
     ismissing(neuron_value(v)) && return pbase
-    return fixnan(pbase .^ (1 ./ normexp(v) .^spread), pbase)
+    return Probability(fixnan(pbase ^ (1/normexp(v, 1/spread)), pbase), rng)
 end
 
 fixnan(x, rep) = isnan(x) ? rep : clamp(x, 0.0, 1.0)
 
-function normexp(v)
+# This is pretty hacky and arbitrary. Change to something better
+function normexp(v::AbstractVertex, s)
     allvertices = filter(allow_mutation, all_in_graph(v))
     allvalues = map(vi -> neuron_value(vi), allvertices)
-    sumvalue = mapreduce(mean, + , skipmissing(allvalues), init=0)
+    meanvalues = map(mean, skipmissing(allvalues))
+    meanvalue = mean(meanvalues)
+    maxvalue = maximum(meanvalues)
     value = mean(neuron_value(v))
-    return (sumvalue - value) / (sumvalue - sumvalue / length(allvertices))
+    # Basic idea: maxvalue - value means the (to be) exponent is <= 0 while the division seems to normalize so that average of pbase ^ normexp across allvertices is near pbase (no proof!). The factor 2 is just to prevent probability of vertex with maxvalue to be 1.
+    return (2maxvalue^s - value^s) / (2maxvalue^s - meanvalue^s)
 end
 
 

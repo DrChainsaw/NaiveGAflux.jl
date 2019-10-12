@@ -104,8 +104,6 @@ newopt(lr::Number) = Flux.Optimise.Optimiser([rand([Descent, Momentum, Nesterov,
 newopt(opt::Flux.Optimise.Optimiser) = NaiveGAflux.apply(Probability(0.05)) ? newopt(newlr(opt)) : sameopt(opt.os[], newlr(opt))
 sameopt(::T, lr) where T = Flux.Optimise.Optimiser([T(lr)])
 
-
-import NaiveGAflux: WeightedMutationProbability, WeightedMutationProbabilityInv
 function mutation()
     acts = [identity, relu, elu, selu]
 
@@ -119,19 +117,19 @@ function mutation()
     decrease_kernel = KernelSizeMutation(CoupledParSpace([-2], 2))
     mutate_act = ActivationFunctionMutation(acts)
 
-
     # Create a shorthand alias for MutationProbability
-    mp(m,p) = VertexMutation(WeightedMutationProbability(m, p))
-    mpi(m, p) = VertexMutation(WeightedMutationProbabilityInv(m, p))
+    mpn(m, p) = VertexMutation(MutationProbability(m, p))
+    mph(m, p) = VertexMutation(HighValueMutationProbability(m, p))
+    mpl(m, p) = VertexMutation(LowValueMutationProbability(m, p))
 
-    inout = mp(LogMutation(v -> "\tChange size of vertex $(name(v))", increase_nout), 0.02)
-    dnout = mpi(LogMutation(v -> "\tReduce size of vertex $(name(v))", decrease_nout), 0.02)
-    maddv = mp(LogMutation(v -> "\tAdd vertex after $(name(v))", add_vertex), 0.005)
-    maddm = mp(MutationFilter(canaddmaxpool, LogMutation(v -> "\tAdd maxpool after $(name(v))", add_maxpool)), 0.0005)
-    mremv = mpi(LogMutation(v -> "\tRemove vertex $(name(v))", rem_vertex), 0.01)
-    mkern = mpi(LogMutation(v -> "\tMutate kernel size of $(name(v))", mutate_kernel), 0.02)
-    dkern = mpi(LogMutation(v -> "\tDecrease kernel size of $(name(v))", decrease_kernel), 0.01)
-    mactf = mpi(LogMutation(v -> "\tMutate activation function of $(name(v))", mutate_act), 0.01)
+    inout = mph(LogMutation(v -> "\tIncrease size of vertex $(name(v))", increase_nout), 0.02)
+    dnout = mpl(LogMutation(v -> "\tReduce size of vertex $(name(v))", decrease_nout), 0.02)
+    maddv = mph(LogMutation(v -> "\tAdd vertex after $(name(v))", add_vertex), 0.005)
+    maddm = mpn(MutationFilter(canaddmaxpool, LogMutation(v -> "\tAdd maxpool after $(name(v))", add_maxpool)), 0.0005)
+    mremv = mpl(LogMutation(v -> "\tRemove vertex $(name(v))", rem_vertex), 0.01)
+    mkern = mpl(LogMutation(v -> "\tMutate kernel size of $(name(v))", mutate_kernel), 0.02)
+    dkern = mpl(LogMutation(v -> "\tDecrease kernel size of $(name(v))", decrease_kernel), 0.01)
+    mactf = mpl(LogMutation(v -> "\tMutate activation function of $(name(v))", mutate_act), 0.01)
 
     mremv = MutationFilter(g -> nv(g) > 5, mremv)
 
@@ -143,7 +141,7 @@ function mutation()
 
     # If isbig then perform the mutation operation which is guaranteed to not increase the size
     # Otherwise perform the mutation which might decrease or increase the size
-    # This is done mostly to avoid OOM or time outs. Doesn't hurt that it also speeds things up
+    # This is done mostly to avoid OOM and time outs. Doesn't hurt that it also speeds things up
     mall = MutationList(MutationFilter(isbig, dsize), MutationFilter(!isbig, msize), mactf)
 
     return LogMutation(g -> "Mutate model $(modelname(g))", mall)
