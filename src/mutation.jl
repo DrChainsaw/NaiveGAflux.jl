@@ -246,6 +246,8 @@ Remove the given vertex `v` using the configured `RemoveStrategy`.
 Default size align strategy is `IncreaseSmaller -> DecreaseBigger -> AlignSizeBoth -> FailAlignSizeWarn -> FailAlignSizeRevert`.
 
 Default reconnect strategy is `ConnectAll`.
+
+Note: High likelyhood of large accuracy degradation after applying this mutation.
 """
 struct RemoveVertexMutation <:AbstractMutation{AbstractVertex}
     s::RemoveStrategy
@@ -262,6 +264,8 @@ RemoveVertexMutation() = RemoveVertexMutation(RemoveStrategy(CheckAligned(CheckN
     KernelSizeMutation(absΔ::Integer...;pad=SamePad())
 
 Mutate the size of filter kernels of convolutional layers.
+
+Note: High likelyhood of large accuracy degradation after applying this mutation.
 """
 struct KernelSizeMutation{N} <: AbstractMutation{AbstractVertex}
     Δsizespace::AbstractParSpace{N, Int}
@@ -290,6 +294,8 @@ dilation(l) = l.dilation
     ActivationFunctionMutation(acts::AbstractVector;rng=rng_default)
 
 Mutate the activation function of layers which have an activation function.
+
+Note: High likelyhood of large accuracy degradation after applying this mutation.
 """
 struct ActivationFunctionMutation{T,R} <: AbstractMutation{AbstractVertex} where {T <: AbstractParSpace{1}, R <: AbstractRNG}
     actspace::T

@@ -4,7 +4,7 @@
 [![Build Status](https://ci.appveyor.com/api/projects/status/github/DrChainsaw/NaiveGAflux.jl?svg=true)](https://ci.appveyor.com/project/DrChainsaw/NaiveGAflux-jl)
 [![Codecov](https://codecov.io/gh/DrChainsaw/NaiveGAflux.jl/branch/master/graph/badge.svg)](https://codecov.io/gh/DrChainsaw/NaiveGAflux.jl)
 
-Neural architecture search for [Flux](https://github.com/FluxML/Flux.jl) through a genetic algorithm.
+Naive neural architecture search for [Flux](https://github.com/FluxML/Flux.jl) models using genetic algorithms.
 
 A marketing person might describe it as "practical proxyless NAS using an unrestricted search space".
 
@@ -16,11 +16,27 @@ The more honest purpose is to serve as a pipe cleaner and example for [NaiveNASf
 Pkg.add("https://github.com/DrChainsaw/NaiveGAflux.jl")
 ```
 
-Package is in development. Not ready for use!
+The basic idea is to create not just one model, but a population of several candidate models with different hyperparameters. The whole population is then evolved while the models are being trained.
+
+More concretely, this means train each model for a number of iterations, evaluate the fitness of each model, select the ones with highest fitness, apply random mutations (e.g. add/remove neurons/layers) to some of them and repeat until a model with the desired fitness has been produced.
+
+By controlling the number of training iterations to do before evolving the population, it is possible tune the compromise between fully training each model at the cost of longer time to evolve versus the risk of discarding a model just because it trains slower than the other members.
+
+There currently is no `fit(data)` type of method implemented. This design choice was made to not give the false impression that there exists one well researched and near optimal way to use this package. As such, this package in its current state is probably better suited for people who want to mess around with genetic algorithms than it is for people who want to offload the effort of finding a good enough model to the computer. 
+
+
+This package has the following main components:
+1. Search spaces
+2. Candidate utilities
+3. Fitness functions
+4. Evolution strategies
+5. Mutation operations
+
+Each component is described more in detail below.
 
 ### Search Spaces
 
-The search space is a set of possible architectures which the search policy may use to create initial candidates or to extend existing candidates. Search spaces are constructed from simple components which gives a lot of flexibility.
+The search space is a set of possible architectures which the search policy may use to create initial candidates or to extend existing candidates. Search spaces are constructed from simple components which can be combined in multiple ways, giving a lot of flexibility.
 
 Lets start with the most simple search space, a `ParSpace`:
 
@@ -64,7 +80,7 @@ convlayer = cs(inputsize)
 @test string(convlayer) == "Conv((5, 4), 16=>18, NNlib.elu)"
 ```
 
-Lastly, lets look at how to construct a search space for ResNeXt like models:
+Lastly, lets look at how to construct a complex search space:
 
 ```julia
 Random.seed!(NaiveGAflux.rng_default, 666)
@@ -130,15 +146,16 @@ graph2 = CompGraph(inputshape, archspace(inputshape))
 
 ### Mutation
 
-Mutation is the way one existing candidate is transformed to a slightly different candidate. NaiveGAflux supports doing this while preserving weights and connections between neurons, thus reducing the impact of mutating an already trained candidate.
+Mutation is the way one existing candidate is transformed to a slightly different candidate. NaiveGAflux supports doing this while preserving weights and alignment between layers, thus reducing the impact of mutating an already trained candidate.
 
 The following basic mutation operations are currently supported:
-1. Change the output size of vertices using `NoutMutation`
-2. Remove vertices using `RemoveVertexMutation`
-3. Add vertices using `AddVertexMutation`
+1. Change the output size of vertices using `NoutMutation`.
+2. Remove vertices using `RemoveVertexMutation`.
+3. Add vertices using `AddVertexMutation`.
+4. Mutation of kernel size for conv layers using `KernelSizeMutation`.
+5. Change of activation function using `ActivationFunctionMutation`.
 
-To be added:
-1. Mutation of kernel size for conv layers
+It is also possible to implement mutation of learning rate and optimizer using `evolve_candidate`, but a convenient way to do this still TBA, see Cifar10 example in the meantime.
 
 Possible but not planned:
 1. Add an edge from one vertex to another
@@ -182,14 +199,14 @@ mutation(graph)
 @test nout.(vertices(graph)) == [3,4,3,10]
 
 # In most cases it makes sense to mutate with a certain probability
-mutation = VertexMutation(MutationProbability(NoutMutation(-0.5, 0.5), Probability(0.05)))
+mutation = VertexMutation(MutationProbability(NoutMutation(-0.5, 0.5), 0.05))
 
 mutation(graph)
 
 @test nout.(vertices(graph)) == [3,4,2,10]
 
 # Or just chose to either mutate the whole graph or don't do anything
-mutation = MutationProbability(VertexMutation(NoutMutation(-0.5, 0.5)), Probability(0.05))
+mutation = MutationProbability(VertexMutation(NoutMutation(-0.5, 0.5)), 0.05)
 
 mutation(graph)
 
@@ -241,3 +258,7 @@ mutation = PostMutation(mutation, logselect, neuronselect)
 
 @test nout.(vertices(graph)) == nout_org.(vertices(graph)) == [3,6,5,10]
 ```
+
+## Contributing
+
+All contributions are welcome. Please file an issue before creating a PR.

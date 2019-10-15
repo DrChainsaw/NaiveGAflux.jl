@@ -14,8 +14,8 @@ export PlotFitness, ScatterPop, ScatterOpt, MultiPlot, CbAll
 defaultdir(this="CIFAR10") = joinpath(NaiveGAflux.modeldir, this)
 
 # TODO: Need to handle this somehow...
-NaiveNASlib.minΔninfactor(::ActivationContribution) = 1
-NaiveNASlib.minΔnoutfactor(::ActivationContribution) = 1
+NaiveNASlib.minΔninfactor(m::ActivationContribution) = minΔninfactor(NaiveNASflux.wrapped(m))
+NaiveNASlib.minΔnoutfactor(m::ActivationContribution) = minΔnoutfactor(NaiveNASflux.wrapped(m))
 
 
 function iterators((train_x,train_y)::Tuple; nepochs=200, batchsize=32, fitnessize=2048, nbatches_per_gen=400)
@@ -122,14 +122,14 @@ function mutation()
     mph(m, p) = VertexMutation(HighValueMutationProbability(m, p))
     mpl(m, p) = VertexMutation(LowValueMutationProbability(m, p))
 
-    inout = mph(LogMutation(v -> "\tIncrease size of vertex $(name(v))", increase_nout), 0.02)
-    dnout = mpl(LogMutation(v -> "\tReduce size of vertex $(name(v))", decrease_nout), 0.02)
+    inout = mph(LogMutation(v -> "\tIncrease size of vertex $(name(v))", increase_nout), 0.025)
+    dnout = mpl(LogMutation(v -> "\tReduce size of vertex $(name(v))", decrease_nout), 0.025)
     maddv = mph(LogMutation(v -> "\tAdd vertex after $(name(v))", add_vertex), 0.005)
     maddm = mpn(MutationFilter(canaddmaxpool, LogMutation(v -> "\tAdd maxpool after $(name(v))", add_maxpool)), 0.0005)
-    mremv = mpl(LogMutation(v -> "\tRemove vertex $(name(v))", rem_vertex), 0.01)
-    mkern = mpl(LogMutation(v -> "\tMutate kernel size of $(name(v))", mutate_kernel), 0.02)
-    dkern = mpl(LogMutation(v -> "\tDecrease kernel size of $(name(v))", decrease_kernel), 0.01)
-    mactf = mpl(LogMutation(v -> "\tMutate activation function of $(name(v))", mutate_act), 0.01)
+    mremv = mpl(LogMutation(v -> "\tRemove vertex $(name(v))", rem_vertex), 0.005)
+    mkern = mpl(LogMutation(v -> "\tMutate kernel size of $(name(v))", mutate_kernel), 0.01)
+    dkern = mpl(LogMutation(v -> "\tDecrease kernel size of $(name(v))", decrease_kernel), 0.005)
+    mactf = mpl(LogMutation(v -> "\tMutate activation function of $(name(v))", mutate_act), 0.005)
 
     mremv = MutationFilter(g -> nv(g) > 5, mremv)
 

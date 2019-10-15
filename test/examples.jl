@@ -134,14 +134,14 @@ end
     @test nout.(vertices(graph)) == [3,4,3,10]
 
     # In most cases it makes sense to mutate with a certain probability
-    mutation = VertexMutation(MutationProbability(NoutMutation(-0.5, 0.5), Probability(0.05)))
+    mutation = VertexMutation(MutationProbability(NoutMutation(-0.5, 0.5), 0.05))
 
     mutation(graph)
 
     @test nout.(vertices(graph)) == [3,4,2,10]
 
     # Or just chose to either mutate the whole graph or don't do anything
-    mutation = MutationProbability(VertexMutation(NoutMutation(-0.5, 0.5)), Probability(0.05))
+    mutation = MutationProbability(VertexMutation(NoutMutation(-0.5, 0.5)), 0.05)
 
     mutation(graph)
 
