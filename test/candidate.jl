@@ -176,7 +176,7 @@
     end
 
     @testset "AggFitness" begin
-        af = AggFitness(sum, MockFitness(3), MockFitness(2))
+        af = AggFitness(+, MockFitness(3), MockFitness(2))
 
         @test fitness(af, identity) == 5
 
@@ -188,6 +188,8 @@
         reset!(af)
 
         @test nreset == 2
+
+        @test_throws ErrorException AggFitness(+)
     end
 end
 

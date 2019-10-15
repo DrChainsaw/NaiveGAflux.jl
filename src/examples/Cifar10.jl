@@ -194,7 +194,7 @@ function fitnessfun(dataset, accdigits=3)
     size = SizeFitness()
     sizefit = MapFitness(x -> min(10.0^-accdigits, 1 / x), size)
 
-    tot = AggFitness(sum, truncacc, sizefit)
+    tot = AggFitness(+, truncacc, sizefit)
 
     cache = FitnessCache(tot)
     return NanGuard(cache)

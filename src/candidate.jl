@@ -223,9 +223,10 @@ struct AggFitness <: AbstractFitness
     aggfun::Function
     fitnesses
 end
+AggFitness(aggfun) = error("Must supply an aggregation function an at least one fitness")
 AggFitness(aggfun, fitnesses::AbstractFitness...) = AggFitness(aggfun, fitnesses)
 
-fitness(s::AggFitness, f) = s.aggfun(fitness.(s.fitnesses, f))
+fitness(s::AggFitness, f) = mapfoldl(ff -> fitness(ff, f), s.aggfun, s.fitnesses)
 
 reset!(s::AggFitness) = foreach(reset!, s.fitnesses)
 
