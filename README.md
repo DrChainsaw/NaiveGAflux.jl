@@ -28,9 +28,9 @@ There currently is no `fit(data)` type of method implemented. This design choice
 This package has the following main components:
 1. [Search spaces](#search-spaces)
 2. [Mutation operations](#mutation)
-3. [Fitness functions]("fitness-functions")
-4. [Candidate utilities]("candidate-utilities")
-5. [Evolution strategies]("evolution-strategies")
+3. [Fitness functions]("#fitness-functions")
+4. [Candidate utilities]("#candidate-utilities")
+5. [Evolution strategies]("#evolution-strategies")
 
 Each component is described more in detail below.
 
@@ -97,7 +97,7 @@ bscs = ListArchSpace(bs, cs)
 # Randomly generates a conv-block:
 cblock = ArchSpace(ParSpace1D(cs, csbs, bscs))
 
-# Generates between 1 and 5 layers from csbs
+# Generates between 1 and 5 layers from cblock
 rep = RepeatArchSpace(cblock, 1:5)
 
 # Generates between 2 and 4 parallel paths joined by concatenation (inception like-blocks) from rep
@@ -132,7 +132,7 @@ output = ListArchSpace(drep, dout)
 # Aaaand lets glue it together: Feature extracting conv+bn layers -> global pooling -> dense layers
 archspace = ListArchSpace(featureextract, GpVertex2D(), output)
 
-# Input is 3 channel image
+# Input is a 3 channel image
 inputshape = inputvertex("input", 3, FluxConv{2}())
 
 # Sample one architecture from the search space
@@ -234,7 +234,7 @@ select(mutation.m)
 @test nout.(vertices(graph)) == nout_org.(vertices(graph)) == [3,4,2,10]
 @test size(graph(ones(3,1))) == (10, 1)
 
-# Mutation can also be conditioned:
+# Mutations can also be conditioned:
 mutation = VertexMutation(MutationFilter(v -> nout(v) < 4, RemoveVertexMutation()))
 
 mutation(graph)
@@ -263,124 +263,169 @@ mutation = PostMutation(mutation, logselect, neuronselect)
 
 A handful of ways to compute the fitness of a model are supplied. Apart from the obvious accuracy on some (typically held out) data set, it is also possible to measure fitness as how many (few) parameters a model has and how long it takes on average to perform a forward/backward pass. Fitness metrics can of course be combined to create objectives which balance several factors.
 
+As seen below, some fitness functions are not trivial to use. [Candidate utilities]("#candidate-utilities") helps managing this complexity behind a much simpler API.
+
 Examples:
 
 ```julia
 # Function to compute fitness for does not have to be a CompGraph, or even a neural network
-candidate1 = x -> 3:-1:1
-candidate2 = Dense(param(ones(3,3)), param(1:3))
+  candidate1 = x -> 3:-1:1
+  candidate2 = Dense(param(ones(3,3)), param(1:3))
 
-# Fitness is accuracy on the provided data set
-accfitness = AccuracyFitness([(ones(3, 1), 1:3)])
+  # Fitness is accuracy on the provided data set
+  accfitness = AccuracyFitness([(ones(3, 1), 1:3)])
 
-@test fitness(accfitness, candidate1) == 0
-@test fitness(accfitness, candidate2) == 1
+  @test fitness(accfitness, candidate1) == 0
+  @test fitness(accfitness, candidate2) == 1
 
-# Measure how long time it takes to train the function
-timetotrain = TimeFitness(NaiveGAflux.Train())
+  # Measure how long time it takes to train the function
+  import NaiveGAflux: Train, Validate
+  timetotrain = TimeFitness(Train())
 
-# No training done yet...
-@test fitness(timetotrain, candidate1) == 0
-@test fitness(timetotrain, candidate2) == 0
+  # No training done yet...
+  @test fitness(timetotrain, candidate1) == 0
+  @test fitness(timetotrain, candidate2) == 0
 
-# There is no magic involved here, we need to "instrument" the function to measure
-candidate2_timed = instrument(NaiveGAflux.Train(), timetotrain, candidate2)
+  # There is no magic involved here, we need to "instrument" the function to measure
+  candidate2_timed = instrument(Train(), timetotrain, candidate2)
 
-# Instrumented function produces same result as the original function...
-@test candidate2_timed(ones(3,1)) == candidate2((ones(3,1)))
-# ... and TimeFitness measures time elapsed in the background
-@test fitness(timetotrain, candidate2) > 0
+  # Instrumented function produces same result as the original function...
+  @test candidate2_timed(ones(3,1)) == candidate2((ones(3,1)))
+  # ... and TimeFitness measures time elapsed in the background
+  @test fitness(timetotrain, candidate2) > 0
 
-# Just beware that it is not very clever, it just stores the time when a function it instrumented was run...
-@test fitness(timetotrain, sleep(0.2)) == fitness(timetotrain, sleep(0.01))
+  # Just beware that it is not very clever, it just stores the time when a function it instrumented was run...
+  @test fitness(timetotrain, sleep(0.2)) == fitness(timetotrain, sleep(0.01))
 
-# ... and it needs to be reset before being used for another candidate
-# In practice you probably want to create one instance per candidate
-reset!(timetotrain)
-@test fitness(timetotrain, candidate1) == 0
+  # ... and it needs to be reset before being used for another candidate
+  # In practice you probably want to create one instance per candidate
+  reset!(timetotrain)
+  @test fitness(timetotrain, candidate1) == 0
 
-# One typically wants to map short time to high fitness.
-timefitness = MapFitness(x -> x == 0 ? 0 : 1/(x*1e6), timetotrain)
+  # One typically wants to map short time to high fitness.
+  timefitness = MapFitness(x -> x == 0 ? 0 : 1/(x*1e6), timetotrain)
 
-# Will see to it so that timetotrain gets to instrument the function
-candidate2_timed = instrument(NaiveGAflux.Train(), timefitness, candidate2)
+  # Will see to it so that timetotrain gets to instrument the function
+  candidate2_timed = instrument(Train(), timefitness, candidate2)
 
-@test candidate2_timed(ones(3,1)) == candidate2(ones(3,1))
-@test fitness(timefitness, candidate2) > 0
+  @test candidate2_timed(ones(3,1)) == candidate2(ones(3,1))
+  @test fitness(timefitness, candidate2) > 0
 
-# This also propagates ofc
-reset!(timefitness)
-@test fitness(timefitness, candidate2) == 0
+  # This also propagates ofc
+  reset!(timefitness)
+  @test fitness(timefitness, candidate2) == 0
 
-# Use the number of parameters to compute fitness
-nparams = SizeFitness()
+  # Use the number of parameters to compute fitness
+  nparams = SizeFitness()
 
-@test fitness(nparams, candidate2) == 12
+  @test fitness(nparams, candidate2) == 12
 
-# This does not work unfortunately, and it tends to happen when combining fitness functions due to instrumentation
-@test (@test_logs (:warn, "SizeFitness got zero parameters! Check your fitness function!") fitness(nparams, candidate2_timed)) == 0
+  # This does not work unfortunately, and it tends to happen when combining fitness functions due to instrumentation
+  @test (@test_logs (:warn, "SizeFitness got zero parameters! Check your fitness function!") fitness(nparams, candidate2_timed)) == 0
 
-# The mitigation for this is to "abuse" the instrumentation API
-instrument(NaiveGAflux.Validate(), nparams, candidate2)
-@test fitness(nparams, candidate2_timed) == 12
+  # The mitigation for this is to "abuse" the instrumentation API
+  instrument(Validate(), nparams, candidate2)
+  @test fitness(nparams, candidate2_timed) == 12
 
-# This however adds state which needs to be reset shall the function be used for something else
-@test fitness(nparams, sum) == 12
-reset!(nparams)
-@test fitness(nparams, param(1:3)) == 3
+  # This however adds state which needs to be reset shall the function be used for something else
+  @test fitness(nparams, sum) == 12
+  reset!(nparams)
+  @test fitness(nparams, param(1:3)) == 3
 
-# Combining fitness is straight forward
-# Note that one typically wants to map low number of parameters to high fitness (omitted here for brevity)
-combined = AggFitness(+, accfitness, nparams, timefitness)
+  # Combining fitness is straight forward
+  # Note that one typically wants to map low number of parameters to high fitness (omitted here for brevity)
+  combined = AggFitness(+, accfitness, nparams, timefitness)
 
-@test fitness(combined, candidate2) == 13
+  @test fitness(combined, candidate2) == 13
 
-# instrumentation will be aggregated as well
-candidate2_timed = instrument(NaiveGAflux.Train(), combined, candidate2)
+  # instrumentation will be aggregated as well
+  candidate2_timed = instrument(Train(), combined, candidate2)
 
-@test candidate2_timed(ones(3,1)) == candidate2(ones(3,1))
-@test fitness(combined, candidate2) > 13
+  @test candidate2_timed(ones(3,1)) == candidate2(ones(3,1))
+  @test fitness(combined, candidate2) > 13
 
-# Special mention goes to NanGuard. Flux typically throws an exception if it sees NaN or Inf.
-# Evolution might come up with a model which produces this and then one typically just want to assign it 0 fitness and move on
-nanguard = NanGuard(combined)
+  # Special mention goes to NanGuard. Flux typically throws an exception if it sees NaN or Inf.
+  # Evolution might come up with a model which produces this and then one typically just want to assign it 0 fitness and move on
+  nanguard = NanGuard(combined)
 
-training_guarded = instrument(NaiveGAflux.Train(), nanguard, candidate2)
-validation_guarded = instrument(NaiveGAflux.Validate(), nanguard, candidate2)
+  training_guarded = instrument(Train(), nanguard, candidate2)
+  validation_guarded = instrument(Validate(), nanguard, candidate2)
 
-@test training_guarded(ones(3,1)) == validation_guarded(ones(3,1)) == candidate2(ones(3,1))
+  @test training_guarded(ones(3,1)) == validation_guarded(ones(3,1)) == candidate2(ones(3,1))
 
-# Now the model gets corrupted somehow...
-candidate2.W.data[1,1] = NaN
+  # Now the model gets corrupted somehow...
+  candidate2.W.data[1,1] = NaN
 
-@test any(isnan, candidate2(ones(3,1)))
+  @test any(isnan, candidate2(ones(3,1)))
 
-@test (@test_logs (:warn, "NaN detected for function with label NaiveGAflux.Train()") training_guarded(ones(3,1))) == zeros(3,1)
-@test (@test_logs (:warn, "NaN detected for function with label NaiveGAflux.Validate()") validation_guarded(ones(3,1))) == zeros(3,1)
+  @test (@test_logs (:warn, "NaN detected for function with label Train()") training_guarded(ones(3,1))) == zeros(3,1)
+  @test (@test_logs (:warn, "NaN detected for function with label Validate()") validation_guarded(ones(3,1))) == zeros(3,1)
 
-@test fitness(nanguard, candidate2) == 0
+  @test fitness(nanguard, candidate2) == 0
 
-# After a Nan is detected the function will no longer be evaluated until reset
-candidate2.W.data[1,1] = 1
+  # After a Nan is detected the function will no longer be evaluated until reset
+  candidate2.W.data[1,1] = 1
 
-@test !any(isnan, candidate2(ones(3,1)))
-@test training_guarded(ones(3,1)) == zeros(3,1)
-@test validation_guarded(ones(3,1)) == zeros(3,1)
-@test fitness(nanguard, candidate2) == 0
+  @test !any(isnan, candidate2(ones(3,1)))
+  @test training_guarded(ones(3,1)) == zeros(3,1)
+  @test validation_guarded(ones(3,1)) == zeros(3,1)
+  @test fitness(nanguard, candidate2) == 0
 
-reset!(nanguard)
-@test training_guarded(ones(3,1)) == validation_guarded(ones(3,1)) == candidate2(ones(3,1))
+  reset!(nanguard)
+  @test training_guarded(ones(3,1)) == validation_guarded(ones(3,1)) == candidate2(ones(3,1))
 ```
 
 ### Candidate utilities
 
 The main component of a candidate is the model itself of course. There are however a few convenience utilities around candidate handling which may be useful.
 
-Example: TBA
+As seen in the previous section, some fitness functions are not straight forward to use. By wrapping a model, a fitness function, a loss function and an optimizer in a `CandidateModel`, NaiveGAflux will hide much of the complexity and reduce the API to the following:
+
+* `train!(candidate, data)`
+* `fitness(candidate)`
+
+Example:
+
+```julia
+using Random
+Random.seed!(NaiveGAflux.rng_default, 0)
+
+archspace = RepeatArchSpace(VertexSpace(DenseSpace(3, relu)), 2)
+inpt = inputvertex("in", 3)
+dataset = (ones(Float32, 3, 1), Float32[0, 1, 0])
+
+graph = CompGraph(inpt, archspace(inpt))
+opt = Flux.ADAM(0.01)
+loss = Flux.logitcrossentropy
+fitfun = NanGuard(AccuracyFitness([dataset]))
+
+# CandidateModel is the most basic candidate and handles things like fitness instrumentation
+candmodel = CandidateModel(graph, opt, loss, fitfun)
+
+Flux.train!(candmodel, Iterators.repeated(dataset, 20))
+@test fitness(candmodel) > 0
+
+# HostCandidate moves the model to the GPU when training or evaluating fitness and moves it back afterwards
+# Useful for conserving GPU memory at the expense of longer time to train.
+# Note, it does not move the data. GpuIterator can provide some assistance here...
+dataset_gpu = GpuIterator([dataset])
+fitfun_gpu = NanGuard(AccuracyFitness(dataset_gpu))
+hostcand = HostCandidate(CandidateModel(graph, Flux.ADAM(0.01), loss, fitfun_gpu))
+
+Flux.train!(hostcand, dataset_gpu)
+@test fitness(hostcand) > 0
+
+# CacheCandidate is a necessity if using AccuracyFitness.
+# It caches the last computed fitness value so it is not recomputed every time fitness is called
+cachinghostcand = CacheCandidate(hostcand)
+
+Flux.train!(cachinghostcand, dataset_gpu)
+@test fitness(cachinghostcand) > 0
+```
 
 ### Evolution Strategies
 
-TBA
+TBD 
 
 ## Contributing
 

@@ -276,7 +276,7 @@ Flux.train!(model::CandidateModel, data::Tuple{<:AbstractArray, <:AbstractArray}
 # Assume iterator in the general case
 function Flux.train!(model::CandidateModel, iter)
     for data in iter
-        Flux.train!(model, [data])
+        Flux.train!(model, data)
     end
 end
 
@@ -358,7 +358,7 @@ graph(c::CacheCandidate) = graph(c.c)
 """
     evolvemodel(m::AbstractMutation{CompGraph}, newfields::Function=deepcopy)
 
-Return a function which maps a `CandidateModel c1` to a new `CandidateModel c2` where `c2.graph = m(copy(c1.graph))`.
+Return a function which maps a `AbstractCandidate c1` to a new `AbstractCandidate c2` where `c2.graph = m(copy(c1.graph))`.
 
 All other fields are mapped through the function `newfields`.
 

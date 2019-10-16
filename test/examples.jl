@@ -301,3 +301,41 @@ end
     reset!(nanguard)
     @test training_guarded(ones(3,1)) == validation_guarded(ones(3,1)) == candidate2(ones(3,1))
 end
+
+
+@testset "Candidate handling" begin
+    using Random
+    Random.seed!(NaiveGAflux.rng_default, 0)
+
+    archspace = RepeatArchSpace(VertexSpace(DenseSpace(3, relu)), 2)
+    inpt = inputvertex("in", 3)
+    dataset = (ones(Float32, 3, 1), Float32[0, 1, 0])
+
+    graph = CompGraph(inpt, archspace(inpt))
+    opt = Flux.ADAM(0.01)
+    loss = Flux.logitcrossentropy
+    fitfun = NanGuard(AccuracyFitness([dataset]))
+
+    # CandidateModel is the most basic candidate and handles things like fitness instrumentation
+    candmodel = CandidateModel(graph, opt, loss, fitfun)
+
+    Flux.train!(candmodel, Iterators.repeated(dataset, 20))
+    @test fitness(candmodel) > 0
+
+    # HostCandidate moves the model to the GPU when training or evaluating fitness and moves it back afterwards
+    # Useful for conserving GPU memory at the expense of longer time to train.
+    # Note, it does not move the data. GpuIterator can provide some assistance here...
+    dataset_gpu = GpuIterator([dataset])
+    fitfun_gpu = NanGuard(AccuracyFitness(dataset_gpu))
+    hostcand = HostCandidate(CandidateModel(graph, Flux.ADAM(0.01), loss, fitfun_gpu))
+
+    Flux.train!(hostcand, dataset_gpu)
+    @test fitness(hostcand) > 0
+
+    # CacheCandidate is a necessity if using AccuracyFitness.
+    # It caches the last computed fitness value so it is not recomputed every time fitness is called
+    cachinghostcand = CacheCandidate(hostcand)
+
+    Flux.train!(cachinghostcand, dataset_gpu)
+    @test fitness(cachinghostcand) > 0
+end
