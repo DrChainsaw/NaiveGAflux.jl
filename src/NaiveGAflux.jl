@@ -56,6 +56,7 @@ include("archspace.jl")
 include("mutation.jl")
 include("fitness.jl")
 include("candidate.jl")
+include("evolve.jl")
 include("iterators.jl")
 include("examples/Cifar10.jl")
 

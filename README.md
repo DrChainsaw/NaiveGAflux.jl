@@ -20,7 +20,7 @@ The basic idea is to create not just one model, but a population of several cand
 
 More concretely, this means train each model for a number of iterations, evaluate the fitness of each model, select the ones with highest fitness, apply random mutations (e.g. add/remove neurons/layers) to some of them and repeat until a model with the desired fitness has been produced.
 
-By controlling the number of training iterations to do before evolving the population, it is possible tune the compromise between fully training each model at the cost of longer time to evolve versus the risk of discarding a model just because it trains slower than the other members.
+By controlling the number of training iterations before evolving the population, it is possible tune the compromise between fully training each model at the cost of longer time to evolve versus the risk of discarding a model just because it trains slower than the other members.
 
 There currently is no `fit(data)` type of method implemented. This design choice was made to not give the false impression that there exists one well researched and near optimal way to use this package. As such, this package in its current state is probably better suited for people who want to mess around with genetic algorithms than it is for people who want to offload the effort of finding a good enough model to the computer.
 
@@ -87,7 +87,7 @@ selection = CombinedEvolution(elites, mutate)
 
 # And evolve
 population = evolve!(selection, population)
-@test nv.(NaiveGAflux.graph.(population)) == [5, 3, 3, 4, 4]
+@test newpopulation != population
 
 # Repeat steps 2 and 3 until a model with the desired fitness is found.
 ```
@@ -99,7 +99,7 @@ The search space is a set of possible architectures which the search policy may 
 Lets start with the most simple search space, a `ParSpace`:
 
 ```julia
-# Set seed of default random number generator for reproduceable results
+# Set seed of default random number generator for reproducible results
 using NaiveGAflux, Random
 Random.seed!(NaiveGAflux.rng_default, 123)
 
@@ -299,8 +299,10 @@ mutation(graph)
 
 @test nout.(vertices(graph)) == [3,5,10]
 
+# When adding vertices it is probably a good idea to try to initialize them as identity mappings
+addmut = AddVertexMutation(VertexSpace(DenseSpace(5, identity)), IdentityWeightInit())
+
 # Chaining mutations is also useful:
-addmut = AddVertexMutation(VertexSpace(DenseSpace(5, identity)))
 noutmut = NeuronSelectMutation(NoutMutation(-0.8, 0.8))
 mutation = VertexMutation(MutationList(addmut, noutmut))
 

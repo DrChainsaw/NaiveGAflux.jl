@@ -41,6 +41,9 @@ using Test
     @info "Testing candidate"
     include("candidate.jl")
 
+    @info "Testing evolve"
+    include("evolve.jl")
+
     @info "Testing iterators"
     include("iterators.jl")
 

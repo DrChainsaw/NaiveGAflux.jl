@@ -48,15 +48,15 @@
     selection = CombinedEvolution(elites, mutate)
 
     # And evolve
-    population = evolve!(selection, population)
-    @test nv.(NaiveGAflux.graph.(population)) == [5, 3, 3, 4, 4]
+    newpopulation = evolve!(selection, population)
+    @test newpopulation != population
 
     # Repeat steps 2 and 3 until a model with the desired fitness is found.
 end
 
 
 @testset "ParSpace example" begin
-    # Set seed of default random number generator for reproduceable results
+    # Set seed of default random number generator for reproducible results
     using NaiveGAflux, Random
     Random.seed!(NaiveGAflux.rng_default, 123)
 
@@ -233,11 +233,12 @@ end
 
     @test nout.(vertices(graph)) == [3,5,10]
 
+    # When adding vertices it is probably a good idea to try to initialize them as identity mappings
+    addmut = AddVertexMutation(VertexSpace(DenseSpace(5, identity)), IdentityWeightInit())
+
     # Chaining mutations is also useful:
-    addmut = AddVertexMutation(VertexSpace(DenseSpace(5, identity)))
     noutmut = NeuronSelectMutation(NoutMutation(-0.8, 0.8))
     mutation = VertexMutation(MutationList(addmut, noutmut))
-
     # For deeply composed blobs like this, it can be cumbersome to "dig up" the NeuronSelectMutation.
     # NeuronSelect helps finding NeuronSelectMutations in the compositional hierarchy
     neuronselect = NeuronSelect()
