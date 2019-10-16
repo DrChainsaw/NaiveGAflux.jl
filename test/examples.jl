@@ -49,7 +49,7 @@
 
     # And evolve
     population = evolve!(selection, population)
-    @test nv.(NaiveGAflux.graph.(population)) == [3, 5, 3, 5, 3]
+    @test nv.(NaiveGAflux.graph.(population)) == [5, 3, 3, 4, 4]
 
     # Repeat steps 2 and 3 until a model with the desired fitness is found.
 end

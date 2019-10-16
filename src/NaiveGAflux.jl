@@ -54,6 +54,7 @@ export Cifar10
 include("util.jl")
 include("archspace.jl")
 include("mutation.jl")
+include("fitness.jl")
 include("candidate.jl")
 include("iterators.jl")
 include("examples/Cifar10.jl")
