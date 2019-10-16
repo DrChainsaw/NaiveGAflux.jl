@@ -310,6 +310,8 @@ struct LayerVertexConf
     traitfun
 end
 LayerVertexConf() = LayerVertexConf(ActivationContribution ∘ LazyMutable, validated() ∘ default_logging())
+Shielded(base=LayerVertexConf()) = LayerVertexConf(base.layerfun, MutationShield ∘ base.traitfun) 
+
 
 (c::LayerVertexConf)(in::AbstractVertex, l) = mutable(l,in,layerfun=c.layerfun, mutation=IoChange, traitfun=c.traitfun)
 (c::LayerVertexConf)(name::String, in::AbstractVertex, l) = mutable(name, l,in,layerfun=c.layerfun, mutation=IoChange, traitfun=c.traitfun)

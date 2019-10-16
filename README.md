@@ -34,6 +34,64 @@ This package has the following main components:
 
 Each component is described more in detail below.
 
+Here is a very basic example just to get a feeling for the package:
+
+```julia
+using NaiveGAflux, Random
+Random.seed!(NaiveGAflux.rng_default, 123)
+
+nlabels = 3
+ninputs = 5
+inshape = inputvertex("input", ninputs, FluxDense())
+
+# Step 1: Create initial models
+layerspace = VertexSpace(DenseSpace(3:10, [identity, relu, elu, selu]))
+initial_hidden = RepeatArchSpace(layerspace, 1:3)
+# Output layer has fixed size and is shielded from mutation
+outlayer = VertexSpace(Shielded(), DenseSpace(nlabels, identity))
+initial_searchspace = ListArchSpace(initial_hidden, outlayer)
+
+# Sample 5 models from the initial search space
+models = [CompGraph(inshape, initial_searchspace(inshape)) for _ in 1:5]
+@test nv.(models) == [3, 5, 3, 4, 5]
+
+# Some dummy data just to make stuff run
+batchsize = 4
+dataset = (randn(ninputs, batchsize), Flux.onehotbatch(rand(1:nlabels, batchsize), 1:nlabels))
+
+# You typically do not want to measure fitness on the same data as the models are trained...
+fitfun = AccuracyFitness([dataset])
+opt = Flux.Descent(0.01) # Careful with stateful optimizers...
+loss = Flux.logitcrossentropy
+population = [CandidateModel(model, opt, loss, fitfun) for model in models]
+
+# Step 2: Train the models
+for candidate in population
+    Flux.train!(candidate, dataset)
+end
+
+# Step 3: Evolve the population
+
+# Mutations
+mp(m, p) = VertexMutation(MutationProbability(m, p))
+# You probably want to use lower probabilities than this
+addlayer = mp(AddVertexMutation(layerspace), 0.4)
+remlayer = mp(RemoveVertexMutation(), 0.4)
+
+mutation = MutationList(remlayer, addlayer)
+
+# Selection
+elites = EliteSelection(2)
+mutate = SusSelection(3, EvolveCandidates(evolvemodel(mutation)))
+selection = CombinedEvolution(elites, mutate)
+
+# And evolve
+population = evolve!(selection, population)
+@test nv.(NaiveGAflux.graph.(population)) == [3, 5, 3, 5, 3]
+
+# Repeat steps 2 and 3 until a model with the desired fitness is found.
+```
+
 ### Search Spaces
 
 The search space is a set of possible architectures which the search policy may use to create initial candidates or to extend existing candidates. Search spaces are constructed from simple components which can be combined in multiple ways, giving a lot of flexibility.
