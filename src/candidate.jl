@@ -404,7 +404,7 @@ abstract type AbstractEvolution end
 
 Evolve `population` into a new population. New population may or may not contain same individuals as before.
 """
-function evolve end
+function evolve! end
 
 """
     NoOpEvolution <: AbstractEvolution
