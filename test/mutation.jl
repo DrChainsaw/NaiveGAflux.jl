@@ -197,7 +197,7 @@
         v2 = dense(v1, 2)
         v3 = dense(v1, 1)
 
-        AddVertexMutation(space, outs -> view(outs, 2))(v1)
+        AddVertexMutation(space, outs -> [outs[2]])(v1)
 
         @test inputs(v2) == [v1]
         @test inputs(v3) != [v1]

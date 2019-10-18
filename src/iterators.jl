@@ -257,3 +257,5 @@ function shufflelastdim!(rng, a::AbstractArray{T,N}) where {T,N}
     get[end] = randperm(rng, size(a,N))
     a[set...] = a[get...]
 end
+
+Flux.onehotbatch(itr::ShuffleIterator, labels) = MapIterator(x -> Flux.onehotbatch(x, labels), itr)

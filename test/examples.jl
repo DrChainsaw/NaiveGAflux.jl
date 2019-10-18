@@ -345,13 +345,9 @@ end
 
     @test any(isnan, candidate2(ones(3,1)))
 
-    @test (
-    @test_logs (:warn, "NaN detected for function with label Train()")
-    training_guarded(ones(3,1))) == zeros(3,1)
+    @test (@test_logs (:warn, "NaN detected for function with label Train()") training_guarded(ones(3,1))) == zeros(3,1)
 
-    @test (
-    @test_logs (:warn, "NaN detected for function with label Validate()")
-    validation_guarded(ones(3,1))) == zeros(3,1)
+    @test (@test_logs (:warn, "NaN detected for function with label Validate()") validation_guarded(ones(3,1))) == zeros(3,1)
 
     @test fitness(nanguard, candidate2) == 0
 
