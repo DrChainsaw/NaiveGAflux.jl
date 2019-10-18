@@ -21,7 +21,7 @@ using Test
         SeqRng(ind) = new(ind)
         SeqRng() = new(0)
     end
-    function Random.rand(rng::SeqRng, vec)
+    function Random.rand(rng::SeqRng, vec::AbstractArray)
         rng.ind = rng.ind % length(vec) + 1
         return vec[rng.ind]
     end

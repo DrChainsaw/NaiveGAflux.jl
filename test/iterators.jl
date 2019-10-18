@@ -75,3 +75,16 @@ end
         @test act == exp
     end
 end
+
+@testset "ShuffleIterator ndims $(length(dims))" for dims in ((3), (3,4), (2,3,4), (2,3,4,5), (2,3,4,5,6), (2,3,4,5,6,7))
+    sitr = ShuffleIterator(collect(reshape(1:prod(dims),dims...)), 2, MersenneTwister(123))
+    bitr = BatchIterator(collect(reshape(1:prod(dims),dims...)), 2)
+    sall, nall = Set{Int}(), Set{Int}()
+    for (sb, nb) in zip(sitr, bitr)
+        @test sb != nb
+        @test size(sb) == size(nb)
+        push!(sall, sb...)
+        push!(nall, nb...)
+    end
+    @test sall == nall
+end

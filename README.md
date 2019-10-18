@@ -28,9 +28,9 @@ There currently is no `fit(data)` type of method implemented. This design choice
 This package has the following main components:
 1. [Search spaces](#search-spaces)
 2. [Mutation operations](#mutation)
-3. [Fitness functions]("#fitness-functions")
-4. [Candidate utilities]("#candidate-utilities")
-5. [Evolution strategies]("#evolution-strategies")
+3. [Fitness functions](#fitness-functions)
+4. [Candidate utilities](#candidate-utilities)
+5. [Evolution strategies](#evolution-strategies)
 
 Each component is described more in detail below.
 
@@ -59,9 +59,9 @@ models = [CompGraph(inshape, initial_searchspace(inshape)) for _ in 1:5]
 batchsize = 4
 dataset = (randn(ninputs, batchsize), Flux.onehotbatch(rand(1:nlabels, batchsize), 1:nlabels))
 
-# You typically do not want to measure fitness on the same data as the models are trained...
+# Not recommended to measure fitness on the training data for real usage.
 fitfun = AccuracyFitness([dataset])
-opt = Flux.Descent(0.01) # Careful with stateful optimizers...
+opt = Flux.Descent(0.01) # All models use the same optimizer. Be careful with stateful optimizers...
 loss = Flux.logitcrossentropy
 population = [CandidateModel(model, opt, loss, fitfun) for model in models]
 
@@ -86,7 +86,7 @@ mutate = SusSelection(3, EvolveCandidates(evolvemodel(mutation)))
 selection = CombinedEvolution(elites, mutate)
 
 # And evolve
-population = evolve!(selection, population)
+newpopulation = evolve!(selection, population)
 @test newpopulation != population
 
 # Repeat steps 2 and 3 until a model with the desired fitness is found.
@@ -404,8 +404,10 @@ Examples:
   @test candidate2_timed(ones(3,1)) == candidate2(ones(3,1))
   @test fitness(combined, candidate2) > 13
 
-  # Special mention goes to NanGuard. Flux typically throws an exception if it sees NaN or Inf.
-  # Evolution might come up with a model which produces this and then one typically just want to assign it 0 fitness and move on
+  # Special mention goes to NanGuard.
+  # It is hard to guarantee that evolution will not produce a model which outputs NaN or Inf.
+  # However, Flux typically throws an exception if it sees NaN or Inf.
+  # NanGuard keeps the show going and assigns fitness 0 so that the model will not be selected.
   nanguard = NanGuard(combined)
 
   training_guarded = instrument(Train(), nanguard, candidate2)
@@ -418,8 +420,13 @@ Examples:
 
   @test any(isnan, candidate2(ones(3,1)))
 
-  @test (@test_logs (:warn, "NaN detected for function with label Train()") training_guarded(ones(3,1))) == zeros(3,1)
-  @test (@test_logs (:warn, "NaN detected for function with label Validate()") validation_guarded(ones(3,1))) == zeros(3,1)
+  @test (
+  @test_logs (:warn, "NaN detected for function with label Train()")
+  training_guarded(ones(3,1))) == zeros(3,1)
+
+  @test (
+  @test_logs (:warn, "NaN detected for function with label Validate()")
+  validation_guarded(ones(3,1))) == zeros(3,1)
 
   @test fitness(nanguard, candidate2) == 0
 

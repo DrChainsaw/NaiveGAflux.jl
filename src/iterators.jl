@@ -6,7 +6,7 @@ Iteratates over iterators of a subset of size `nrep` elements in `base`.
 
 Generally useful for training all models in a population with the same data in each evolution epoch.
 
-Tailored for situations where iterating over models is more expensive than iterating over data, for example if candidates are stored in host RAM or on disk.
+Tailored for situations where iterating over models is more expensive than iterating over data, for example if candidates are stored in host RAM or on disk and needs to be transferred to the GPU for training.
 
 Example training loop:
 ```julia
@@ -148,10 +148,11 @@ batch(a::AbstractArray{T,1}, start, stop) where T = view(a, start:stop)
 batch(a::AbstractArray{T,2}, start, stop) where T = view(a, :,start:stop)
 batch(a::AbstractArray{T,3}, start, stop) where T = view(a, :,:,start:stop)
 batch(a::AbstractArray{T,4}, start, stop) where T = view(a, :,:,:,start:stop)
-function batch(a, start, stop)
-    access = collect(UnitRange, axes(itr.base))
-    access[itr.dim] = start:stop
-    return view(itr.base, access...)
+batch(a::AbstractArray{T,5}, start, stop) where T = view(a, :,:,:,:,start:stop)
+function batch(a::AbstractArray{T,N}, start, stop) where {T,N}
+    get = repeat(Union{Colon, AbstractArray{Int}}[Colon()], N)
+    get[end] = start:stop
+    return view(a, get...)
 end
 
 Base.print(io::IO, itr::BatchIterator) = print(io, "BatchIterator(size=$(size(itr.base)), batchsize=$(itr.batchsize))")
@@ -216,4 +217,43 @@ function shift(itr::ShiftIterator, (data,state)::Tuple)
         selectdim(sdata, dim, 1:sdim) .= 0
     end
     return sdata, state
+end
+
+"""
+    ShuffleIterator{T<:AbstractArray, R<:AbstractRNG}
+    ShuffleIterator(data, batchsize, rng=rng_default)
+
+`BatchIterator` which also shuffles `data`. Order is reshuffled each time iteration begins.
+
+Beware: The data is shuffled in place. Provide a copy if the unshuffled data is also needed.
+"""
+struct ShuffleIterator{T<:AbstractArray, R<:AbstractRNG}
+    base::BatchIterator{T}
+    rng::R
+end
+ShuffleIterator(data, bs, rng=rng_default) = ShuffleIterator(BatchIterator(data, bs), rng)
+
+Base.length(itr::ShuffleIterator) = length(itr.base)
+Base.size(itr::ShuffleIterator) = size(itr.base)
+
+Base.IteratorSize(itr::ShuffleIterator) = Base.IteratorSize(itr.base)
+Base.IteratorEltype(itr::ShuffleIterator) = Base.IteratorEltype(itr.base)
+
+function Base.iterate(itr::ShuffleIterator)
+    shufflelastdim!(itr.rng, itr.base.base)
+    return iterate(itr.base)
+end
+Base.iterate(itr::ShuffleIterator, state) = iterate(itr.base, state)
+
+## I *think* speed matters here, so...
+shufflelastdim!(rng, a::AbstractArray{T,1}) where T = shuffle!(rng, a)
+shufflelastdim!(rng, a::AbstractArray{T,2}) where T = a[:,:] = a[:, randperm(rng, size(a, 2))]
+shufflelastdim!(rng, a::AbstractArray{T,3}) where T = a[:,:,:] = a[:,:, randperm(rng, size(a, 3))]
+shufflelastdim!(rng, a::AbstractArray{T,4}) where T = a[:,:,:,:] = a[:,:,:,randperm(rng, size(a, 4))]
+shufflelastdim!(rng, a::AbstractArray{T,5}) where T = a[:,:,:,:,:] = a[:,:,:,:, randperm(rng, size(a, 5))]
+function shufflelastdim!(rng, a::AbstractArray{T,N}) where {T,N}
+    set = repeat(Union{Colon, AbstractArray{Int}}[Colon()], N)
+    get = repeat(Union{Colon, AbstractArray{Int}}[Colon()], N)
+    get[end] = randperm(rng, size(a,N))
+    a[set...] = a[get...]
 end

@@ -30,7 +30,13 @@ function iterators((train_x,train_y)::Tuple; nepochs=200, batchsize=32, fitnessi
 
     return fit_iter, evo_iter
 end
+"""
+    run_experiment(popsize, fit_iter, evo_iter; nelites = 2, baseseed=666, cb = identity, mdir = defaultdir(), newpop = false)
 
+Runs the Cifar10 experiment. This command also adds persistence and plotting:
+run_experiment(50, iterators(CIFAR10.traindata())...; baseseed=abs(rand(Int)), cb=CbAll(persist, MultiPlot(display ∘ plot, PlotFitness(plot), ScatterPop(scatter), ScatterOpt(scatter))))
+
+"""
 function run_experiment(popsize, fit_iter, evo_iter; nelites = 2, baseseed=666, cb = identity, mdir = defaultdir(), newpop = false)
     Random.seed!(NaiveGAflux.rng_default, baseseed)
     @info "Start experiment with baseseed: $baseseed."
