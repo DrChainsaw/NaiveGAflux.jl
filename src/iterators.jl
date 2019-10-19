@@ -246,7 +246,7 @@ end
 Base.iterate(itr::ShuffleIterator, state) = iterate(itr.base, state)
 
 ## I *think* speed matters here, so...
-shufflelastdim!(rng, a::AbstractArray{T,1}) where T = shuffle!(rng, a)
+shufflelastdim!(rng, a::AbstractArray{T,1}) where T = a[:] = a[randperm(rng, size(a,1))]
 shufflelastdim!(rng, a::AbstractArray{T,2}) where T = a[:,:] = a[:, randperm(rng, size(a, 2))]
 shufflelastdim!(rng, a::AbstractArray{T,3}) where T = a[:,:,:] = a[:,:, randperm(rng, size(a, 3))]
 shufflelastdim!(rng, a::AbstractArray{T,4}) where T = a[:,:,:,:] = a[:,:,:,randperm(rng, size(a, 4))]
