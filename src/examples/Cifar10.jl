@@ -44,6 +44,11 @@ function run_experiment(popsize, fit_iter, evo_iter; nelites = 2, baseseed=666, 
     population = initial_models(popsize, mdir, newpop, () -> fitnessfun(evo_iter))
     evostrategy = evolutionstrategy(popsize, nelites)
 
+    # If experiment was resumed we should start by evolving as population is persisted right before evoluation
+    if all(i -> isfile(NaiveGAflux.filename(population, i)), 1:length(population))
+        population = evolve!(evostrategy, population)
+    end
+
     evolutionloop(population, evostrategy, fit_iter, cb)
 
     return population

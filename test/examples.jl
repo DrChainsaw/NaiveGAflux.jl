@@ -23,7 +23,7 @@
 
     # Not recommended to measure fitness on the training data for real usage.
     fitfun = AccuracyFitness([dataset])
-    opt = Flux.Descent(0.01) # All models use the same optimizer. Be careful with stateful optimizers...
+    opt = Flux.Descent(0.01) # All models use the same optimizer here. Would be a bad idea with a stateful optimizer!
     loss = Flux.logitcrossentropy
     population = [CandidateModel(model, opt, loss, fitfun) for model in models]
 
@@ -368,12 +368,12 @@ end
     using Random
     Random.seed!(NaiveGAflux.rng_default, 0)
 
-    archspace = RepeatArchSpace(VertexSpace(DenseSpace(3, relu)), 2)
+    archspace = RepeatArchSpace(VertexSpace(DenseSpace(3, elu)), 2)
     inpt = inputvertex("in", 3)
     dataset = (ones(Float32, 3, 1), Float32[0, 1, 0])
 
     graph = CompGraph(inpt, archspace(inpt))
-    opt = Flux.ADAM(0.01)
+    opt = Flux.ADAM(0.1)
     loss = Flux.logitcrossentropy
     fitfun = NanGuard(AccuracyFitness([dataset]))
 
@@ -388,12 +388,12 @@ end
     # Note, it does not move the data. GpuIterator can provide some assistance here...
     dataset_gpu = GpuIterator([dataset])
     fitfun_gpu = NanGuard(AccuracyFitness(dataset_gpu))
-    hostcand = HostCandidate(CandidateModel(graph, Flux.ADAM(0.01), loss, fitfun_gpu))
+    hostcand = HostCandidate(CandidateModel(graph, Flux.ADAM(0.1), loss, fitfun_gpu))
 
     Flux.train!(hostcand, dataset_gpu)
     @test fitness(hostcand) > 0
 
-    # CacheCandidate is a necessity if using AccuracyFitness.
+    # CacheCandidate is a practical necessity if using AccuracyFitness.
     # It caches the last computed fitness value so it is not recomputed every time fitness is called
     cachinghostcand = CacheCandidate(hostcand)
 
@@ -441,4 +441,61 @@ end
     resetafter = ResetAfterEvolution(comb)
     @test evolve!(resetafter, Cand.(1:10)) == Cand.(Any[10, 9, 4.1, 6.1, 8.1, 9.1, 10.1])
     @test ntest == 7
+end
+
+@testset "Iterators" begin
+    data = reshape(collect(1:4*5), 4,5)
+
+    # mini-batching
+    biter = BatchIterator(data, 2)
+    @test size(first(biter)) == (4, 2)
+
+    # shuffle data before mini-batching
+    # Warning 1: Data will be shuffled inplace!
+    # Warning 2: Must use different rng instances with the same seed for features and labels!
+    siter = ShuffleIterator(copy(data), 2, MersenneTwister(123))
+    @test size(first(siter)) == size(first(biter))
+    @test first(siter) != first(biter)
+
+    # Flip data along a dimension with a certain probability
+    probability = 1.0
+    dimension = 1
+    fiter = FlipIterator(biter, probability, dimension)
+    @test first(fiter) == reverse(first(biter), dims=dimension)
+
+    # Randomly shift the data while cropping and padding to keep the same size
+    maxshiftdim1 = 2
+    maxshiftdim2 = 0
+    siter = ShiftIterator(biter, maxshiftdim1,maxshiftdim2; rng = MersenneTwister(12))
+    sdata = first(siter)
+    @test sdata[1:1,:] == zeros(1,2)
+    @test sdata[2:4,:] == first(biter)[1:3,:]
+
+    # Apply a function to each batch
+    miter = MapIterator(x -> 2 .* x, biter)
+    @test first(miter) == 2 .* first(biter)
+
+    # Move data to gpu
+    giter = GpuIterator(miter)
+    @test first(giter) == first(miter) |> gpu
+
+    labels = collect(0:5)
+
+    # Possible to use Flux.onehotbatch for many iterators
+    biter_labels = Flux.onehotbatch(BatchIterator(labels, 2), 0:5)
+    @test first(biter_labels) == Flux.onehotbatch(0:1, 0:5)
+
+    # This is the only iterator which is "special" for this package:
+    rpiter = RepeatPartitionIterator(zip(biter, biter_labels), 2)
+    # It produces iterators over a subset of the wrapped iterator (2 batches in this case)
+    piter = first(rpiter)
+    @test length(piter) == 2
+    # This allows for easily training several models on the same subset of the data
+    expiter = zip(biter, biter_labels)
+    for modeli in 1:3
+        for ((feature, label), (expf, expl)) in zip(piter, expiter)
+            @test feature == expf
+            @test label == expl
+        end
+    end
 end
