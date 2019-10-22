@@ -223,6 +223,11 @@
 
         @test size(v(indata)) == size(indata)
         @test size(NaiveNASflux.weights(layer(v)))[1:2] == (1, 2)
+
+        # Test with maxvalue
+        KernelSizeMutation(Singleton2DParSpace(4), maxsize=v->(4, 10))(v)
+        @test size(v(indata)) == size(indata)
+        @test size(NaiveNASflux.weights(layer(v)))[1:2] == (4, 6)
     end
 
     @testset "ActivationFunctionMutation Dense" begin

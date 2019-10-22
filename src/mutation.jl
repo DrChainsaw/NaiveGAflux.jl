@@ -259,29 +259,30 @@ RemoveVertexMutation() = RemoveVertexMutation(RemoveStrategy(CheckAligned(CheckN
 
 """
     KernelSizeMutation{N} <: AbstractMutation{AbstractVertex}
-    KernelSizeMutation(Δsizespace::AbstractParSpace{N, Int}, padspace::AbstractPadSpace=SamePad(), rng::AbstractRNG=rng_default)
-    KernelSizeMutation2D(absΔ::Integer;pad=SamePad())
-    KernelSizeMutation(absΔ::Integer...;pad=SamePad())
+    KernelSizeMutation(Δsizespace::AbstractParSpace{N, Int}; maxsize, pad, rng)
+    KernelSizeMutation2D(absΔ::Integer;maxsize, pad, rng)
+    KernelSizeMutation(absΔ::Integer...;maxsize, pad, rng)
 
 Mutate the size of filter kernels of convolutional layers.
 
 Note: High likelyhood of large accuracy degradation after applying this mutation.
 """
-struct KernelSizeMutation{N} <: AbstractMutation{AbstractVertex}
+struct KernelSizeMutation{N,F} <: AbstractMutation{AbstractVertex}
     Δsizespace::AbstractParSpace{N, Int}
+    maxsize::F
     padspace::AbstractPadSpace
     rng::AbstractRNG
 end
-KernelSizeMutation(Δsizespace, pad=SamePad(), rng=rng_default) = KernelSizeMutation(Δsizespace, pad, rng)
-KernelSizeMutation2D(absΔ::Integer;pad=SamePad(), rng=rng_default) = KernelSizeMutation(absΔ, absΔ, pad=pad, rng=rng)
-KernelSizeMutation(absΔ::Integer...;pad=SamePad(), rng=rng_default) = KernelSizeMutation(ParSpace(UnitRange.(.-absΔ, absΔ)), pad, rng)
+KernelSizeMutation(Δsizespace::AbstractParSpace{N, Int}; maxsize = v -> ntuple(i->Inf,N), pad=SamePad(), rng=rng_default) where N = KernelSizeMutation(Δsizespace, maxsize, pad, rng)
+KernelSizeMutation2D(absΔ::Integer;maxsize = v -> (Inf,Inf), pad=SamePad(), rng=rng_default) = KernelSizeMutation(absΔ, absΔ, maxsize = maxsize, pad=pad, rng=rng)
+KernelSizeMutation(absΔ::Integer...;maxsize = v -> ntuple(i->Inf, length(absΔ)), pad=SamePad(), rng=rng_default) = KernelSizeMutation(ParSpace(UnitRange.(.-absΔ, absΔ));maxsize = maxsize, pad=pad, rng=rng)
 
 function (m::KernelSizeMutation{N})(v::AbstractVertex) where N
     layertype(v) isa FluxConvolutional{N} || return
     l = layer(v)
 
     currsize = size(NaiveNASflux.weights(l))[1:N]
-    Δsize = max.(1 .- currsize, m.Δsizespace(m.rng)) # ensure new size is > 0
+    Δsize = Int.(clamp.(m.Δsizespace(m.rng), 1 .- currsize, m.maxsize(v) .- currsize)) # ensure new size is > 0 and < maxsize
     pad = m.padspace(currsize .+ Δsize, dilation(l))
     mutate_weights(v, KernelSizeAligned(Δsize, pad))
 end

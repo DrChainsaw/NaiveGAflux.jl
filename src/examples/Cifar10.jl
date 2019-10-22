@@ -123,7 +123,7 @@ function mutation()
     add_maxpool = AddVertexMutation(VertexSpace(default_layerconf(), NamedLayerSpace("maxpool", MaxPoolSpace(PoolSpace2D([2])))))
     rem_vertex = RemoveVertexMutation()
     # [-2, 2] keeps kernel size odd due to CuArrays issue# 356 (odd kernel size => symmetric padding)
-    mutate_kernel = KernelSizeMutation(ParSpace2D([-2, 2]))
+    mutate_kernel = KernelSizeMutation(ParSpace2D([-2, 2]), maxsize=maxkernelsize)
     decrease_kernel = KernelSizeMutation(ParSpace2D([-2]))
     mutate_act = ActivationFunctionMutation(acts)
 
@@ -161,7 +161,11 @@ nparams(c::AbstractCandidate) = nparams(NaiveGAflux.graph(c))
 nparams(g::CompGraph) = mapreduce(prod ∘ size, +, params(g).order)
 isbig(g) = nparams(g) > 20e7
 
-canaddmaxpool(v::AbstractVertex) = is_convtype(v) && !occursin.(r"(path|res|maxpool)", name(v)) && sum(endswith.(name.(all_in_graph(v)), "maxpool")) < 5
+canaddmaxpool(v::AbstractVertex) = is_convtype(v) && !occursin.(r"(path|res|maxpool)", name(v)) && nmaxpool(all_in_graph(v)) < 5
+
+nmaxpool(vs) = sum(endswith.(name.(vs), "maxpool"))
+
+maxkernelsize(v::AbstractVertex, insize=(32,32)) = @. insize / 2^nmaxpool(flatten(v))
 
 Flux.mapchildren(f, aa::AbstractArray{<:Integer, 1}) = aa
 
