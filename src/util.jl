@@ -50,6 +50,7 @@ allow_mutation(t::DecoratingTrait) = allow_mutation(base(t))
 allow_mutation(::MutationTrait) = true
 allow_mutation(::Immutable) = false
 allow_mutation(::MutationShield) = false
+NaiveNASlib.clone(t::MutationShield;cf=clone) = MutationShield(cf(base(t), cf=cf))
 
 """
     AbstractVertexSelection
