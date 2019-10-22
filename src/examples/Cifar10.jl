@@ -49,9 +49,7 @@ function run_experiment(popsize, fit_iter, evo_iter; nelites = 2, baseseed=666, 
         population = evolve!(evostrategy, population)
     end
 
-    evolutionloop(population, evostrategy, fit_iter, cb)
-
-    return population
+    return evolutionloop(population, evostrategy, fit_iter, cb)
 end
 
 
@@ -72,6 +70,7 @@ function evolutionloop(population, evostrategy, trainingiter, cb)
 
         population = evolve!(evostrategy, population)
     end
+    return population
 end
 
 
@@ -123,9 +122,9 @@ function mutation()
     add_vertex = add_vertex_mutation(acts)
     add_maxpool = AddVertexMutation(VertexSpace(default_layerconf(), NamedLayerSpace("maxpool", MaxPoolSpace(PoolSpace2D([2])))))
     rem_vertex = RemoveVertexMutation()
-    # CoupledParSpace and [-2, 2] due to CuArrays issue# 356
-    mutate_kernel = KernelSizeMutation(CoupledParSpace([-2, 2], 2))
-    decrease_kernel = KernelSizeMutation(CoupledParSpace([-2], 2))
+    # [-2, 2] keeps kernel size odd due to CuArrays issue# 356 (odd kernel size => symmetric padding)
+    mutate_kernel = KernelSizeMutation(ParSpace2D([-2, 2]))
+    decrease_kernel = KernelSizeMutation(ParSpace2D([-2]))
     mutate_act = ActivationFunctionMutation(acts)
 
     # Create a shorthand alias for MutationProbability
@@ -168,9 +167,14 @@ Flux.mapchildren(f, aa::AbstractArray{<:Integer, 1}) = aa
 
 function add_vertex_mutation(acts)
 
-    wrapitup(as) = AddVertexMutation(rep_fork_res(as, 1,loglevel=Logging.Info))
+    function outselect(vs)
+        rss = randsubseq(vs, 0.5)
+        isempty(rss) && return [rand(vs)]
+        return rss
+    end
 
-    # TODO: New layers to have identity mapping
+    wrapitup(as) = AddVertexMutation(rep_fork_res(as, 1,loglevel=Logging.Info), outselect)
+
     add_conv = wrapitup(convspace(default_layerconf(), 8:128, 1:2:7, acts,loglevel=Logging.Info))
     add_dense = wrapitup(LoggingArchSpace(Logging.Info, VertexSpace(default_layerconf(), NamedLayerSpace("dense", DenseSpace(16:512, acts)))))
 
@@ -281,7 +285,7 @@ end
 function convspace(conf, outsizes, kernelsizes, acts; loglevel=Logging.Debug)
     # CoupledParSpace due to CuArrays issue# 356
     msgfun(v) = "\tCreated $(name(v)), nin: $(nin(v)), nout: $(nout(v))"
-    conv2d = LoggingArchSpace(loglevel, msgfun, VertexSpace(conf, NamedLayerSpace("conv2d", ConvSpace(outsizes, acts, CoupledParSpace(kernelsizes, 2)))))
+    conv2d = LoggingArchSpace(loglevel, msgfun, VertexSpace(conf, NamedLayerSpace("conv2d", ConvSpace2D(outsizes, acts, kernelsizes))))
     bn = LoggingArchSpace(loglevel, msgfun, VertexSpace(conf, NamedLayerSpace("batchnorm", BatchNormSpace(acts))))
 
     # Make sure that each alternative has the option to change output size

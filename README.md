@@ -216,10 +216,6 @@ The following basic mutation operations are currently supported:
 
 It is also possible to implement mutation of learning rate and optimizer using `evolve_candidate`, but a convenient way to do this still TBA, see Cifar10 example in the meantime.
 
-Possible but not planned:
-1. Add an edge from one vertex to another
-2. Remove and edge from one vertex to another
-
 In addition to the basic mutation operations, there are numerous utilities for adding behaviour and convenience. Here are a few examples:
 
 ```julia
