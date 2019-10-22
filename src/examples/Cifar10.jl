@@ -161,7 +161,7 @@ nparams(c::AbstractCandidate) = nparams(NaiveGAflux.graph(c))
 nparams(g::CompGraph) = mapreduce(prod ∘ size, +, params(g).order)
 isbig(g) = nparams(g) > 20e7
 
-canaddmaxpool(v::AbstractVertex) = is_convtype(v) && !occursin.(r"(path|res|maxpool)", name(v)) && nmaxpool(all_in_graph(v)) < 5
+canaddmaxpool(v::AbstractVertex) = is_convtype(v) && !occursin.(r"(path|res|maxpool)", name(v)) && nmaxpool(all_in_graph(v)) < 4
 
 nmaxpool(vs) = sum(endswith.(name.(vs), "maxpool"))
 
@@ -179,7 +179,7 @@ function add_vertex_mutation(acts)
 
     wrapitup(as) = AddVertexMutation(rep_fork_res(as, 1,loglevel=Logging.Info), outselect)
 
-    add_conv = wrapitup(convspace(default_layerconf(), 8:128, 1:2:7, acts,loglevel=Logging.Info))
+    add_conv = wrapitup(convspace(default_layerconf(), 8:128, 1:2:5, acts,loglevel=Logging.Info))
     add_dense = wrapitup(LoggingArchSpace(Logging.Info, VertexSpace(default_layerconf(), NamedLayerSpace("dense", DenseSpace(16:512, acts)))))
 
     return MutationList(MutationFilter(is_convtype, add_conv), MutationFilter(!is_convtype, add_dense))
@@ -245,10 +245,10 @@ function initial_archspace()
     red1 = ListArchSpace(rfr1, maxpoolvertex)
     red2 = ListArchSpace(rfr2, maxpoolvertex)
 
-    # Block 1 (large kernels and small sizes) repeated up to 3 times
-    block1 = RepeatArchSpace(red1, 1:3)
-    # Lets keep number of type 2 blocks to just one
-    block2 = red2
+    # Block 1 (large kernels and small sizes) repeated up to 2 times
+    block1 = RepeatArchSpace(red1, 1:2)
+    # And the same for block type 2
+    block2 = RepeatArchSpace(red2, 1:2)
 
     # Ok, lets work on the output layers.
     # Two main options:
