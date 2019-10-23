@@ -13,11 +13,6 @@ export PlotFitness, ScatterPop, ScatterOpt, MultiPlot, CbAll
 
 defaultdir(this="CIFAR10") = joinpath(NaiveGAflux.modeldir, this)
 
-# TODO: Need to handle this somehow...
-NaiveNASlib.minΔninfactor(m::ActivationContribution) = minΔninfactor(NaiveNASflux.wrapped(m))
-NaiveNASlib.minΔnoutfactor(m::ActivationContribution) = minΔnoutfactor(NaiveNASflux.wrapped(m))
-
-
 function iterators((train_x,train_y)::Tuple; nepochs=200, batchsize=32, fitnessize=2048, nbatches_per_gen=400, seed=123)
     batch(data) = ShuffleIterator(data, batchsize, MersenneTwister(seed))
     dataiter(x,y, wrap = FlipIterator ∘ ShiftIterator) = zip(wrap(batch(x)), Flux.onehotbatch(batch(y), 0:9))
