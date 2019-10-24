@@ -10,19 +10,82 @@ abstract type AbstractMutation{T} end
 """
     MutationProbability{T} <:AbstractMutation{T}
     MutationProbability(m::AbstractMutation{T}, p::Probability)
+    MutationProbability(m::AbstractMutation{T}, p::Number)
 
-Applies a wrapped `AbstractMutation` with a configured `Probability`
+Applies `m` with probability `p`.
 """
 struct MutationProbability{T} <:AbstractMutation{T}
     m::AbstractMutation{T}
     p::Probability
 end
+MutationProbability(m::AbstractMutation{T}, p::Number) where T = MutationProbability(m, Probability(p))
 
 function (m::MutationProbability{T})(e::T) where T
     apply(m.p) do
         m.m(e)
     end
 end
+
+"""
+    WeightedMutationProbability{T,F} <: AbstractMutation{T}
+    WeightedMutationProbability(m::AbstractMutation::T, pfun::F)
+
+Applies `m` to an entity `e` with a probability `pfun(e)`.
+"""
+struct WeightedMutationProbability{T,F} <: AbstractMutation{T}
+    m::AbstractMutation{T}
+    pfun::F
+end
+
+function (m::WeightedMutationProbability{T})(e::T) where T
+    apply(m.pfun(e)) do
+        m.m(e)
+    end
+end
+
+"""
+    HighValueMutationProbability(m::AbstractMutation{T}, pbase::Real, rng=rng_default; spread=0.5)
+
+Return a `WeightedMutationProbability` which applies `m` to vertices with an (approximately) average probability of `pbase` and where high `neuron_value` compared to other vertices in same graph means higher probability.
+
+Parameter `spread` can be used to control how much the difference in probability is between high and low values. High spread means high difference while low spread means low difference.
+"""
+HighValueMutationProbability(m::AbstractMutation{T}, pbase::Real, rng=rng_default;spread=0.5) where T <: AbstractVertex = WeightedMutationProbability(m, weighted_neuron_value_high(pbase, rng,spread=spread))
+
+"""
+    LowValueMutationProbability(m::AbstractMutation{T}, pbase::Real, rng=rng_default; spread=2)
+
+Return a `WeightedMutationProbability` which applies `m` to vertices with an (approximately) average probability of `pbase` and where low `neuron_value` compared to other vertices in same graph means higher probability.
+
+Parameter `spread` can be used to control how much the difference in probability is between high and low values. High spread means high difference while low spread means low difference.
+"""
+LowValueMutationProbability(m::AbstractMutation{T}, pbase::Real, rng=rng_default;spread=2) where T <: AbstractVertex = WeightedMutationProbability(m, weighted_neuron_value_low(pbase, rng, spread=spread))
+
+
+weighted_neuron_value_high(pbase, rng=rng_default; spread=0.5) = function(v::AbstractVertex)
+    ismissing(neuron_value(v)) && return pbase
+    return Probability(fixnan(pbase ^ normexp(v, spread), pbase), rng)
+end
+
+weighted_neuron_value_low(pbase, rng=rng_default;spread=2) = function(v::AbstractVertex)
+    ismissing(neuron_value(v)) && return pbase
+    return Probability(fixnan(pbase ^ (1/normexp(v, 1/spread)), pbase), rng)
+end
+
+fixnan(x, rep) = isnan(x) ? rep : clamp(x, 0.0, 1.0)
+
+# This is pretty hacky and arbitrary. Change to something better
+function normexp(v::AbstractVertex, s)
+    allvertices = filter(allow_mutation, all_in_graph(v))
+    allvalues = map(vi -> neuron_value(vi), allvertices)
+    meanvalues = map(mean, skipmissing(allvalues))
+    meanvalue = mean(meanvalues)
+    maxvalue = maximum(meanvalues)
+    value = mean(neuron_value(v))
+    # Basic idea: maxvalue - value means the (to be) exponent is <= 0 while the division seems to normalize so that average of pbase ^ normexp across allvertices is near pbase (no proof!). The factor 2 is just to prevent probability of vertex with maxvalue to be 1.
+    return (2maxvalue^s - value^s) / (2maxvalue^s - meanvalue^s)
+end
+
 
 """
     MutationList{T} <: AbstractMutation{T}
@@ -152,9 +215,10 @@ end
 
 """
     AddVertexMutation <:AbstractMutation{AbstractVertex}
-    AddVertexMutation(s::AbstractArchSpace, outselect::Function, rng::AbstractRNG)
+    AddVertexMutation(s::AbstractArchSpace, outselect::Function, WeightInit::AbstractWeightInit, rng::AbstractRNG)
     AddVertexMutation(s, outselect::Function=identity)
     AddVertexMutation(s, rng::AbstractRNG)
+    AddVertexMutation(s, wi::AbstractWeightInit)
 
 Insert a vertex from the wrapped `AbstractArchSpace` `s` after a given vertex `v`.
 
@@ -163,12 +227,14 @@ The function `outselect` takes an `AbstractVector{AbstractVertex}` representing 
 struct AddVertexMutation <:AbstractMutation{AbstractVertex}
     s::AbstractArchSpace
     outselect::Function
+    weightinit::AbstractWeightInit
     rng::AbstractRNG
 end
-AddVertexMutation(s, outselect::Function=identity) = AddVertexMutation(s, outselect, rng_default)
-AddVertexMutation(s, rng::AbstractRNG) = AddVertexMutation(s, identity, rng)
+AddVertexMutation(s, outselect::Function=identity) = AddVertexMutation(s, outselect, IdentityWeightInit(), rng_default)
+AddVertexMutation(s, rng::AbstractRNG) = AddVertexMutation(s, identity, IdentityWeightInit(), rng)
+AddVertexMutation(s, wi::AbstractWeightInit) = AddVertexMutation(s, identity, wi, rng_default)
 
-(m::AddVertexMutation)(v::AbstractVertex) = insert!(v, vi -> m.s(name(vi), vi, outsize=nout(vi)), m.outselect)
+(m::AddVertexMutation)(v::AbstractVertex) = insert!(v, vi -> m.s(name(vi), vi, m.rng, outsize=nout(vi), wi=m.weightinit), m.outselect)
 
 """
     RemoveVertexMutation <:AbstractMutation{AbstractVertex}
@@ -180,6 +246,8 @@ Remove the given vertex `v` using the configured `RemoveStrategy`.
 Default size align strategy is `IncreaseSmaller -> DecreaseBigger -> AlignSizeBoth -> FailAlignSizeWarn -> FailAlignSizeRevert`.
 
 Default reconnect strategy is `ConnectAll`.
+
+Note: High likelyhood of large accuracy degradation after applying this mutation.
 """
 struct RemoveVertexMutation <:AbstractMutation{AbstractVertex}
     s::RemoveStrategy
@@ -188,6 +256,75 @@ RemoveVertexMutation() = RemoveVertexMutation(RemoveStrategy(CheckAligned(CheckN
  valuefun = default_neuronselect, align=IncreaseSmaller(DecreaseBigger(AlignSizeBoth(FailAlignSizeWarn()))))), FailAlignSizeWarn(msgfun = (vin,vout) -> "Can not remove vertex $(name(vin))! Size cycle detected!")))))
 
 (m::RemoveVertexMutation)(v::AbstractVertex) = remove!(v, m.s)
+
+"""
+    KernelSizeMutation{N} <: AbstractMutation{AbstractVertex}
+    KernelSizeMutation(Δsizespace::AbstractParSpace{N, Int}; maxsize, pad, rng)
+    KernelSizeMutation2D(absΔ::Integer;maxsize, pad, rng)
+    KernelSizeMutation(absΔ::Integer...;maxsize, pad, rng)
+
+Mutate the size of filter kernels of convolutional layers.
+
+Note: High likelyhood of large accuracy degradation after applying this mutation.
+"""
+struct KernelSizeMutation{N,F} <: AbstractMutation{AbstractVertex}
+    Δsizespace::AbstractParSpace{N, Int}
+    maxsize::F
+    padspace::AbstractPadSpace
+    rng::AbstractRNG
+end
+KernelSizeMutation(Δsizespace::AbstractParSpace{N, Int}; maxsize = v -> ntuple(i->Inf,N), pad=SamePad(), rng=rng_default) where N = KernelSizeMutation(Δsizespace, maxsize, pad, rng)
+KernelSizeMutation2D(absΔ::Integer;maxsize = v -> (Inf,Inf), pad=SamePad(), rng=rng_default) = KernelSizeMutation(absΔ, absΔ, maxsize = maxsize, pad=pad, rng=rng)
+KernelSizeMutation(absΔ::Integer...;maxsize = v -> ntuple(i->Inf, length(absΔ)), pad=SamePad(), rng=rng_default) = KernelSizeMutation(ParSpace(UnitRange.(.-absΔ, absΔ));maxsize = maxsize, pad=pad, rng=rng)
+
+function (m::KernelSizeMutation{N})(v::AbstractVertex) where N
+    layertype(v) isa FluxConvolutional{N} || return
+    l = layer(v)
+
+    currsize = size(NaiveNASflux.weights(l))[1:N]
+    Δsize = Int.(clamp.(m.Δsizespace(m.rng), 1 .- currsize, m.maxsize(v) .- currsize)) # ensure new size is > 0 and < maxsize
+    pad = m.padspace(currsize .+ Δsize, dilation(l))
+    mutate_weights(v, KernelSizeAligned(Δsize, pad))
+end
+dilation(l) = l.dilation
+
+"""
+    ActivationFunctionMutation{T,R} <: AbstractMutation{AbstractVertex} where {T <: AbstractParSpace{1}, R <: AbstractRNG}
+    ActivationFunctionMutation(actspace::AbstractParSpace{1}, rng::AbstractRNG)
+    ActivationFunctionMutation(acts...;rng=rng_default)
+    ActivationFunctionMutation(acts::AbstractVector;rng=rng_default)
+
+Mutate the activation function of layers which have an activation function.
+
+Note: High likelyhood of large accuracy degradation after applying this mutation.
+"""
+struct ActivationFunctionMutation{T,R} <: AbstractMutation{AbstractVertex} where {T <: AbstractParSpace{1}, R <: AbstractRNG}
+    actspace::T
+    rng::R
+end
+ActivationFunctionMutation(acts...;rng=rng_default) = ActivationFunctionMutation(collect(acts), rng=rng)
+ActivationFunctionMutation(acts::AbstractVector;rng=rng_default) = ActivationFunctionMutation(ParSpace(acts), rng)
+
+(m::ActivationFunctionMutation)(v::AbstractVertex) = m(layertype(v), v)
+function (m::ActivationFunctionMutation)(t, v) end
+(m::ActivationFunctionMutation)(::Union{FluxDense, FluxConvolutional}, v) = setlayer(v, (σ = m.actspace(m.rng),))
+(m::ActivationFunctionMutation)(::FluxParNorm, v) = setlayer(v, (λ = m.actspace(m.rng),))
+function (m::ActivationFunctionMutation)(::FluxRnn, v)
+    newcell = setproperties(layer(v).cell, (σ = m.actspace(m.rng),))
+    setlayer(v, (cell = newcell,))
+end
+
+# TODO: Move to NaiveNASflux??
+function setlayer(x, propval) end
+setlayer(v::AbstractVertex, propval) = setlayer(base(v), propval)
+setlayer(v::CompVertex, propval) = setlayer(v.computation, propval)
+setlayer(m::AbstractMutableComp, propval) = setlayer(NaiveNASflux.wrapped(m), propval)
+setlayer(m::NaiveNASflux.ResetLazyMutable, propval) = setlayer(m.wrapped, propval)
+setlayer(m::NaiveNASflux.MutationTriggered, propval) = setlayer(m.wrapped, propval)
+function setlayer(m::MutableLayer, propval)
+    m.layer = setproperties(m.layer, propval)
+end
+
 
 """
     NeuronSelectMutation{T} <: AbstractMutation{AbstractVertex}
@@ -245,7 +382,7 @@ NaiveNASflux.neuron_value(::Immutable, v) = ones(nout(v))
 NaiveNASflux.neuron_value(::MutationSizeTrait, v) = clean_values(cpu(neuron_value(v)),v)
 clean_values(::Missing, v) = ones(nout_org(v))
 # NaN should perhaps be < 0, but since SelectDirection is used, this might lead to inconsistent results as a subset of neurons for a vertex v whose output vertices are not part of the selection (typically because only v's inputs are touched) are selected. As the output vertices are not changed this will lead to a size inconsistency. Cleanest fix might be to separate "touch output" from "touch input" when formulating the output selection problem.
-clean_values(a::AbstractArray, v) = replace(a, NaN => 0.01, 0.0 => 0.01, Inf => 0.01, -Inf => 0.01)
+clean_values(a::AbstractArray, v) = replace(a, NaN => 0.0001, 0.0 => 0.0001, Inf => 0.0001, -Inf => 0.0001)
 
 
 """

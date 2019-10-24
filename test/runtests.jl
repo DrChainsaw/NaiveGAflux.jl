@@ -16,6 +16,16 @@ using Test
         return rng.seq[rng.ind]
     end
 
+    mutable struct SeqRng <: AbstractRNG
+        ind
+        SeqRng(ind) = new(ind)
+        SeqRng() = new(0)
+    end
+    function Random.rand(rng::SeqRng, vec::AbstractArray)
+        rng.ind = rng.ind % length(vec) + 1
+        return vec[rng.ind]
+    end
+
     @info "Testing util"
     include("util.jl")
 
@@ -24,6 +34,18 @@ using Test
 
     @info "Testing mutation"
     include("mutation.jl")
+
+    @info "Testing fitness"
+    include("fitness.jl")
+
+    @info "Testing candidate"
+    include("candidate.jl")
+
+    @info "Testing evolve"
+    include("evolve.jl")
+
+    @info "Testing iterators"
+    include("iterators.jl")
 
     @info "Testing README examples"
     include("examples.jl")

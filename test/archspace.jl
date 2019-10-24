@@ -1,15 +1,5 @@
 @testset "Architecture Spaces" begin
 
-    mutable struct SeqRng
-        ind
-        SeqRng(ind) = new(ind)
-        SeqRng() = new(0)
-    end
-    function Random.rand(rng::SeqRng, vec)
-        rng.ind = rng.ind % length(vec) + 1
-        return vec[rng.ind]
-    end
-
     @testset "BasicLayerSpace" begin
         import NaiveGAflux: outsize, activation
         rng = SeqRng()
@@ -54,7 +44,7 @@
 
     @testset "NamedLayerSpace" begin
         rng = SeqRng()
-        s1 = DenseSpace(BaseLayerSpace(2, identity))
+        s1 = DenseSpace(2, identity)
         s2 = NamedLayerSpace("test", s1)
 
         @test name(s1) == ""
@@ -73,7 +63,7 @@
 
     @testset "LoggingLayerSpace" begin
         rng = SeqRng()
-        s1 = DenseSpace(BaseLayerSpace(2, identity))
+        s1 = DenseSpace(2, identity)
         s2 = LoggingLayerSpace(NamedLayerSpace("test", s1))
 
         @test name(s2) == "test"
@@ -92,7 +82,7 @@
 
     @testset "DenseSpace" begin
         rng = SeqRng()
-        space = DenseSpace(BaseLayerSpace(3, σ))
+        space = DenseSpace(3, σ)
         l = space(2, rng)
         @test l.σ == σ
         @test size(l.W) == (3,2)
@@ -103,13 +93,13 @@
 
     @testset "ConvSpace" begin
         rng = SeqRng()
-        space = ConvSpace2D(BaseLayerSpace(5, relu), 2:5)
+        space = ConvSpace2D(5, relu, 2:5)
         l = space(4, rng)
         @test size(l.weight) == (2,3,4,5)
         @test size(l(ones(5,5,4,1))) == (5,5,5,1)
 
         rng.ind = 0
-        space = ConvSpace(BaseLayerSpace(4, elu), 2:5)
+        space = ConvSpace(4, elu, 2:5)
         l = space(3, rng)
         @test size(l.weight) == (2,3,4)
         @test size(l(ones(5,3,1))) == (5,4,1)
@@ -150,7 +140,7 @@
     end
 
     @testset "VertexSpace" begin
-        space = VertexSpace(DenseSpace(BaseLayerSpace(3,relu)))
+        space = VertexSpace(DenseSpace(3,relu))
         inpt = inputvertex("in", 2)
         v = space(inpt)
         @test nin(v) == [2]
@@ -159,13 +149,13 @@
         v = space("v", inpt)
         @test name(v) == "v"
 
-        space = VertexSpace(NamedLayerSpace("dense", DenseSpace(BaseLayerSpace(3,relu))))
+        space = VertexSpace(NamedLayerSpace("dense", DenseSpace(3,relu)))
         v = space("v", inpt)
         @test name(v) == "v.dense"
     end
 
     @testset "LoggingArchSpace" begin
-        space = LoggingArchSpace(VertexSpace(NamedLayerSpace("dense", DenseSpace(BaseLayerSpace(3, identity)))))
+        space = LoggingArchSpace(VertexSpace(NamedLayerSpace("dense", DenseSpace(3, identity))))
         inpt = inputvertex("in", 2)
 
         v = (@test_logs (:debug, "Created test.dense") min_level=Logging.Debug space("test", inpt))
@@ -228,7 +218,7 @@
         v = space(inpt, rng)
         @test nv(CompGraph(inpt, v)) == 6
 
-        space = RepeatArchSpace(VertexSpace(DenseSpace(BaseLayerSpace(3, relu))), 2)
+        space = RepeatArchSpace(VertexSpace(DenseSpace(3, relu)), 2)
         v = space(inpt, outsize=4)
         @test nout(v) == 4
         @test nin(v) == [4]
@@ -243,7 +233,7 @@
     end
 
     @testset "ListArchSpace" begin
-        space = ListArchSpace(VertexSpace.(DenseSpace.(BaseLayerSpace.((2,3), relu)))...)
+        space = ListArchSpace(VertexSpace.(DenseSpace.((2,3), relu))...)
         inpt = inputvertex("in", 3)
 
         v = space(inpt)
@@ -292,7 +282,7 @@
         v = space(inpt, rng)
         @test length(inputs(v)) == 5
 
-        space = ForkArchSpace(VertexSpace(DenseSpace(BaseLayerSpace(3, relu))), 3)
+        space = ForkArchSpace(VertexSpace(DenseSpace(3, relu)), 3)
         v = space(inpt, outsize=13)
         @test nout(v) == 13
         @test nin(v) == [4, 4, 5]
@@ -311,12 +301,12 @@
         @test nout(v) == 2
         @test nin(v) == [1, 1]
 
-        space = ForkArchSpace(VertexSpace(DenseSpace(BaseLayerSpace(3, relu))), 0)
+        space = ForkArchSpace(VertexSpace(DenseSpace(3, relu)), 0)
         @test space(inpt) == inpt
     end
 
     @testset "ResidualArchSpace" begin
-        space = ResidualArchSpace(DenseSpace(BaseLayerSpace(3, relu)))
+        space = ResidualArchSpace(DenseSpace(3, relu))
         inpt = inputvertex("in", 4)
 
         v = space(inpt)
@@ -351,6 +341,97 @@
         v = space("v", inpt)
 
         @test size(v(ones(Float32, 3,4,5,6))) == (5,6)
+    end
+
+    @testset "WeightInit" begin
+
+        @testset "DenseSpace" begin
+            space = DenseSpace(3, identity)
+            indata = reshape(1:2*4, :, 2)
+            insize = size(indata, 1)
+
+            @testset "IdentityWeightInit" begin
+                v = space(insize, outsize=insize, wi=IdentityWeightInit())
+                @test v(indata) == indata
+            end
+
+            @testset "ZeroWeightInit" begin
+                v = space(insize, wi=ZeroWeightInit())
+                @test v(indata) == zeros(nout(v), size(indata,2))
+            end
+        end
+
+        @testset "ConvSpace2D" begin
+            space = ConvSpace2D(3, identity, [3])
+            indata = reshape(1:2*4*5*6,4,5,6,2)
+            insize = size(indata, 3)
+
+            @testset "IdentityWeightInit" begin
+                v = space(insize, outsize=insize, wi=IdentityWeightInit())
+                @test v(indata) == indata
+            end
+
+            @testset "ZeroWeightInit" begin
+                v = space(insize, wi=ZeroWeightInit())
+                @test v(indata) == zeros(size(indata,1), size(indata,2), nout(v), size(indata,4))
+            end
+        end
+
+        function test_identity_dense(space, inpt = inputvertex("in", 3))
+            v = space(inpt, outsize=nout(inpt), wi=IdentityWeightInit())
+            g = CompGraph(inpt, v)
+
+            indata = reshape(1:2*nout(inpt), :, 2)
+            @test g(indata) == indata
+        end
+
+        function test_identity_conv(space, inpt = inputvertex("in", 3))
+            v = space(inpt, outsize=nout(inpt), wi=IdentityWeightInit())
+            g = CompGraph(inpt, v)
+
+            indata = reshape(1:2*nout(inpt)*4*5, 5,4,nout(inpt), 2)
+            @test g(indata) == indata
+        end
+
+        @testset "RepeatArchSpace identity" begin
+            test_identity_dense(RepeatArchSpace(VertexSpace(DenseSpace(3, identity)), 3))
+        end
+
+        @testset "ListArchSpace identity" begin
+            test_identity_dense(ListArchSpace(VertexSpace.(DenseSpace.((2,3), relu))...))
+        end
+
+        @testset "ForkArchSpace identity $npaths paths" for npaths in (1, 2, 3)
+            test_identity_dense(ForkArchSpace(VertexSpace(DenseSpace(3, identity)), npaths), inputvertex("in", npaths*2+1))
+            test_identity_conv(ForkArchSpace(VertexSpace(ConvSpace2D(3, identity, [3])), npaths), inputvertex("in", npaths*2+1))
+        end
+
+        @testset "ForkArchSpace RepeatArchSpace identity $nreps repetitions" for nreps in (1,2,3)
+            test_identity_dense(ForkArchSpace(RepeatArchSpace(VertexSpace(DenseSpace(3, identity)), nreps), 3), inputvertex("in", 3*2+1))
+            test_identity_conv(ForkArchSpace(RepeatArchSpace(VertexSpace(ConvSpace2D(3, identity, [3])), nreps), 3), inputvertex("in", 3*2+1))
+        end
+
+        @testset "ForkArchSpace ListArchSpace identity $sizes sizes" for sizes in ((3,), (2,3), (2,3,4))
+            test_identity_dense(ForkArchSpace(ListArchSpace(VertexSpace.(DenseSpace.(sizes, identity))...), 3), inputvertex("in", 3*2+1))
+            test_identity_conv(ForkArchSpace(ListArchSpace(VertexSpace.((MaxPoolSpace(PoolSpace2D([1])), ConvSpace2D.(sizes, identity, ([3],))...))...), 3), inputvertex("in", 3*2+1))
+        end
+
+        @testset "ResidualArchSpace identity" begin
+            test_identity_dense(ResidualArchSpace(DenseSpace(3, identity)))
+            test_identity_conv(ResidualArchSpace(ConvSpace2D(3, identity, [3])))
+        end
+
+        @testset "ResidualArchSpace ForkArchSpace identity $npaths paths" for npaths in (1,2,3)
+            test_identity_dense(ResidualArchSpace(ForkArchSpace(VertexSpace(DenseSpace(3, identity)), npaths)))
+            test_identity_conv(ResidualArchSpace(ForkArchSpace(VertexSpace(ConvSpace2D(3, identity, [3])), npaths)))
+        end
+
+        @testset "ForkArchSpace ResidualArchSpace identity" begin
+            # ID mapping only possible with one path
+            test_identity_dense(ForkArchSpace(ResidualArchSpace(VertexSpace(DenseSpace(3, identity))), 1))
+            test_identity_conv(ForkArchSpace(ResidualArchSpace(VertexSpace(ConvSpace2D(3, identity, [3]))), 1))
+        end
+
     end
 
 end

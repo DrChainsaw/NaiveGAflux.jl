@@ -81,3 +81,28 @@ end
 
     @test nv_pre == nv(g) + 3
 end
+
+@testset "PersistentArray" begin
+    testdir = "testPersistentArray"
+    pa = PersistentArray(testdir, 5, identity)
+
+    @test pa == 1:5
+    @test map(identity, pa) == pa
+    @test identity.(pa) == pa
+    @test mapfoldl(identity, vcat, pa) == pa
+    pa[1] = 3
+    @test pa == [3,2,3,4,5]
+
+    try
+        persist(pa)
+        @test PersistentArray(testdir, 7, x -> 2x) == [3,2,3,4,5,12,14]
+
+        rm(pa, 2)
+        @test PersistentArray(testdir, 3, x -> 17) == [3,17,3]
+
+        rm(pa)
+        @test PersistentArray(testdir, 3, x -> 11) == [11,11,11]
+    finally
+        rm(testdir, force=true, recursive=true)
+    end
+end

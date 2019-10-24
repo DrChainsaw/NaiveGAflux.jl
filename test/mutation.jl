@@ -17,6 +17,70 @@
         @test probe.mutated == [1,3,4]
     end
 
+    @testset "WeightedMutationProbability" begin
+        probe = ProbeMutation(Real)
+        rng = MockRng([0.5])
+        m = WeightedMutationProbability(probe, p -> Probability(p, rng))
+
+        m(0.1)
+        m(0.6)
+        m(0.4)
+        m(0.9)
+        @test probe.mutated == [0.6,0.9]
+    end
+
+    @testset "Neuron value weighted mutation" begin
+        using Statistics
+        struct DummyValue <: AbstractMutableComp
+            values
+        end
+        NaiveNASflux.neuron_value(d::DummyValue) = d.values
+
+        l(in, outsize, value) = mutable(Dense(nout(in), outsize), in, layerfun = l -> DummyValue(value))
+
+        v0 = inputvertex("in", 3)
+        v1 = l(v0, 4, 1:4)
+        v2 = l(v1, 3, 100:300)
+        v3 = l(v2, 5, 0.1:0.1:0.5)
+
+        @testset "weighted_neuron_value_high pbase $pbase" for pbase in (0.05, 0.1, 0.3, 0.7, 0.9, 0.95)
+            import NaiveGAflux: weighted_neuron_value_high
+            wnv = weighted_neuron_value_high(pbase, spread=0.5)
+            wp = map(p -> p.p, wnv.([v1,v2,v3]))
+            @test wp[2] > wp[1] > wp[3]
+            @test mean(wp) ≈ pbase rtol = 0.1
+        end
+
+        @testset "HighValueMutationProbability" begin
+
+            probe = ProbeMutation(MutationVertex)
+            m = HighValueMutationProbability(probe, 0.1, MockRng([0.15]))
+
+            m(v1)
+            m(v2)
+            m(v3)
+            @test probe.mutated == [v2]
+        end
+
+        @testset "weighted_neuron_value_low pbase $pbase" for pbase in (0.05, 0.1, 0.3, 0.7, 0.9, 0.95)
+            import NaiveGAflux: weighted_neuron_value_low
+            wnv = weighted_neuron_value_low(pbase,spread=0.8)
+            wp = map(p -> p.p, wnv.([v1,v2,v3]))
+            @test wp[2] < wp[1] < wp[3]
+            @test mean(wp) ≈ pbase rtol = 0.1
+        end
+
+        @testset "LowValueMutationProbability" begin
+            probe = ProbeMutation(MutationVertex)
+            m = LowValueMutationProbability(probe, 0.1, MockRng([0.15]))
+
+            m(v1)
+            m(v2)
+            m(v3)
+            @test probe.mutated == [v1, v3]
+        end
+    end
+
     @testset "MutationList" begin
         probes = ProbeMutation.(repeat([Int], 3))
         m = MutationList(probes...)
@@ -122,17 +186,18 @@
 
         @test inputs(v1) == [inpt]
 
-        space = ArchSpace(DenseSpace(BaseLayerSpace(4, relu)))
+        space = ArchSpace(DenseSpace(4, relu))
 
         AddVertexMutation(space)(inpt)
 
         @test inputs(v1) != [inpt]
         @test nin(v1) == [3]
+        @test inputs(v1)[](1:nout(inpt)) == 1:nout(inpt)
 
         v2 = dense(v1, 2)
         v3 = dense(v1, 1)
 
-        AddVertexMutation(space, outs -> view(outs, 2))(v1)
+        AddVertexMutation(space, outs -> [outs[2]])(v1)
 
         @test inputs(v2) == [v1]
         @test inputs(v3) != [v1]
@@ -146,6 +211,48 @@
         RemoveVertexMutation()(v1)
 
         @test inputs(v2) == [inpt]
+    end
+
+    @testset "KernelSizeMutation $convtype" for convtype in (Conv, ConvTranspose, DepthwiseConv)
+        v = mutable(convtype((3,5), 2=>2, pad=(1,1,2,2)), inputvertex("in", 2))
+        indata = ones(Float32, 7,7,2,2)
+        @test size(v(indata)) == size(indata)
+
+        rng = SeqRng()
+        KernelSizeMutation2D(4,rng=rng)(v)
+
+        @test size(v(indata)) == size(indata)
+        @test size(NaiveNASflux.weights(layer(v)))[1:2] == (1, 2)
+
+        # Test with maxvalue
+        KernelSizeMutation(Singleton2DParSpace(4), maxsize=v->(4, 10))(v)
+        @test size(v(indata)) == size(indata)
+        @test size(NaiveNASflux.weights(layer(v)))[1:2] == (4, 6)
+    end
+
+    @testset "ActivationFunctionMutation Dense" begin
+        v = mutable(Dense(2,3), inputvertex("in", 2))
+        ActivationFunctionMutation(elu)(v)
+        @test layer(v).σ == elu
+    end
+
+    @testset "ActivationFunctionMutation RNN" begin
+        v = mutable(RNN(2,3), inputvertex("in", 2))
+        ActivationFunctionMutation(elu)(v)
+        @test layer(v).cell.σ == elu
+    end
+
+    @testset "ActivationFunctionMutation $convtype" for convtype in (Conv, ConvTranspose, DepthwiseConv)
+        v = mutable(convtype((3,5), 2=>2), inputvertex("in", 2))
+        ActivationFunctionMutation(elu)(v)
+        @test layer(v).σ == elu
+    end
+
+    Flux.GroupNorm(n) = GroupNorm(n,n)
+    @testset "ActivationFunctionMutation $normtype" for normtype in (BatchNorm, InstanceNorm, GroupNorm)
+        v = mutable(normtype(2), inputvertex("in", 2))
+        ActivationFunctionMutation(elu)(v)
+        @test layer(v).λ == elu
     end
 
     @testset "NeuronSelectMutation" begin
