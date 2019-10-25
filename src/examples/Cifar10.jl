@@ -62,7 +62,7 @@ function evolutionloop(population, evostrategy, trainingiter, cb)
             @info "\tFitness model $i: $(fitness(cand))"
         end
         cb(population)
-        gen == 3 && return population
+
         population = evolve!(evostrategy, population)
     end
     return population
