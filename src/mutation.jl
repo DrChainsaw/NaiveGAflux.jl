@@ -258,6 +258,136 @@ RemoveVertexMutation() = RemoveVertexMutation(RemoveStrategy(CheckAligned(CheckN
 (m::RemoveVertexMutation)(v::AbstractVertex) = remove!(v, m.s)
 
 """
+    AddEdgeMutation{F1, F2, R} <: AbstractMutation{AbstractVertex}
+    AddEdgeMutation(p, rng=rng_default)
+    AddEdgeMutation(p::Probability, rng=rng_default)
+    AddEdgeMutation(mergefun::F, p::Probability, rng::R)
+
+Add an edge from a vertex `vi` to another vertex `vo` randomly selected from `vs = filtfun(vi)`.
+
+Higher values of `p` will give more preference to earlier vertices of `vs`.
+
+If `vo` is not capable of having multiple inputs (determined by `singleinput(v) == true`), `vm = mergefun(voi)` where `voi` is a randomly selected input to `vo` will be used instead of `vo`.
+"""
+struct AddEdgeMutation{F1, F2, R} <: AbstractMutation{AbstractVertex}
+    mergefun::F1
+    filtfun::F2
+    p::Probability
+    rng::R
+end
+AddEdgeMutation(p, rng=rng_default) = AddEdgeMutation(Probability(p, rng), rng)
+AddEdgeMutation(p::Probability, rng=rng_default) = AddEdgeMutation(default_mergefun(rng), no_shapechange, p, rng)
+
+default_mergefun(rng, pconc = 0; traitfun = validated() ∘ default_logging(), layerfun = ActivationContribution) = function(vin)
+    if rand(rng) > pconc
+        return invariantvertex(layerfun(+), vin, traitdecoration=traitfun ∘ named(name(vin) * ".add"))
+    end
+    return concat(vin ,mutation=IoChange, traitfun = traitfun ∘ named(name(vin) * ".cat"), layerfun=layerfun)
+end
+
+function no_shapechange(vi, vc=vi, valid = [])
+    if vi != vc
+        if vi ∉ inputs(vc)
+            valid = vcat(valid, vc)
+        end
+        if layertype(vc) == FluxNoParLayer()
+            layertype(vc) == typeof(globalpooling2d) && return valid
+            layer(vc) isa MaxPool && return valid
+            layer(vc) isa MeanPool && return valid
+        end
+    end
+    isempty(outputs(vc)) && return valid
+    return mapfoldl(vco -> no_shapechange(vi, vco, valid), vcat, outputs(vc))
+end
+
+mutable struct SuccessState <: AbstractAlignSizeStrategy
+    success::Bool
+    SuccessState() = new(true)
+end
+NaiveNASlib.prealignsizes(s::SuccessState, vin, vout, will_rm) = s.success = false
+NaiveNASlib.postalignsizes(s::SuccessState, vin, vout) = s.success = false
+
+function (m::AddEdgeMutation)(v::AbstractVertex)
+    # All vertices for which it is allowed to add v as an input
+    allverts = filter(allow_mutation, m.filtfun(v))
+    isempty(allverts) && return
+
+    # Higher probability to select a vertex close to v is desired behaviour
+    # One line less than a for loop => FP wins!!
+    selfun(::Nothing, vc) = apply(m.p) ? vc : nothing
+    selfun(vs, vd) = vs
+    vo = foldl(selfun, allverts, init=nothing)
+    vo = vo == nothing ? rand(allverts) : vo
+
+    println("\tvo=$(name(vo)) ins : $(name.(inputs(vo)))")
+
+    # Need to add a vertex which can handle multiple inputs if vo is single input only
+    # For cleaning up added vertex if the whole operation fails
+    cleanup_failed = () -> vo
+    @show nin.(vo)
+    if singleinput(vo)
+        v in inputs(vo) && return
+        voi = rand(m.rng, inputs(vo))
+        #if singleinput(voi)
+            vm = m.mergefun(voi)
+            # Insert vm between voi and vo, i.e voi -> vo turns into voi -> vm -> vo
+            insert!(voi, vv -> vm, vs -> [vo])
+            cleanup_failed = () -> remove!(vm, RemoveStrategy(NoSizeChange()))
+            vo = vm # vm is the one we shall add an edge to
+            println("\tchange to $(name(vm)), is in graph: $(vo in all_in_graph(v))")
+        #else
+    #        vo = voi
+    #    end
+    end
+
+    println("before vo nin=$(nin(vo)), nout=$(nout(vo)) nin_org=$(nin_org(vo)), nout_org=$(nout_org(vo))")
+    println("before v  nin=$(nin(v)), nout=$(nout(v)) nin_org=$(nin_org(v)), nout_org=$(nout_org(v))")
+    # Now, lets try to create the edge
+    successstate = SuccessState()
+    create_edge!(v, vo, pos = rand(m.rng, 1:length(inputs(vo)) + 1), strategy = add_edge_strat(vo, successstate))
+
+    println("after edge vo nin=$(nin(vo)), nout=$(nout(vo)) nin_org=$(nin_org(vo)), nout_org=$(nout_org(vo))")
+    println("after edge v  nin=$(nin(v)), nout=$(nout(v)) nin_org=$(nin_org(v)), nout_org=$(nout_org(v))")
+
+    if !successstate.success
+        cleanup_failed()
+        println("Done after fail to align")
+        println("fail1 vo nin=$(nin(vo)), nout=$(nout(vo)) nin_org=$(nin_org(vo)), nout_org=$(nout_org(vo))")
+        println("fail1 v  nin=$(nin(v)), nout=$(nout(v)) nin_org=$(nin_org(v)), nout_org=$(nout_org(v))")
+        return
+    end
+
+    # We need immediate feedback regarding whether it is possible to select outputs so we can clean up the edge in case of failure
+    vs = all_in_Δsize_graph(v, Output())
+    println("vo nin=$(nin(vo)), nout=$(nout(vo)) nin_org=$(nin_org(vo)), nout_org=$(nout_org(vo))")
+    success, ins, outs = NaiveNASlib.solve_outputs_selection(OutSelect{Exact}(LogSelectionFallback("Reverting...", NoutRevert())), vs, default_neuronselect)
+
+    if success
+        Δoutputs(ins, outs, vs)
+        apply_mutation.(vs)
+
+    else
+        println("failure vo nin=$(nin(vo)), nout=$(nout(vo)) nin_org=$(nin_org(vo)), nout_org=$(nout_org(vo))")
+        # We now assume that the fallback has reverted the sizes
+        # To clean up, we just need to remove the edge without performing any size changes
+        remove_edge!(v, vo, strategy=NoSizeChange())
+        # In case we added a vertex above we will now remove it
+        cleanup_failed()
+        println("is in graph: $(vo in all_in_graph(v))")
+        println("after cleanup vo nin=$(nin(vo)), nout=$(nout(vo)) nin_org=$(nin_org(vo)), nout_org=$(nout_org(vo))")
+        println("after cleanup v nin=$(nin(v)), nout=$(nout(v)) nin_org=$(nin_org(v)), nout_org=$(nout_org(v))")
+    end
+end
+# Need to override this one for strange types which e.g. layers which support exactly 2 inputs or something.
+singleinput(v) = length(inputs(v)) == 1
+
+add_edge_strat(v::AbstractVertex, notifyfailure) = add_edge_strat(trait(v), notifyfailure)
+add_edge_strat(d::DecoratingTrait, notifyfailure) = add_edge_strat(base(d), notifyfailure)
+add_edge_strat(::SizeInvariant, notifyfailure) = CheckNoSizeCycle(IncreaseSmaller(DecreaseBigger(FailAlignSizeWarn(andthen=notifyfailure))),FailAlignSizeWarn(msgfun = (vin,vout) -> "Can not add edge from $(name(vin)) to $(name(vout))! Size cycle detected!"))
+add_edge_strat(::SizeStack, notifyfailure) = PostAlignJuMP(DefaultJuMPΔSizeStrategy(), FailAlignSizeWarn(andthen=notifyfailure))
+
+
+"""
     KernelSizeMutation{N} <: AbstractMutation{AbstractVertex}
     KernelSizeMutation(Δsizespace::AbstractParSpace{N, Int}; maxsize, pad, rng)
     KernelSizeMutation2D(absΔ::Integer;maxsize, pad, rng)

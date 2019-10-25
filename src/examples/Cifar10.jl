@@ -62,8 +62,8 @@ function evolutionloop(population, evostrategy, trainingiter, cb)
             @info "\tFitness model $i: $(fitness(cand))"
         end
         cb(population)
-        gen == 3 && return population
         population = evolve!(evostrategy, population)
+        return population
     end
     return population
 end
@@ -122,6 +122,8 @@ function mutation()
     decrease_kernel = KernelSizeMutation(ParSpace2D([-2]))
     mutate_act = ActivationFunctionMutation(acts)
 
+    add_edge = AddEdgeMutation(0.1)
+
     # Create a shorthand alias for MutationProbability
     mpn(m, p) = VertexMutation(MutationProbability(m, p))
     mph(m, p) = VertexMutation(HighValueMutationProbability(m, p))
@@ -135,13 +137,14 @@ function mutation()
     mkern = mpl(LogMutation(v -> "\tMutate kernel size of $(name(v))", mutate_kernel), 0.01)
     dkern = mpl(LogMutation(v -> "\tDecrease kernel size of $(name(v))", decrease_kernel), 0.005)
     mactf = mpl(LogMutation(v -> "\tMutate activation function of $(name(v))", mutate_act), 0.005)
+    madde = mph(LogMutation(v -> "\tAdd edge from $(name(v))", add_edge), 0.5)
 
     mremv = MutationFilter(g -> nv(g) > 5, mremv)
 
     # Create two possible mutations: One which is guaranteed to not increase the size:
     dsize = MutationList(mremv, PostMutation(dnout, NeuronSelect()), dkern, maddm)
     # ...and another which can either decrease or increase the size:
-    msize = MutationList(mremv, PostMutation(inout, NeuronSelect()), PostMutation(dnout, NeuronSelect()), mkern, maddm, maddv)
+    msize = MutationList(mremv, PostMutation(inout, NeuronSelect()), PostMutation(dnout, NeuronSelect()), mkern, madde, maddm, maddv)
     # Add mutation last as new vertices with neuron_value == 0 screws up outputs selection as per https://github.com/DrChainsaw/NaiveNASlib.jl/issues/39
 
     # If isbig then perform the mutation operation which is guaranteed to not increase the size
