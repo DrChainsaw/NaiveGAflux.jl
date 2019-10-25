@@ -62,7 +62,7 @@ function evolutionloop(population, evostrategy, trainingiter, cb)
             @info "\tFitness model $i: $(fitness(cand))"
         end
         cb(population)
-
+        gen == 3 && return population
         population = evolve!(evostrategy, population)
     end
     return population
@@ -160,7 +160,7 @@ canaddmaxpool(v::AbstractVertex) = is_convtype(v) && !occursin.(r"(path|res|maxp
 
 nmaxpool(vs) = sum(endswith.(name.(vs), "maxpool"))
 
-maxkernelsize(v::AbstractVertex, insize=(32,32)) = @. insize / 2^nmaxpool(flatten(v))
+maxkernelsize(v::AbstractVertex, insize=(32,32)) = @. insize / 2^nmaxpool(flatten(v)) + 1
 
 Flux.mapchildren(f, aa::AbstractArray{<:Integer, 1}) = aa
 

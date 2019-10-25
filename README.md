@@ -148,7 +148,7 @@ Random.seed!(NaiveGAflux.rng_default, 666)
 cs = VertexSpace(ConvSpace2D(8:256, [identity, relu, elu], 3:5))
 bs = VertexSpace(BatchNormSpace([identity, relu]))
 
-# Block of conv->bn and bn-conv respectively.
+# Block of conv->bn and bn->conv respectively.
 # Need to make sure there is always at least one SizeAbsorb layer to make fork and res below play nice
 csbs = ListArchSpace(cs ,bs)
 bscs = ListArchSpace(bs, cs)
@@ -184,8 +184,8 @@ featureextract = RepeatArchSpace(reduction, 2:4)
 # Adds 1 to 3 dense layers as outputs
 dense = VertexSpace(DenseSpace(16:512, [relu, selu]))
 drep = RepeatArchSpace(dense, 0:2)
-# Last layer has fixed output size depending on number of labels
-dout=VertexSpace(DenseSpace(10, identity))
+# Last layer has fixed output size (number of labels)
+dout=VertexSpace(Shielded(), DenseSpace(10, identity))
 output = ListArchSpace(drep, dout)
 
 # Aaaand lets glue it together: Feature extracting conv+bn layers -> global pooling -> dense layers
@@ -402,7 +402,7 @@ Examples:
   @test fitness(combined, candidate2) > 13
 
   # Special mention goes to NanGuard.
-  # It is hard to guarantee that evolution will not produce a model which outputs NaN or Inf.
+  # It is hard to ensure that evolution does not produce a model which outputs NaN or Inf.
   # However, Flux typically throws an exception if it sees NaN or Inf.
   # NanGuard keeps the show going and assigns fitness 0 so that the model will not be selected.
   nanguard = NanGuard(combined)
@@ -466,7 +466,7 @@ Flux.train!(candmodel, Iterators.repeated(dataset, 20))
 @test fitness(candmodel) > 0
 
 # HostCandidate moves the model to the GPU when training or evaluating fitness and moves it back afterwards
-# Useful for conserving GPU memory at the expense of longer time to train.
+# Useful for reducing GPU memory consumption (at the cost of longer time to train as cpu<->gpu move takes some time).
 # Note, it does not move the data. GpuIterator can provide some assistance here...
 dataset_gpu = GpuIterator([dataset])
 fitfun_gpu = NanGuard(AccuracyFitness(dataset_gpu))
@@ -494,7 +494,7 @@ Evolution strategies are the functions used to evolve the population in the gene
 Examples:
 
 ```julia
-# For controlled randomness
+# For controlled randomness in the examples
 struct FakeRng end
 Base.rand(::FakeRng) = 0.7
 
@@ -508,7 +508,7 @@ NaiveGAflux.fitness(d::Cand) = d.fitness
 elitesel = EliteSelection(2)
 @test evolve!(elitesel, Cand.(1:10)) == Cand.([10, 9])
 
-# EvolveCandidates maps candidates to new candidates
+# EvolveCandidates maps candidates to new candidates (e.g. through mutation)
 evocands = EvolveCandidates(c -> Cand(fitness(c) + 0.1))
 @test evolve!(evocands, Cand.(1:10)) == Cand.(1.1:10.1)
 
@@ -521,7 +521,7 @@ sussel = SusSelection(5, evocands, FakeRng())
 comb = CombinedEvolution(elitesel, sussel)
 @test evolve!(comb, Cand.(1:10)) == Cand.(Any[10, 9, 4.1, 6.1, 8.1, 9.1, 10.1])
 
-# AfterEvolution provides a callback after evolution is completed
+# AfterEvolution calls a function after evolution is completed
 afterfun(pop) = map(c -> Cand(2fitness(c)), pop)
 afterevo = AfterEvolution(comb, afterfun)
 @test evolve!(afterevo, Cand.(1:10)) == Cand.(Any[20, 18, 8.2, 12.2, 16.2, 18.2, 20.2])
