@@ -63,7 +63,6 @@ function evolutionloop(population, evostrategy, trainingiter, cb)
         end
         cb(population)
         population = evolve!(evostrategy, population)
-        return population
     end
     return population
 end

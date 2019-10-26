@@ -278,7 +278,7 @@ end
 AddEdgeMutation(p, rng=rng_default) = AddEdgeMutation(Probability(p, rng), rng)
 AddEdgeMutation(p::Probability, rng=rng_default) = AddEdgeMutation(default_mergefun(rng), no_shapechange, p, rng)
 
-default_mergefun(rng=rng_default, pconc = 0; traitfun = validated() ∘ default_logging(), layerfun = ActivationContribution) = function(vin)
+default_mergefun(rng=rng_default, pconc = 0; traitfun = MutationShield ∘ validated() ∘ default_logging(), layerfun = ActivationContribution) = function(vin)
     if rand(rng) > pconc
         return invariantvertex(layerfun(+), vin, traitdecoration=traitfun ∘ named(name(vin) * ".add"))
     end
@@ -290,8 +290,8 @@ function no_shapechange(vi, vc=vi, valid = [])
         if vi ∉ inputs(vc)
             valid = vcat(valid, vc)
         end
+        layertype(vc) == typeof(globalpooling2d) && return valid
         if layertype(vc) == FluxNoParLayer()
-            layertype(vc) == typeof(globalpooling2d) && return valid
             layer(vc) isa MaxPool && return valid
             layer(vc) isa MeanPool && return valid
         end
@@ -328,7 +328,6 @@ function try_add_edge(vi, vo, mergefun, rng=rng_default)
     # Need to add a vertex which can handle multiple inputs if vo is single input only
     # For cleaning up added vertex if the whole operation fails
     cleanup_failed = () -> vo
-    @show nin.(vo)
     if singleinput(vo)
         vi in inputs(vo) && return
         #voi = rand(rng, inputs(vo))
@@ -346,42 +345,49 @@ function try_add_edge(vi, vo, mergefun, rng=rng_default)
     end
 
     println("before vo nin=$(nin(vo)), nout=$(nout(vo)) nin_org=$(nin_org(vo)), nout_org=$(nout_org(vo))")
+    println("inputs   nout=$(nout.(inputs(vo))),       nout_org=$(nout_org.(inputs(vo)))")
     println("before vi nin=$(nin(vi)), nout=$(nout(vi)) nin_org=$(nin_org(vi)), nout_org=$(nout_org(vi))")
     # Now, lets try to create the edge
     successstate = SuccessState()
     create_edge!(vi, vo, pos = rand(rng, 1:length(inputs(vo)) + 1), strategy = add_edge_strat(vo, successstate))
 
     println("after edge vo nin=$(nin(vo)), nout=$(nout(vo)) nin_org=$(nin_org(vo)), nout_org=$(nout_org(vo))")
+    println("inputs       nout=$(nout.(inputs(vo))),       nout_org=$(nout_org.(inputs(vo)))")
     println("after edge vi nin=$(nin(vi)), nout=$(nout(vi)) nin_org=$(nin_org(vi)), nout_org=$(nout_org(vi))")
 
     if !successstate.success
         cleanup_failed()
         println("Done after fail to align")
         println("fail1 vo nin=$(nin(vo)), nout=$(nout(vo)) nin_org=$(nin_org(vo)), nout_org=$(nout_org(vo))")
+        println("inputs  nout=$(nout.(inputs(vo))),       nout_org=$(nout_org.(inputs(vo)))")
         println("fail1 vi nin=$(nin(vi)), nout=$(nout(vi)) nin_org=$(nin_org(vi)), nout_org=$(nout_org(vi))")
         return
     end
 
-
-    # We need immediate feedback regarding whether it is possible to select outputs so we can clean up the edge in case of failure
+    success = false
     vs = all_in_Δsize_graph(vi, Output())
+    if validate_sizes(vo)
+        # We need immediate feedback regarding whether it is possible to select outputs so we can clean up the edge in case of failure
+        success, ins, outs = NaiveNASlib.solve_outputs_selection(OutSelect{Exact}(LogSelectionFallback("Reverting...", NoutRevert())), vs, default_neuronselect)
+    end
 
-    success, ins, outs = NaiveNASlib.solve_outputs_selection(OutSelect{Exact}(LogSelectionFallback("Reverting...", NoutRevert())), vs, default_neuronselect)
-
-    if success && validate_sizes(vo)
+    if success
         Δoutputs(ins, outs, vs)
         apply_mutation.(vs)
-
     else
-        println("failure vo nin=$(nin(vo)), nout=$(nout(vo)) nin_org=$(nin_org(vo)), nout_org=$(nout_org(vo))")
+
+        println("failure vo    nin=$(nin(vo)), nout=$(nout(vo)) nin_org=$(nin_org(vo)), nout_org=$(nout_org(vo))")
+        println("inputs       nout=$(nout.(inputs(vo))),       nout_org=$(nout_org.(inputs(vo)))")
         println("failure vi nin=$(nin(vi)), nout=$(nout(vi)) nin_org=$(nin_org(vi)), nout_org=$(nout_org(vi))")
         # We now assume that the fallback has reverted the sizes
         # To clean up, we just need to remove the edge without performing any size changes
         remove_edge!(vi, vo, strategy=NoSizeChange())
         # In case we added a vertex above we will now remove it
         cleanup_failed()
+        Δoutputs(NoutRevert(), vs, v -> ones(nout_org(v)))
         println("is in graph: $(vo in all_in_graph(vi))")
         println("after cleanup vo nin=$(nin(vo)), nout=$(nout(vo)) nin_org=$(nin_org(vo)), nout_org=$(nout_org(vo))")
+        println("inputs          nout=$(nout.(inputs(vo))),       nout_org=$(nout_org.(inputs(vo)))")
         println("after cleanup vi nin=$(nin(vi)), nout=$(nout(vi)) nin_org=$(nin_org(vi)), nout_org=$(nout_org(vi))")
     end
 end
@@ -390,8 +396,8 @@ singleinput(v) = length(inputs(v)) == 1
 
 add_edge_strat(v::AbstractVertex, notifyfailure) = add_edge_strat(trait(v), notifyfailure)
 add_edge_strat(d::DecoratingTrait, notifyfailure) = add_edge_strat(base(d), notifyfailure)
-add_edge_strat(::SizeInvariant, notifyfailure) = IncreaseSmaller(DecreaseBigger(FailAlignSizeWarn(andthen=notifyfailure)))
-add_edge_strat(::SizeStack, notifyfailure) = PostAlignJuMP(DefaultJuMPΔSizeStrategy(), FailAlignSizeWarn(andthen=notifyfailure))
+add_edge_strat(::SizeInvariant, notifyfailure) = IncreaseSmaller(DecreaseBigger(FailAlignSizeWarn(andthen=notifyfailure, msgfun = (vin,vout) -> "Could not align sizes of $(name(vin)) and $(name(vout))!")))
+add_edge_strat(::SizeStack, notifyfailure) = PostAlignJuMP(DefaultJuMPΔSizeStrategy(), FailAlignSizeWarn(andthen=notifyfailure, msgfun = (vin,vout) -> "Could not align sizes of $(name(vin)) and $(name(vout))!"))
 
 validate_sizes(v) = validate_sizes(trait(v), v)
 validate_sizes(t::DecoratingTrait, v) = validate_sizes(base(t), v)
