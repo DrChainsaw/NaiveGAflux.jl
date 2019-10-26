@@ -278,7 +278,7 @@ end
 AddEdgeMutation(p, rng=rng_default) = AddEdgeMutation(Probability(p, rng), rng)
 AddEdgeMutation(p::Probability, rng=rng_default) = AddEdgeMutation(default_mergefun(rng), no_shapechange, p, rng)
 
-default_mergefun(rng=rng_default, pconc = 0; traitfun = MutationShield ∘ validated() ∘ default_logging(), layerfun = ActivationContribution) = function(vin)
+default_mergefun(rng=rng_default, pconc = 1; traitfun = MutationShield ∘ validated() ∘ default_logging(), layerfun = ActivationContribution) = function(vin)
     if rand(rng) > pconc
         return invariantvertex(layerfun(+), vin, traitdecoration=traitfun ∘ named(name(vin) * ".add"))
     end
@@ -327,7 +327,8 @@ function try_add_edge(vi, vo, mergefun, rng=rng_default)
 
     # Need to add a vertex which can handle multiple inputs if vo is single input only
     # For cleaning up added vertex if the whole operation fails
-    cleanup_failed = () -> vo
+    cleanup_failed = () -> nothing
+    fake_orgsize = () -> nothing
     if singleinput(vo)
         vi in inputs(vo) && return
         #voi = rand(rng, inputs(vo))
@@ -339,6 +340,10 @@ function try_add_edge(vi, vo, mergefun, rng=rng_default)
             cleanup_failed = () -> remove!(vm, RemoveStrategy(NoSizeChange()))
             vo = vm # vm is the one we shall add an edge to
             println("\tchange to $(name(vm)), is in graph: $(vo in all_in_graph(vi))")
+            fake_orgsize = function()
+                #NaiveNASlib.reset_in!(op(vm))
+                #NaiveNASlib.reset_out!(op(vm))
+            end
         #else
     #        vo = voi
     #    end
@@ -349,6 +354,7 @@ function try_add_edge(vi, vo, mergefun, rng=rng_default)
     println("before vi nin=$(nin(vi)), nout=$(nout(vi)) nin_org=$(nin_org(vi)), nout_org=$(nout_org(vi))")
     # Now, lets try to create the edge
     successstate = SuccessState()
+
     create_edge!(vi, vo, pos = rand(rng, 1:length(inputs(vo)) + 1), strategy = add_edge_strat(vo, successstate))
 
     println("after edge vo nin=$(nin(vo)), nout=$(nout(vo)) nin_org=$(nin_org(vo)), nout_org=$(nout_org(vo))")
@@ -367,6 +373,11 @@ function try_add_edge(vi, vo, mergefun, rng=rng_default)
     success = false
     vs = all_in_Δsize_graph(vi, Output())
     if validate_sizes(vo)
+        # Output selection uses original sizes. When adding new edges original sizes are naturally not aligned, so we need to fake them to be aligned
+        fake_orgsize()
+        println("after fakeorg vo nin=$(nin(vo)), nout=$(nout(vo)) nin_org=$(nin_org(vo)), nout_org=$(nout_org(vo))")
+        println("inputs          nout=$(nout.(inputs(vo))),       nout_org=$(nout_org.(inputs(vo)))")
+
         # We need immediate feedback regarding whether it is possible to select outputs so we can clean up the edge in case of failure
         success, ins, outs = NaiveNASlib.solve_outputs_selection(OutSelect{Exact}(LogSelectionFallback("Reverting...", NoutRevert())), vs, default_neuronselect)
     end
@@ -403,6 +414,68 @@ validate_sizes(v) = validate_sizes(trait(v), v)
 validate_sizes(t::DecoratingTrait, v) = validate_sizes(base(t), v)
 validate_sizes(::SizeInvariant, v) = unique(nin(v)) == [nout(v)]
 validate_sizes(::SizeStack, v) = sum(nin(v)) == nout(v)
+
+import JuMP
+import JuMP: @constraint, @variable
+function NaiveNASlib.inoutconstraint!(s, ::SizeStack, v, model, vardict::Dict)
+    offs = 1
+    var = vardict[v]
+    #println("inoutconstraint for $(name(v)), varsize: $(length(var))")
+    for (i, vi) in enumerate(inputs(v))
+        var_i = vardict[vi]
+        #println("\t vi: $(name(vi)) length: $(length(var_i))")
+        # Sizes mismatch when vertex/edge was removed (or edge added)
+        if nout_org(vi) == nin_org(v)[i]
+            @constraint(model, var_i .== var[offs:offs+length(var_i)-1])
+        end
+        offs += min(nin_org(v)[i], length(var_i), nout_org(vi))
+    end
+end
+
+function NaiveNASlib.vertexconstraints!(v::AbstractVertex, s::AlignNinToNout, data)
+    NaiveNASlib.vertexconstraints!(v, s.vstrat, data)
+    for vo in filter(vo -> vo in keys(data.noutdict), outputs(v))
+        ninvar = @variable(data.model, integer=true)
+        @constraint(data.model, data.noutdict[v] == ninvar)
+
+        ninarr = get!(() -> Vector{JuMP.VariableRef}(undef, length(inputs(vo))), s.nindict, vo)
+        ninarr[inputs(vo) .== v] .= ninvar
+    end
+end
+
+function NaiveNASlib.postalignsizes(s::PostAlignJuMP, vin, vout)
+    vin_all = all_in_Δsize_graph(vin, Output())
+    vout_all = all_in_Δsize_graph(vout, Input())
+
+    verts = union(vin_all, vout_all)
+    #println("vin_all $(name.(vin_all))")
+    #println("vout_all $(name.(vout_all))")
+    #println("all $(name.(verts))")
+    success, nins, nouts = newsizes(AlignNinToNout(s.sizestrat, ΔSizeFailNoOp()), verts)
+    if !success
+        return NaiveNASlib.postalignsizes(s.fallback, vin, vout)
+    end
+    Δsize(nins, nouts, verts)
+end
+
+function NaiveNASlib.ninsAndNouts(s::AlignNinToNout, vs, noutvars)
+    nouts = round.(Int, JuMP.value.(noutvars))
+    #display([name(k) => v => name.(inputs(k)) for (k,v) in s.nindict])
+    nins = Dict(key => round.(Int, JuMP.value.(value)) for (key, value) in s.nindict)
+    return nins,nouts
+end
+
+function NaiveNASlib.add_input!(s::IoChange, pos, size)
+    NaiveNASlib.add_input!(s.size, pos, 0)
+    NaiveNASlib.add_input!(s.indices, pos, 0)
+    NaiveNASlib.insert!(s.inΔ, pos, size)
+end
+
+function NaiveNASlib.add_output!(s::IoChange, t::SizeStack, size)
+    Δnout(s, size)
+    #NaiveNASlib.add_output!(s.size, t, size)
+    #NaiveNASlib.add_output!(s.indices, t, size)
+end
 
 """
     KernelSizeMutation{N} <: AbstractMutation{AbstractVertex}
