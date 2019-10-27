@@ -300,25 +300,6 @@ function no_shapechange(vi, vc=vi, valid = [])
     return mapfoldl(vco -> no_shapechange(vi, vco, valid), vcat, outputs(vc))
 end
 
-mutable struct SuccessState <: AbstractAlignSizeStrategy
-    success::Bool
-    SuccessState() = new(true)
-end
-NaiveNASlib.prealignsizes(s::SuccessState, vin, vout, will_rm) = s.success = false
-NaiveNASlib.postalignsizes(s::SuccessState, vin, vout) = s.success = false
-
-struct RevertAfter <: AbstractAlignSizeStrategy
-    s
-end
-function NaiveNASlib.prealignsizes(s::RevertAfter, vin, vout, will_rm)
-    NaiveNASlib.prealignsizes(s.s, vin, vout, will_rm)
-    NaiveNASlib.prealignsizes(FailAlignSizeRevert(), vin, vout, will_rm)
-end
-function NaiveNASlib.postalignsizes(s::RevertAfter, vin, vout)
-    NaiveNASlib.postalignsizes(s.s, vin, vout)
-    NaiveNASlib.postalignsizes(FailAlignSizeRevert(), vin, vout)
-end
-
 """
     PostSelectOutputs <: AbstractAlignSizeStrategy
     PostSelectOutputs(;select=OutSelectExact(),align=IncreaseSmaller(), valuefun=v -> ones(nout_org(v)))
@@ -345,12 +326,9 @@ function NaiveNASlib.postalignsizes(s::PostSelectOutputs, vin, vout)
         isempty(verts) && return true
         success = Δoutputs(s.selectstrategy, verts, s.valuefun)
         if !success
-            printsizes("Fallback1", vin, vout)
             ret = NaiveNASlib.postalignsizes(s.fallback, vin, vout)
-            printsizes("Fallback2", vin, vout)
-            # Something is off here... Previous operation seems to mess up the sizes again
+            # TODO: FailAlignSizeRevert uses remove_edge! and this will change nout of vout with -nout of vin which is the right thing to do if one just wants to remove the edge when sizes are aligned to begin with.
             Δoutputs(NoutRevert(), verts, v -> ones(nout_org(v)))
-            printsizes("Fallback3", vin, vout)
             return ret
         end
         return success
@@ -405,29 +383,27 @@ function try_add_edge(vi, vo, mergefun, rng=rng_default)
     cleanup_failed = () -> nothing
     if singleinput(vo)
         voi = inputs(vo)[1]
-        #if singleinput(voi)
+        if singleinput(voi)
             vm = mergefun(voi)
             # Insert vm between voi and vo, i.e voi -> vo turns into voi -> vm -> vo
             insert!(voi, vv -> vm, vs -> [vo])
             cleanup_failed = function()
                 length(inputs(vm)) > 1 && return
                 remove!(vm, RemoveStrategy(NoSizeChange()))
-                #Δoutputs(NoutRevert(), Output(), vi, v -> ones(nout_org(v)))
             end
             vo = vm # vm is the one we shall add an edge to
             @info "Create new vertex for merging $(name(vo))"
-        #else
-        #    vo = voi
-        #end
+        else
+            vo = voi
+        end
     end
     # This is mainly because FailAlignSizeRevert does not work when the same vertex is input more than once, but it also seems kinda redundant.
     vi in inputs(vo) && return
     @info "Create edge between $(name(vi)) and $(name(vo))"
 
     printsizes("before edge", vi, vo)
-    # Now, lets try to create the edge
-    successstate = SuccessState()
-    create_edge!(vi, vo, strategy = add_edge_strat(vo, successstate))
+
+    create_edge!(vi, vo, strategy = add_edge_strat(vo))
     printsizes("after edge", vi, vo)
     cleanup_failed()
 
@@ -443,30 +419,31 @@ function printsizes(pref, vi, vo)
     println("$pref vi  nout=$(nout(vi)) nin=$(nin(vi)), nout_org=$(nout_org(vi)), nin_org=$(nin_org(vi))")
     println("$pref vo  nout=$(nout(vo)) nin=$(nin(vo)), nout_org=$(nout_org(vo)), nin_org=$(nin_org(vo))")
     println("$pref voi nout=$(nout.(inputs(vo))), nout_org=$(nout_org.(inputs(vo)))")
+    println("$pref op  $(op(vo).outΔ), $(op(vo).inΔ)")
 end
 
-add_edge_strat(v::AbstractVertex, notifyfailure) = add_edge_strat(trait(v), notifyfailure)
-add_edge_strat(d::DecoratingTrait, notifyfailure) = add_edge_strat(base(d), notifyfailure)
-function add_edge_strat(::SizeInvariant, notifyfailure)
-    alignstrat = IncreaseSmaller(DecreaseBigger(AlignSizeBoth(FailAlignSizeWarn(andthen=notifyfailure, msgfun = (vin,vout) -> "Could not align sizes of $(name(vin)) and $(name(vout))!"))))
+add_edge_strat(v::AbstractVertex) = add_edge_strat(trait(v))
+add_edge_strat(d::DecoratingTrait) = add_edge_strat(base(d))
+function add_edge_strat(::SizeInvariant)
+    alignstrat = IncreaseSmaller(DecreaseBigger(AlignSizeBoth(FailAlignSizeWarn(msgfun = (vin,vout) -> "Could not align sizes of $(name(vin)) and $(name(vout))!"))))
 
     selectstrat = OutSelect{Exact}(LogSelectionFallback("Reverting...", NoutRevert()))
 
     okstrat = ApplyMutation(SelectOutputs(selectstrat, alignstrat, default_neuronselect))
 
-    nokstrat = FailAlignSizeWarn(andthen=RevertAfter(notifyfailure), msgfun = (vin,vout) -> "Could not align sizes of $(name(vin)) and $(name(vout))! Size cycle detected!")
+    nokstrat = FailAlignSizeWarn(msgfun = (vin,vout) -> "Could not align sizes of $(name(vin)) and $(name(vout))! Size cycle detected!")
 
     return CheckAligned(CheckCreateEdgeNoSizeCycle(okstrat, nokstrat))
 end
-function add_edge_strat(::SizeStack, notifyfailure)
+function add_edge_strat(::SizeStack)
 
-    alignstrat = PostAlignJuMP(DefaultJuMPΔSizeStrategy(), FailAlignSizeWarn(andthen=RevertAfter(notifyfailure), msgfun = (vin,vout) -> "Could not align sizes of $(name(vin)) and $(name(vout))!"))
+    alignstrat = PostAlignJuMP(DefaultJuMPΔSizeStrategy(), FailAlignSizeWarn(msgfun = (vin,vout) -> "Could not align sizes of $(name(vin)) and $(name(vout))!"))
 
     selectstrat = OutSelect{Exact}(LogSelectionFallback("Reverting...", NoutRevert()))
 
-    okstrat = PostApplyMutation(PostSelectOutputs(selectstrat, alignstrat, default_neuronselect, RevertAfter(notifyfailure)))
+    okstrat = PostApplyMutation(PostSelectOutputs(selectstrat, alignstrat, default_neuronselect, FailAlignSizeRevert()))
 
-    nokstrat = FailAlignSizeWarn(andthen=RevertAfter(notifyfailure), msgfun = (vin,vout) -> "Could not align sizes of $(name(vin)) and $(name(vout))! Size cycle detected!")
+    nokstrat = FailAlignSizeWarn(msgfun = (vin,vout) -> "Could not align sizes of $(name(vin)) and $(name(vout))! Size cycle detected!")
     return CheckCreateEdgeNoSizeCycle(okstrat, nokstrat)
 end
 
