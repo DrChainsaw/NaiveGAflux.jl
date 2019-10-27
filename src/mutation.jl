@@ -307,6 +307,30 @@ end
 NaiveNASlib.prealignsizes(s::SuccessState, vin, vout, will_rm) = s.success = false
 NaiveNASlib.postalignsizes(s::SuccessState, vin, vout) = s.success = false
 
+using LightGraphs
+struct CheckCreateEdgeNoSizeCycle <: AbstractAlignSizeStrategy
+    ifok
+    ifnok
+end
+CheckCreateEdgeNoSizeCycle(;ifok=IncreaseSmaller(), ifnok=FailAlignSizeWarn(msgfun = (vin,vout) -> "Can not add edge between $(vin) and $(vout)! Size cycle detected!")) = CheckCreateEdgeNoSizeCycle(ifok, ifnok)
+function NaiveNASlib.prealignsizes(s::CheckCreateEdgeNoSizeCycle, vin, vout, will_rm)
+    sg = NaiveNASlib.ΔnoutSizeGraph(vin)
+    if vout in keys(sg.metaindex[:vertex])
+        add_edge!(sg, sg[vin, :vertex], sg[vout, :vertex])
+        println("check size cycle pre ")
+        is_cyclic(ΔnoutSizeGraph(vin)) && return NaiveNASlib.prealignsizes(CheckAligned(s.ifnok), vin, vout, will_rm)
+        println("\t-success!")
+    end
+    return NaiveNASlib.prealignsizes(s.ifok, vin, vout, will_rm)
+end
+function NaiveNASlib.postalignsizes(s::CheckCreateEdgeNoSizeCycle, vin, vout)
+    sg = NaiveNASlib.ΔnoutSizeGraph(vin)
+    println("check size cycle post")
+    is_cyclic(ΔnoutSizeGraph(vin)) && return NaiveNASlib.postalignsizes(s.ifnok, vin, vout)
+    println("\t-success!")
+    return NaiveNASlib.postalignsizes(s.ifok, vin, vout)
+end
+
 struct RevertAfter <: AbstractAlignSizeStrategy
     s
 end
@@ -339,10 +363,11 @@ function try_add_edge(vi, vo, mergefun, rng=rng_default)
 
     # Need to add a vertex which can handle multiple inputs if vo is single input only
     # For cleaning up added vertex if the whole operation fails
+
+    printsizes("start", vi, vo)
+
     cleanup_failed = () -> nothing
     if singleinput(vo)
-        vi in inputs(vo) && return
-        #voi = rand(rng, inputs(vo))
         voi = inputs(vo)[1]
         if singleinput(voi)
             vm = mergefun(voi)
@@ -350,16 +375,19 @@ function try_add_edge(vi, vo, mergefun, rng=rng_default)
             insert!(voi, vv -> vm, vs -> [vo])
             cleanup_failed = () -> remove!(vm, RemoveStrategy(NoSizeChange()))
             vo = vm # vm is the one we shall add an edge to
+            @info "Create new vertex for merging $(name(vo))"
         else
             vo = voi
         end
     end
+    vi in inputs(vo) && return
+    @info "Create edge between $(name(vi)) and $(name(vo))"
 
+    printsizes("before edge", vi, vo)
     # Now, lets try to create the edge
     successstate = SuccessState()
-
     create_edge!(vi, vo, strategy = add_edge_strat(vo, successstate))
-
+    printsizes("after edge", vi, vo)
     if !successstate.success
         cleanup_failed()
         return
@@ -367,11 +395,14 @@ function try_add_edge(vi, vo, mergefun, rng=rng_default)
 
     success = false
     vs = all_in_Δsize_graph(vi, Output())
-    if validate_sizes(vo)
+    validate_sizes(vo) || error("Validation failed!!")
+    if validate_sizes(vo) || true
 
         # We need immediate feedback regarding whether it is possible to select outputs so we can clean up the edge in case of failure
         success, ins, outs = NaiveNASlib.solve_outputs_selection(OutSelect{Exact}(LogSelectionFallback("Reverting...", NoutRevert())), vs, default_neuronselect)
     end
+
+    printsizes("after sel", vi, vo)
 
     if success
         Δoutputs(ins, outs, vs)
@@ -384,30 +415,58 @@ function try_add_edge(vi, vo, mergefun, rng=rng_default)
         cleanup_failed()
         Δoutputs(NoutRevert(), vs, v -> ones(nout_org(v)))
     end
+    printsizes("done", vi, vo)
+    validate_sizes(vo) || error("Validation failed after!!")
 end
 # Need to override this one for strange types which e.g. layers which support exactly 2 inputs or something.
 singleinput(v) = length(inputs(v)) == 1
 
+function printsizes(pref, vi, vo)
+    println("$pref vi  nout=$(nout(vi)) nin=$(nin(vi)), nout_org=$(nout_org(vi)), nin_org=$(nin_org(vi))")
+    println("$pref vo  nout=$(nout(vo)) nin=$(nin(vo)), nout_org=$(nout_org(vo)), nin_org=$(nin_org(vo))")
+    println("$pref voi nout=$(nout.(inputs(vo))), nout_org=$(nout_org.(inputs(vo)))")
+end
+
 add_edge_strat(v::AbstractVertex, notifyfailure) = add_edge_strat(trait(v), notifyfailure)
 add_edge_strat(d::DecoratingTrait, notifyfailure) = add_edge_strat(base(d), notifyfailure)
-add_edge_strat(::SizeInvariant, notifyfailure) = IncreaseSmaller(DecreaseBigger(FailAlignSizeWarn(andthen=notifyfailure, msgfun = (vin,vout) -> "Could not align sizes of $(name(vin)) and $(name(vout))!")))
-add_edge_strat(::SizeStack, notifyfailure) = PostAlignJuMP(DefaultJuMPΔSizeStrategy(), FailAlignSizeWarn(andthen=RevertAfter(notifyfailure), msgfun = (vin,vout) -> "Could not align sizes of $(name(vin)) and $(name(vout))!"))
+function add_edge_strat(::SizeInvariant, notifyfailure)
+    okstrat = IncreaseSmaller(DecreaseBigger(AlignSizeBoth(FailAlignSizeWarn(andthen=notifyfailure, msgfun = (vin,vout) -> "Could not align sizes of $(name(vin)) and $(name(vout))!"))))
+    nokstrat = FailAlignSizeWarn(andthen=RevertAfter(notifyfailure), msgfun = (vin,vout) -> "Could not align sizes of $(name(vin)) and $(name(vout))! Size cycle detected!")
+    return CheckCreateEdgeNoSizeCycle(okstrat, nokstrat)
+end
+function add_edge_strat(::SizeStack, notifyfailure)
+    okstrat = PostAlignJuMP(DefaultJuMPΔSizeStrategy(), FailAlignSizeWarn(andthen=RevertAfter(notifyfailure), msgfun = (vin,vout) -> "Could not align sizes of $(name(vin)) and $(name(vout))!"))
+    nokstrat = FailAlignSizeWarn(andthen=RevertAfter(notifyfailure), msgfun = (vin,vout) -> "Could not align sizes of $(name(vin)) and $(name(vout))! Size cycle detected!")
+    return CheckCreateEdgeNoSizeCycle(okstrat, nokstrat)
+end
 
 validate_sizes(v) = validate_sizes(trait(v), v)
 validate_sizes(t::DecoratingTrait, v) = validate_sizes(base(t), v)
 validate_sizes(::SizeInvariant, v) = unique(nin(v)) == [nout(v)]
 validate_sizes(::SizeStack, v) = sum(nin(v)) == nout(v)
 
-import JuMP
-import JuMP: @constraint, @variable
-function NaiveNASlib.vertexconstraints!(v::AbstractVertex, s::AlignNinToNout, data)
-    NaiveNASlib.vertexconstraints!(v, s.vstrat, data)
-    for vo in filter(vo -> vo in keys(data.noutdict), outputs(v))
-        ninvar = @variable(data.model, integer=true)
-        @constraint(data.model, data.noutdict[v] == ninvar)
+import JuMP: @constraint
+function NaiveNASlib.vertexconstraints!(v::MutationVertex, s::NaiveNASlib.AlignNinToNoutVertices, data)
+    neededinds = filter(i -> i != nothing, indexin(keys(data.noutdict), inputs(s.vout)))
 
-        ninarr = get!(() -> Vector{JuMP.VariableRef}(undef, length(inputs(vo))), s.nindict, vo)
-        ninarr[inputs(vo) .== v] .= ninvar
+    println("needed inds: $neededinds")
+
+    # s.vout is added to s.vstrat.nindict in code below, so we assume this is the only reason why it is in the dict
+    hasadded = s.vout in keys(s.vstrat.nindict) && all(i -> isassigned(s.vstrat.nindict[s.vout], i), neededinds)
+    NaiveNASlib.vertexconstraints!(v, s.vstrat, data)
+    @show hasadded
+    if s.vout in keys(s.vstrat.nindict)
+        println("defined: $(map(i -> isassigned(s.vstrat.nindict[s.vout], i), neededinds))")
+    end
+
+    if !hasadded && s.vout in keys(s.vstrat.nindict) && all(i -> isassigned(s.vstrat.nindict[s.vout], i), neededinds)
+        display(name.(keys(data.noutdict)))
+        println("v: $(name(v)) s.vout: $(name(s.vout)) vars: $(s.vstrat.nindict[s.vout])")
+        display(name.(inputs(s.vout)))
+        println("defined: $(map(i -> isassigned(s.vstrat.nindict[s.vout], i), neededinds))")
+        @show isassigned(s.vstrat.nindict[s.vout], 1)
+        @show isassigned(s.vstrat.nindict[s.vout], 2)
+        @constraint(data.model, data.noutdict[s.vin] .== s.vstrat.nindict[s.vout][s.ininds])
     end
 end
 
