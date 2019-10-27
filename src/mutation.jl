@@ -319,6 +319,66 @@ function NaiveNASlib.postalignsizes(s::RevertAfter, vin, vout)
     NaiveNASlib.postalignsizes(FailAlignSizeRevert(), vin, vout)
 end
 
+"""
+    PostSelectOutputs <: AbstractAlignSizeStrategy
+    PostSelectOutputs(;select=OutSelectExact(),align=IncreaseSmaller(), valuefun=v -> ones(nout_org(v)))
+
+Post change alignment strategy which first aligns size using `align`, then select outputs (through `Δoutputs`) using `select` and `valuefun` if size alignment is successful.
+
+Motivation is basically convenience when creating new edges between vertices.
+"""
+struct PostSelectOutputs <: AbstractAlignSizeStrategy
+    selectstrategy::AbstractSelectionStrategy
+    alignstrategy::AbstractAlignSizeStrategy
+    valuefun::Function
+    fallback::AbstractAlignSizeStrategy
+end
+PostSelectOutputs(;select=OutSelectExact(),align=PostAlignJuMP(), valuefun=v -> ones(nout_org(v)), fallback=FailAlignSizeRevert()) = PostSelectOutputs(select, align, valuefun, fallback)
+
+NaiveNASlib.prealignsizes(s::PostSelectOutputs, vin, vout, will_rm) = NaiveNASlib.prealignsizes(s.alignstrategy, vin, vout, will_rm)
+function NaiveNASlib.postalignsizes(s::PostSelectOutputs, vin, vout)
+    if NaiveNASlib.postalignsizes(s.alignstrategy, vin, vout)
+        vin_all = nout(vin) == nout_org(vin) ? AbstractVertex[] : all_in_Δsize_graph(vin, Output())
+        vout_all = nin(vout) == nin_org(vin) ? AbstractVertex[] : all_in_Δsize_graph(vout, Input())
+
+        verts = union(vin_all, vout_all)
+        isempty(verts) && return true
+        success = Δoutputs(s.selectstrategy, verts, s.valuefun)
+        if !success
+            printsizes("Fallback1", vin, vout)
+            ret = NaiveNASlib.postalignsizes(s.fallback, vin, vout)
+            printsizes("Fallback2", vin, vout)
+            # Something is off here... Previous operation seems to mess up the sizes again
+            Δoutputs(NoutRevert(), verts, v -> ones(nout_org(v)))
+            printsizes("Fallback3", vin, vout)
+            return ret
+        end
+        return success
+    end
+    return false
+end
+
+"""
+    PostApplyMutation <: AbstractAlignSizeStrategy
+    PostApplyMutation()
+    PostApplyMutation(strategy::AbstractAlignSizeStrategy)
+
+Post change alignment strategy which first aligns size using `strategy`, then invoke `apply_mutation` if size alignment is successful.
+
+Motivation is basically convenience when creating new edges between vertices.
+"""
+struct PostApplyMutation <: AbstractAlignSizeStrategy
+    strategy::AbstractAlignSizeStrategy
+end
+PostApplyMutation() = PostApplyMutation(PostSelectOutputs())
+NaiveNASlib.prealignsizes(s::PostApplyMutation, vin, vout, will_rm) = NaiveNASlib.prealignsizes(s.strategy, vin, vout, will_rm)
+function NaiveNASlib.postalignsizes(s::PostApplyMutation, vin, vout)
+    if NaiveNASlib.postalignsizes(s.strategy, vin, vout)
+        apply_mutation.(all_in_graph(vin))
+        return true
+    end
+    return false
+end
 
 function (m::AddEdgeMutation)(vi::AbstractVertex)
     # All vertices for which it is allowed to add vi as an input
@@ -345,16 +405,20 @@ function try_add_edge(vi, vo, mergefun, rng=rng_default)
     cleanup_failed = () -> nothing
     if singleinput(vo)
         voi = inputs(vo)[1]
-        if singleinput(voi)
+        #if singleinput(voi)
             vm = mergefun(voi)
             # Insert vm between voi and vo, i.e voi -> vo turns into voi -> vm -> vo
             insert!(voi, vv -> vm, vs -> [vo])
-            cleanup_failed = () -> remove!(vm, RemoveStrategy(NoSizeChange()))
+            cleanup_failed = function()
+                length(inputs(vm)) > 1 && return
+                remove!(vm, RemoveStrategy(NoSizeChange()))
+                #Δoutputs(NoutRevert(), Output(), vi, v -> ones(nout_org(v)))
+            end
             vo = vm # vm is the one we shall add an edge to
             @info "Create new vertex for merging $(name(vo))"
-        else
-            vo = voi
-        end
+        #else
+        #    vo = voi
+        #end
     end
     # This is mainly because FailAlignSizeRevert does not work when the same vertex is input more than once, but it also seems kinda redundant.
     vi in inputs(vo) && return
@@ -365,33 +429,7 @@ function try_add_edge(vi, vo, mergefun, rng=rng_default)
     successstate = SuccessState()
     create_edge!(vi, vo, strategy = add_edge_strat(vo, successstate))
     printsizes("after edge", vi, vo)
-    if !successstate.success
-        cleanup_failed()
-        return
-    end
-
-    success = false
-    vs = all_in_Δsize_graph(vi, Output())
-    validate_sizes(vo) || error("Validation failed!!")
-    if validate_sizes(vo) || true
-
-        # We need immediate feedback regarding whether it is possible to select outputs so we can clean up the edge in case of failure
-        success, ins, outs = NaiveNASlib.solve_outputs_selection(OutSelect{Exact}(LogSelectionFallback("Reverting...", NoutRevert())), vs, default_neuronselect)
-    end
-
-    printsizes("after sel", vi, vo)
-
-    if success
-        Δoutputs(ins, outs, vs)
-        apply_mutation.(vs)
-    else
-        # We now assume that the fallback has reverted the sizes
-        # To clean up, we just need to remove the edge without performing any size changes
-        remove_edge!(vi, vo, strategy=NoSizeChange())
-        # In case we added a vertex above we will now remove it
-        cleanup_failed()
-        Δoutputs(NoutRevert(), vs, v -> ones(nout_org(v)))
-    end
+    cleanup_failed()
 
     maximum(abs.(nout.(all_in_graph(vi)) .- nout_org.(all_in_graph(vi)))) > 0 && error("Size apply error!!!")
 
@@ -410,12 +448,24 @@ end
 add_edge_strat(v::AbstractVertex, notifyfailure) = add_edge_strat(trait(v), notifyfailure)
 add_edge_strat(d::DecoratingTrait, notifyfailure) = add_edge_strat(base(d), notifyfailure)
 function add_edge_strat(::SizeInvariant, notifyfailure)
-    okstrat = IncreaseSmaller(DecreaseBigger(AlignSizeBoth(FailAlignSizeWarn(andthen=notifyfailure, msgfun = (vin,vout) -> "Could not align sizes of $(name(vin)) and $(name(vout))!"))))
+    alignstrat = IncreaseSmaller(DecreaseBigger(AlignSizeBoth(FailAlignSizeWarn(andthen=notifyfailure, msgfun = (vin,vout) -> "Could not align sizes of $(name(vin)) and $(name(vout))!"))))
+
+    selectstrat = OutSelect{Exact}(LogSelectionFallback("Reverting...", NoutRevert()))
+
+    okstrat = ApplyMutation(SelectOutputs(selectstrat, alignstrat, default_neuronselect))
+
     nokstrat = FailAlignSizeWarn(andthen=RevertAfter(notifyfailure), msgfun = (vin,vout) -> "Could not align sizes of $(name(vin)) and $(name(vout))! Size cycle detected!")
-    return CheckCreateEdgeNoSizeCycle(okstrat, nokstrat)
+
+    return CheckAligned(CheckCreateEdgeNoSizeCycle(okstrat, nokstrat))
 end
 function add_edge_strat(::SizeStack, notifyfailure)
-    okstrat = PostAlignJuMP(DefaultJuMPΔSizeStrategy(), FailAlignSizeWarn(andthen=RevertAfter(notifyfailure), msgfun = (vin,vout) -> "Could not align sizes of $(name(vin)) and $(name(vout))!"))
+
+    alignstrat = PostAlignJuMP(DefaultJuMPΔSizeStrategy(), FailAlignSizeWarn(andthen=RevertAfter(notifyfailure), msgfun = (vin,vout) -> "Could not align sizes of $(name(vin)) and $(name(vout))!"))
+
+    selectstrat = OutSelect{Exact}(LogSelectionFallback("Reverting...", NoutRevert()))
+
+    okstrat = PostApplyMutation(PostSelectOutputs(selectstrat, alignstrat, default_neuronselect, RevertAfter(notifyfailure)))
+
     nokstrat = FailAlignSizeWarn(andthen=RevertAfter(notifyfailure), msgfun = (vin,vout) -> "Could not align sizes of $(name(vin)) and $(name(vout))! Size cycle detected!")
     return CheckCreateEdgeNoSizeCycle(okstrat, nokstrat)
 end
