@@ -332,7 +332,6 @@ function (m::AddEdgeMutation)(vi::AbstractVertex)
     vo = foldl(selfun, allverts, init=nothing)
     vo = vo == nothing ? rand(m.rng, allverts) : vo
 
-    println("\tvo=$(name(vo)) ins : $(name.(inputs(vo)))")
     try_add_edge(vi, vo, m.mergefun, m.rng)
 end
 
@@ -351,30 +350,18 @@ function try_add_edge(vi, vo, mergefun, rng=rng_default)
             insert!(voi, vv -> vm, vs -> [vo])
             cleanup_failed = () -> remove!(vm, RemoveStrategy(NoSizeChange()))
             vo = vm # vm is the one we shall add an edge to
-            println("\tchange to $(name(vm)), is in graph: $(vo in all_in_graph(vi))")
         else
             vo = voi
         end
     end
 
-    println("before vo nin=$(nin(vo)), nout=$(nout(vo)) nin_org=$(nin_org(vo)), nout_org=$(nout_org(vo))")
-    println("inputs   nout=$(nout.(inputs(vo))),       nout_org=$(nout_org.(inputs(vo)))")
-    println("before vi nin=$(nin(vi)), nout=$(nout(vi)) nin_org=$(nin_org(vi)), nout_org=$(nout_org(vi))")
     # Now, lets try to create the edge
     successstate = SuccessState()
 
     create_edge!(vi, vo, strategy = add_edge_strat(vo, successstate))
 
-    println("after edge vo nin=$(nin(vo)), nout=$(nout(vo)) nin_org=$(nin_org(vo)), nout_org=$(nout_org(vo))")
-    println("inputs       nout=$(nout.(inputs(vo))),       nout_org=$(nout_org.(inputs(vo)))")
-    println("after edge vi nin=$(nin(vi)), nout=$(nout(vi)) nin_org=$(nin_org(vi)), nout_org=$(nout_org(vi))")
-
     if !successstate.success
         cleanup_failed()
-        println("Done after fail to align")
-        println("fail1 vo nin=$(nin(vo)), nout=$(nout(vo)) nin_org=$(nin_org(vo)), nout_org=$(nout_org(vo))")
-        println("inputs  nout=$(nout.(inputs(vo))),       nout_org=$(nout_org.(inputs(vo)))")
-        println("fail1 vi nin=$(nin(vi)), nout=$(nout(vi)) nin_org=$(nin_org(vi)), nout_org=$(nout_org(vi))")
         return
     end
 
@@ -390,20 +377,12 @@ function try_add_edge(vi, vo, mergefun, rng=rng_default)
         Δoutputs(ins, outs, vs)
         apply_mutation.(vs)
     else
-
-        println("failure vo    nin=$(nin(vo)), nout=$(nout(vo)) nin_org=$(nin_org(vo)), nout_org=$(nout_org(vo))")
-        println("inputs       nout=$(nout.(inputs(vo))),       nout_org=$(nout_org.(inputs(vo)))")
-        println("failure vi nin=$(nin(vi)), nout=$(nout(vi)) nin_org=$(nin_org(vi)), nout_org=$(nout_org(vi))")
         # We now assume that the fallback has reverted the sizes
         # To clean up, we just need to remove the edge without performing any size changes
         remove_edge!(vi, vo, strategy=NoSizeChange())
         # In case we added a vertex above we will now remove it
         cleanup_failed()
         Δoutputs(NoutRevert(), vs, v -> ones(nout_org(v)))
-        println("is in graph: $(vo in all_in_graph(vi))")
-        println("after cleanup vo nin=$(nin(vo)), nout=$(nout(vo)) nin_org=$(nin_org(vo)), nout_org=$(nout_org(vo))")
-        println("inputs          nout=$(nout.(inputs(vo))),       nout_org=$(nout_org.(inputs(vo)))")
-        println("after cleanup vi nin=$(nin(vi)), nout=$(nout(vi)) nin_org=$(nin_org(vi)), nout_org=$(nout_org(vi))")
     end
 end
 # Need to override this one for strange types which e.g. layers which support exactly 2 inputs or something.
