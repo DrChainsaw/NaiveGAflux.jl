@@ -307,30 +307,6 @@ end
 NaiveNASlib.prealignsizes(s::SuccessState, vin, vout, will_rm) = s.success = false
 NaiveNASlib.postalignsizes(s::SuccessState, vin, vout) = s.success = false
 
-using LightGraphs
-struct CheckCreateEdgeNoSizeCycle <: AbstractAlignSizeStrategy
-    ifok
-    ifnok
-end
-CheckCreateEdgeNoSizeCycle(;ifok=IncreaseSmaller(), ifnok=FailAlignSizeWarn(msgfun = (vin,vout) -> "Can not add edge between $(vin) and $(vout)! Size cycle detected!")) = CheckCreateEdgeNoSizeCycle(ifok, ifnok)
-function NaiveNASlib.prealignsizes(s::CheckCreateEdgeNoSizeCycle, vin, vout, will_rm)
-    sg = NaiveNASlib.ΔnoutSizeGraph(vin)
-    if vout in keys(sg.metaindex[:vertex])
-        add_edge!(sg, sg[vin, :vertex], sg[vout, :vertex])
-        println("check size cycle pre ")
-        is_cyclic(ΔnoutSizeGraph(vin)) && return NaiveNASlib.prealignsizes(CheckAligned(s.ifnok), vin, vout, will_rm)
-        println("\t-success!")
-    end
-    return NaiveNASlib.prealignsizes(s.ifok, vin, vout, will_rm)
-end
-function NaiveNASlib.postalignsizes(s::CheckCreateEdgeNoSizeCycle, vin, vout)
-    sg = NaiveNASlib.ΔnoutSizeGraph(vin)
-    println("check size cycle post")
-    is_cyclic(ΔnoutSizeGraph(vin)) && return NaiveNASlib.postalignsizes(s.ifnok, vin, vout)
-    println("\t-success!")
-    return NaiveNASlib.postalignsizes(s.ifok, vin, vout)
-end
-
 struct RevertAfter <: AbstractAlignSizeStrategy
     s
 end
@@ -380,6 +356,7 @@ function try_add_edge(vi, vo, mergefun, rng=rng_default)
             vo = voi
         end
     end
+    # This is mainly because FailAlignSizeRevert does not work when the same vertex is input more than once, but it also seems kinda redundant.
     vi in inputs(vo) && return
     @info "Create edge between $(name(vi)) and $(name(vo))"
 
@@ -415,6 +392,9 @@ function try_add_edge(vi, vo, mergefun, rng=rng_default)
         cleanup_failed()
         Δoutputs(NoutRevert(), vs, v -> ones(nout_org(v)))
     end
+
+    maximum(abs.(nout.(all_in_graph(vi)) .- nout_org.(all_in_graph(vi)))) > 0 && error("Size apply error!!!")
+
     printsizes("done", vi, vo)
     validate_sizes(vo) || error("Validation failed after!!")
 end
@@ -444,31 +424,6 @@ validate_sizes(v) = validate_sizes(trait(v), v)
 validate_sizes(t::DecoratingTrait, v) = validate_sizes(base(t), v)
 validate_sizes(::SizeInvariant, v) = unique(nin(v)) == [nout(v)]
 validate_sizes(::SizeStack, v) = sum(nin(v)) == nout(v)
-
-import JuMP: @constraint
-function NaiveNASlib.vertexconstraints!(v::MutationVertex, s::NaiveNASlib.AlignNinToNoutVertices, data)
-    neededinds = filter(i -> i != nothing, indexin(keys(data.noutdict), inputs(s.vout)))
-
-    println("needed inds: $neededinds")
-
-    # s.vout is added to s.vstrat.nindict in code below, so we assume this is the only reason why it is in the dict
-    hasadded = s.vout in keys(s.vstrat.nindict) && all(i -> isassigned(s.vstrat.nindict[s.vout], i), neededinds)
-    NaiveNASlib.vertexconstraints!(v, s.vstrat, data)
-    @show hasadded
-    if s.vout in keys(s.vstrat.nindict)
-        println("defined: $(map(i -> isassigned(s.vstrat.nindict[s.vout], i), neededinds))")
-    end
-
-    if !hasadded && s.vout in keys(s.vstrat.nindict) && all(i -> isassigned(s.vstrat.nindict[s.vout], i), neededinds)
-        display(name.(keys(data.noutdict)))
-        println("v: $(name(v)) s.vout: $(name(s.vout)) vars: $(s.vstrat.nindict[s.vout])")
-        display(name.(inputs(s.vout)))
-        println("defined: $(map(i -> isassigned(s.vstrat.nindict[s.vout], i), neededinds))")
-        @show isassigned(s.vstrat.nindict[s.vout], 1)
-        @show isassigned(s.vstrat.nindict[s.vout], 2)
-        @constraint(data.model, data.noutdict[s.vin] .== s.vstrat.nindict[s.vout][s.ininds])
-    end
-end
 
 """
     KernelSizeMutation{N} <: AbstractMutation{AbstractVertex}
