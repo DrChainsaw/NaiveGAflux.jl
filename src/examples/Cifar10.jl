@@ -13,7 +13,7 @@ export PlotFitness, ScatterPop, ScatterOpt, MultiPlot, CbAll
 
 defaultdir(this="CIFAR10") = joinpath(NaiveGAflux.modeldir, this)
 
-function iterators((train_x,train_y)::Tuple; nepochs=200, batchsize=32, fitnessize=2048, nbatches_per_gen=400, seed=123)
+function iterators((train_x,train_y)::Tuple; nepochs=200, batchsize=64, fitnessize=2048, nbatches_per_gen=600, seed=123)
     batch(data) = ShuffleIterator(data, batchsize, MersenneTwister(seed))
     dataiter(x,y, wrap = FlipIterator ∘ ShiftIterator) = zip(wrap(batch(x)), Flux.onehotbatch(batch(y), 0:9))
 
@@ -62,6 +62,7 @@ function evolutionloop(population, evostrategy, trainingiter, cb)
             @info "\tFitness model $i: $(fitness(cand))"
         end
         cb(population)
+        gen == 3 && return population
         population = evolve!(evostrategy, population)
     end
     return population
@@ -136,7 +137,7 @@ function mutation()
     mkern = mpl(LogMutation(v -> "\tMutate kernel size of $(name(v))", mutate_kernel), 0.01)
     dkern = mpl(LogMutation(v -> "\tDecrease kernel size of $(name(v))", decrease_kernel), 0.005)
     mactf = mpl(LogMutation(v -> "\tMutate activation function of $(name(v))", mutate_act), 0.005)
-    madde = mph(LogMutation(v -> "\tAdd edge from $(name(v))", add_edge), 0.5)
+    madde = mph(LogMutation(v -> "\tAdd edge from $(name(v))", add_edge), 0.005)
 
     mremv = MutationFilter(g -> nv(g) > 5, mremv)
 
