@@ -278,7 +278,7 @@ end
 AddEdgeMutation(p, rng=rng_default) = AddEdgeMutation(Probability(p, rng), rng)
 AddEdgeMutation(p::Probability, rng=rng_default) = AddEdgeMutation(default_mergefun(rng), no_shapechange, p, rng)
 
-default_mergefun(rng=rng_default, pconc = 1; traitfun = MutationShield ∘ validated() ∘ default_logging(), layerfun = ActivationContribution) = function(vin)
+default_mergefun(rng=rng_default, pconc = 0.5; traitfun = MutationShield ∘ validated() ∘ default_logging(), layerfun = ActivationContribution) = function(vin)
     if rand(rng) > pconc
         return invariantvertex(layerfun(+), vin, traitdecoration=traitfun ∘ named(name(vin) * ".add"))
     end
@@ -320,21 +320,37 @@ NaiveNASlib.prealignsizes(s::PostSelectOutputs, vin, vout, will_rm) = NaiveNASli
 function NaiveNASlib.postalignsizes(s::PostSelectOutputs, vin, vout)
     if NaiveNASlib.postalignsizes(s.alignstrategy, vin, vout)
         vin_all = nout(vin) == nout_org(vin) ? AbstractVertex[] : all_in_Δsize_graph(vin, Output())
-        vout_all = nin(vout) == nin_org(vin) ? AbstractVertex[] : all_in_Δsize_graph(vout, Input())
+        vout_all = nin(vout) == nin_org(vout) ? AbstractVertex[] : all_in_Δsize_graph(vout, Input())
 
         verts = union(vin_all, vout_all)
+
         isempty(verts) && return true
         success = Δoutputs(s.selectstrategy, verts, s.valuefun)
+
         if !success
-            ret = NaiveNASlib.postalignsizes(s.fallback, vin, vout)
-            # TODO: FailAlignSizeRevert uses remove_edge! and this will change nout of vout with -nout of vin which is the right thing to do if one just wants to remove the edge when sizes are aligned to begin with.
-            Δoutputs(NoutRevert(), verts, v -> ones(nout_org(v)))
-            return ret
+            return NaiveNASlib.postalignsizes(s.fallback, vin, vout)
         end
         return success
     end
     return false
 end
+
+function NaiveNASlib.remove_edge!(from::AbstractVertex, to::AbstractVertex; nr = 1, strategy = NaiveNASlib.default_remove_edge_strat(to))
+
+    NaiveNASlib.prealignsizes(strategy, from, to, v -> false) || return
+
+    in_inds = findall(vx -> vx == from, inputs(to))[nr]
+    out_inds =findall(vx -> vx == to, outputs(from))[nr]
+    deleteat!(inputs(to), in_inds)
+    deleteat!(outputs(from), out_inds)
+
+    NaiveNASlib.add_output!(op(to), trait(to), -nin(to)[in_inds])
+    NaiveNASlib.rem_input!(op(to), in_inds...)
+
+    NaiveNASlib.postalignsizes(strategy, from, to)
+end
+NaiveNASlib.postalignsizes(s::AbstractAlignSizeStrategy, vin, vout) = true
+
 
 """
     PostApplyMutation <: AbstractAlignSizeStrategy
@@ -349,7 +365,9 @@ struct PostApplyMutation <: AbstractAlignSizeStrategy
     strategy::AbstractAlignSizeStrategy
 end
 PostApplyMutation() = PostApplyMutation(PostSelectOutputs())
-NaiveNASlib.prealignsizes(s::PostApplyMutation, vin, vout, will_rm) = NaiveNASlib.prealignsizes(s.strategy, vin, vout, will_rm)
+NaiveNASlib.prealignsizes(s::PostApplyMutation, vin, vout, will_rm) = begin
+    @show NaiveNASlib.prealignsizes(s.strategy, vin, vout, will_rm)
+end
 function NaiveNASlib.postalignsizes(s::PostApplyMutation, vin, vout)
     if NaiveNASlib.postalignsizes(s.strategy, vin, vout)
         apply_mutation.(all_in_graph(vin))
@@ -407,7 +425,8 @@ function try_add_edge(vi, vo, mergefun, rng=rng_default)
     printsizes("after edge", vi, vo)
     cleanup_failed()
 
-    maximum(abs.(nout.(all_in_graph(vi)) .- nout_org.(all_in_graph(vi)))) > 0 && error("Size apply error!!!")
+    any(vx -> nout(vx) != nout_org(vx), all_in_graph(vi)) && error("Size apply error nout!!!")
+    any(vx -> nin(vx) != nin_org(vx), all_in_graph(vi)) && error("Size apply error nin!!!")
 
     printsizes("done", vi, vo)
     validate_sizes(vo) || error("Validation failed after!!")
@@ -429,11 +448,12 @@ function add_edge_strat(::SizeInvariant)
 
     selectstrat = OutSelect{Exact}(LogSelectionFallback("Reverting...", NoutRevert()))
 
-    okstrat = ApplyMutation(SelectOutputs(selectstrat, alignstrat, default_neuronselect))
+    okstrat = PostApplyMutation(SelectOutputs(selectstrat, alignstrat, default_neuronselect))
 
-    nokstrat = FailAlignSizeWarn(msgfun = (vin,vout) -> "Could not align sizes of $(name(vin)) and $(name(vout))! Size cycle detected!")
+    # Tricky failure case: It is possible that CheckCreateEdgeNoSizeCycle does not detect any size cycle until after the edge has been created. When this happens, we run PostSelectOutputs to revert all size changes before removing the edge. The latter might not be strictly needed (I really don't know actually), but it does stay true to the contract of "no size change if operation does not succeed".
+    nokstrat = FailAlignSizeWarn(msgfun = (vin,vout) -> "Could not align sizes of $(name(vin)) and $(name(vout))! Size cycle detected! Reverting...", andthen=PostSelectOutputs(select=NoutRevert(), align=NoSizeChange(), fallback=FailAlignSizeRevert())) # NoutRevert returns success=false, meaning that fallback will be invoked
 
-    return CheckAligned(CheckCreateEdgeNoSizeCycle(okstrat, nokstrat))
+    return CheckCreateEdgeNoSizeCycle(okstrat, nokstrat)
 end
 function add_edge_strat(::SizeStack)
 
@@ -449,8 +469,9 @@ end
 
 validate_sizes(v) = validate_sizes(trait(v), v)
 validate_sizes(t::DecoratingTrait, v) = validate_sizes(base(t), v)
-validate_sizes(::SizeInvariant, v) = unique(nin(v)) == [nout(v)]
-validate_sizes(::SizeStack, v) = sum(nin(v)) == nout(v)
+validate_sizes(::SizeInvariant, v) = unique(nin(v)) == [nout(v)] && unique(nin_org(v)) == [nout_org(v)]
+validate_sizes(::SizeStack, v) = sum(nin(v)) == nout(v) && sum(nin_org(v)) == nout_org(v)
+validate_sizes(::MutationTrait, v) = true
 
 """
     KernelSizeMutation{N} <: AbstractMutation{AbstractVertex}
