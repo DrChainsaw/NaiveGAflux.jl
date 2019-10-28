@@ -319,9 +319,6 @@ function try_add_edge(vi, vo, mergefun, rng=rng_default)
 
     # Need to add a vertex which can handle multiple inputs if vo is single input only
     # For cleaning up added vertex if the whole operation fails
-
-    printsizes("start", vi, vo)
-
     cleanup_failed = () -> nothing
     if singleinput(vo)
         voi = inputs(vo)[1]
@@ -334,36 +331,20 @@ function try_add_edge(vi, vo, mergefun, rng=rng_default)
                 remove!(vm, RemoveStrategy(NoSizeChange()))
             end
             vo = vm # vm is the one we shall add an edge to
-            @info "Create new vertex for merging $(name(vo))"
+            @debug "Create new vertex for merging $(name(vo))"
         else
             vo = voi
         end
     end
     # This is mainly because FailAlignSizeRevert does not work when the same vertex is input more than once, but it also seems kinda redundant.
     vi in inputs(vo) && return
-    @info "Create edge between $(name(vi)) and $(name(vo))"
-
-    printsizes("before edge", vi, vo)
+    @debug "Create edge between $(name(vi)) and $(name(vo))"
 
     create_edge!(vi, vo, strategy = add_edge_strat(vo))
-    printsizes("after edge", vi, vo)
     cleanup_failed()
-
-    any(vx -> nout(vx) != nout_org(vx), all_in_graph(vi)) && error("Size apply error nout!!!")
-    any(vx -> nin(vx) != nin_org(vx), all_in_graph(vi)) && error("Size apply error nin!!!")
-
-    printsizes("done", vi, vo)
-    validate_sizes(vo) || error("Validation failed after!!")
 end
 # Need to override this one for strange types which e.g. layers which support exactly 2 inputs or something.
 singleinput(v) = length(inputs(v)) == 1
-
-function printsizes(pref, vi, vo)
-    println("$pref vi  nout=$(nout(vi)) nin=$(nin(vi)), nout_org=$(nout_org(vi)), nin_org=$(nin_org(vi))")
-    println("$pref vo  nout=$(nout(vo)) nin=$(nin(vo)), nout_org=$(nout_org(vo)), nin_org=$(nin_org(vo))")
-    println("$pref voi nout=$(nout.(inputs(vo))), nout_org=$(nout_org.(inputs(vo)))")
-    println("$pref op  $(op(vo).outΔ), $(op(vo).inΔ)")
-end
 
 add_edge_strat(v::AbstractVertex) = add_edge_strat(trait(v))
 add_edge_strat(d::DecoratingTrait) = add_edge_strat(base(d))
@@ -387,15 +368,9 @@ function add_edge_strat(::SizeStack)
 
     okstrat = PostApplyMutation(PostSelectOutputs(selectstrat, alignstrat, default_neuronselect, FailAlignSizeRevert()))
 
-    nokstrat = FailAlignSizeWarn(msgfun = (vin,vout) -> "Could not align sizes of $(name(vin)) and $(name(vout))! Size cycle detected!")
+    nokstrat = FailAlignSizeWarn(msgfun = (vin,vout) -> "Could not align sizes of $(name(vin)) and $(name(vout))! Size cycle detected! Reverting...")
     return CheckCreateEdgeNoSizeCycle(okstrat, nokstrat)
 end
-
-validate_sizes(v) = validate_sizes(trait(v), v)
-validate_sizes(t::DecoratingTrait, v) = validate_sizes(base(t), v)
-validate_sizes(::SizeInvariant, v) = unique(nin(v)) == [nout(v)] && unique(nin_org(v)) == [nout_org(v)]
-validate_sizes(::SizeStack, v) = sum(nin(v)) == nout(v) && sum(nin_org(v)) == nout_org(v)
-validate_sizes(::MutationTrait, v) = true
 
 """
     KernelSizeMutation{N} <: AbstractMutation{AbstractVertex}
