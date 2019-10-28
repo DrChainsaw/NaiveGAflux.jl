@@ -13,7 +13,7 @@ export PlotFitness, ScatterPop, ScatterOpt, MultiPlot, CbAll
 
 defaultdir(this="CIFAR10") = joinpath(NaiveGAflux.modeldir, this)
 
-function iterators((train_x,train_y)::Tuple; nepochs=200, batchsize=32, fitnessize=2048, nbatches_per_gen=600, seed=123)
+function iterators((train_x,train_y)::Tuple; nepochs=200, batchsize=64, fitnessize=2048, nbatches_per_gen=300, seed=123)
     batch(data) = ShuffleIterator(data, batchsize, MersenneTwister(seed))
     dataiter(x,y, wrap = FlipIterator ∘ ShiftIterator) = zip(wrap(batch(x)), Flux.onehotbatch(batch(y), 0:9))
 
@@ -137,7 +137,7 @@ function mutation()
     mkern = mpl(LogMutation(v -> "\tMutate kernel size of $(name(v))", mutate_kernel), 0.01)
     dkern = mpl(LogMutation(v -> "\tDecrease kernel size of $(name(v))", decrease_kernel), 0.005)
     mactf = mpl(LogMutation(v -> "\tMutate activation function of $(name(v))", mutate_act), 0.005)
-    madde = mph(LogMutation(v -> "\tAdd edge from $(name(v))", add_edge), 0.5)
+    madde = mph(LogMutation(v -> "\tAdd edge from $(name(v))", add_edge), 0.02)
 
     mremv = MutationFilter(g -> nv(g) > 5, mremv)
 
@@ -342,6 +342,8 @@ function plotfitness(p::PlotFitness, population)
     push!(p.plt, length(p.best), [best, avg])
 end
 
+plotgen(p::PlotFitness, gen=length(p.best)) = p.plt # Plot already loaded with data...
+
 function (p::PlotFitness)(population)
     plotfitness(p, population)
     mkpath(p.basedir)
@@ -382,6 +384,15 @@ function plotfitness(p::ScatterPop, population)
     nverts = nv.(NaiveGAflux.graph.(population))
     npars = nparams.(population)
     push!(p.data, hcat(nverts, fits, npars))
+    plotgen(p)
+end
+
+function plotgen(p::ScatterPop, gen=length(p.data))
+    gen == 1 && return p.plotfun()
+    data = p.data[gen]
+    nverts = data[:,1]
+    fits = data[:,2]
+    npars = data[:,3]
     return p.plotfun(nverts, fits, zcolor=npars/1e6, m=(:heat, 0.8), xlabel="Number of vertices", ylabel="Fitness", colorbar_title="Number of parameters (1e6)", label="")
 end
 
@@ -430,6 +441,15 @@ function plotfitness(p::ScatterOpt, population)
     ots = map(o -> typeof(o.os[]), opts)
 
     push!(p.data, hcat(fits, lrs, ots))
+    plotgen(p)
+end
+
+function plotgen(p::ScatterOpt, gen = length(p.data))
+    gen == 1 && return p.plotfun()
+    data = p.data[gen]
+    fits = data[:,1]
+    lrs = data[:,2]
+    ots = data[:,3]
 
     uots = unique(ots)
     inds = map(o -> o .== ots, uots)
@@ -465,9 +485,18 @@ struct MultiPlot
     plotfun
     plts
 end
-MultiPlot(plotfun, plts...) = MultiPlot(plotfun, plts)
+function MultiPlot(plotfun, plts...;init=true)
+    mp = MultiPlot(plotfun, plts)
+    if init
+        plotgen(mp)
+    end
+    return mp
+end
 
 (p::MultiPlot)(population) = p.plotfun(map(pp -> pp(population), p.plts)...)
+
+plotgen(p::MultiPlot) = p.plotfun(map(pp -> plotgen(pp), p.plts)...)
+plotgen(p::MultiPlot, gen) = p.plotfun(map(pp -> plotgen(pp, gen), p.plts)...)
 
 struct CbAll
     cbs
