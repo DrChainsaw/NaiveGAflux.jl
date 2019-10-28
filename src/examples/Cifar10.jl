@@ -137,7 +137,7 @@ function mutation()
     mkern = mpl(LogMutation(v -> "\tMutate kernel size of $(name(v))", mutate_kernel), 0.01)
     dkern = mpl(LogMutation(v -> "\tDecrease kernel size of $(name(v))", decrease_kernel), 0.005)
     mactf = mpl(LogMutation(v -> "\tMutate activation function of $(name(v))", mutate_act), 0.005)
-    madde = mph(LogMutation(v -> "\tAdd edge from $(name(v))", add_edge), 0.02)
+    madde = mph(LogMutation(v -> "\tAdd edge from $(name(v))", add_edge), 0.005)
 
     mremv = MutationFilter(g -> nv(g) > 5, mremv)
 
@@ -171,8 +171,7 @@ function add_vertex_mutation(acts)
 
     function outselect(vs)
         rss = randsubseq(vs, 0.5)
-        isempty(rss) && return [rand(vs)]
-        return rss
+        return isempty(rss) ? [rand(vs)] : rss
     end
 
     wrapitup(as) = AddVertexMutation(rep_fork_res(as, 1,loglevel=Logging.Info), outselect)
