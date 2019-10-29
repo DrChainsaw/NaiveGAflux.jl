@@ -77,7 +77,12 @@ function evolutionstrategy(popsize, nelites=2)
 
     combine = CombinedEvolution(elite, evolve)
     reset = ResetAfterEvolution(combine)
-    return AfterEvolution(reset, rename_models)
+    return AfterEvolution(reset, rename_models ∘ clear_redundant_vertices)
+end
+
+function clear_redundant_vertices(pop)
+    foreach(cand -> check_apply(NaiveGAflux.graph(cand)), pop)
+    return pop
 end
 
 function rename_models(pop)

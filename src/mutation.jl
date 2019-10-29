@@ -282,7 +282,7 @@ end
 AddEdgeMutation(p; rng=rng_default, mergefun=default_mergefun(rng=rng), filtfun=no_shapechange, valuefun=default_neuronselect) = AddEdgeMutation(Probability(p, rng), rng=rng, mergefun=mergefun, filtfun=filtfun, valuefun=valuefun)
 AddEdgeMutation(p::Probability; rng=rng_default, mergefun=default_mergefun(rng=rng), filtfun=no_shapechange, valuefun=default_neuronselect) = AddEdgeMutation(mergefun, filtfun, valuefun, p, rng)
 
-default_mergefun(pconc = 0.5; rng=rng_default, traitfun = MutationShield ∘ validated() ∘ default_logging(), layerfun = ActivationContribution) = function(vin)
+default_mergefun(pconc = 0.5; rng=rng_default, traitfun = MutationShield ∘ RemoveIfSingleInput ∘ validated() ∘ default_logging(), layerfun = ActivationContribution) = function(vin)
     if rand(rng) > pconc
         return invariantvertex(layerfun(+), vin, traitdecoration=traitfun ∘ named(name(vin) * ".add"))
     end
@@ -344,15 +344,15 @@ function try_add_edge(vi, vo, mergefun, rng=rng_default, valuefun=default_neuron
     vi in inputs(vo) && return
     @debug "Create edge between $(name(vi)) and $(name(vo))"
 
-    create_edge!(vi, vo, strategy = modify_edge_strat(vo, valuefun))
+    create_edge!(vi, vo, strategy = create_edge_strat(vo, valuefun))
     cleanup_failed()
 end
 # Need to override this one for strange types which e.g. layers which support exactly 2 inputs or something.
 singleinput(v) = length(inputs(v)) == 1
 
-modify_edge_strat(v::AbstractVertex, valuefun) = modify_edge_strat(trait(v), valuefun)
-modify_edge_strat(d::DecoratingTrait, valuefun) = modify_edge_strat(base(d), valuefun)
-function modify_edge_strat(::SizeInvariant, valuefun)
+create_edge_strat(v::AbstractVertex, valuefun) = create_edge_strat(trait(v), valuefun)
+create_edge_strat(d::DecoratingTrait, valuefun) = create_edge_strat(base(d), valuefun)
+function create_edge_strat(::SizeInvariant, valuefun)
     alignstrat = IncreaseSmaller(DecreaseBigger(AlignSizeBoth(FailAlignSizeWarn(msgfun = (vin,vout) -> "Could not align sizes of $(name(vin)) and $(name(vout))!"))))
 
     selectstrat = OutSelect{Exact}(LogSelectionFallback("Reverting...", NoutRevert()))
@@ -364,7 +364,7 @@ function modify_edge_strat(::SizeInvariant, valuefun)
 
     return CheckCreateEdgeNoSizeCycle(okstrat, nokstrat)
 end
-function modify_edge_strat(::SizeStack, valuefun)
+function create_edge_strat(::SizeStack, valuefun)
 
     alignstrat = PostAlignJuMP(DefaultJuMPΔSizeStrategy(), fallback=FailAlignSizeWarn(msgfun = (vin,vout) -> "Could not align sizes of $(name(vin)) and $(name(vout))!"))
 
@@ -407,8 +407,15 @@ function (m::RemoveEdgeMutation)(vi::AbstractVertex)
     nr = rand(m.rng, 1:sum(inputs(vo) .== vi))
     @info "Remove edge $nr between $(name(vi)) and $(name(vo))"
 
-    remove_edge!(vi, vo, nr=nr, strategy=modify_edge_strat(vo, m.valuefun))
+    remove_edge!(vi, vo, nr=nr, strategy=remove_edge_strat(vo, m.valuefun))
+    any(v -> nin(v) != nin_org(v), all_in_graph(vi)) && error("size fail nin!!")
+    any(v -> nout(v) != nout_org(v), all_in_graph(vi)) && error("size fail nin!!")
 end
+
+remove_edge_strat(v::AbstractVertex, valuefun) = remove_edge_strat(trait(v), valuefun)
+remove_edge_strat(d::DecoratingTrait, valuefun) = remove_edge_strat(base(d), valuefun)
+remove_edge_strat(::SizeInvariant, valuefun) = NoSizeChange()
+remove_edge_strat(t::SizeStack, valuefun) = create_edge_strat(t, valuefun)
 
 """
     KernelSizeMutation{N} <: AbstractMutation{AbstractVertex}
