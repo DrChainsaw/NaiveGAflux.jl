@@ -139,7 +139,7 @@ function mutation()
     dkern = mpl(LogMutation(v -> "\tDecrease kernel size of $(name(v))", decrease_kernel), 0.005)
     mactf = mpl(LogMutation(v -> "\tMutate activation function of $(name(v))", mutate_act), 0.005)
     madde = mph(LogMutation(v -> "\tAdd edge from $(name(v))", add_edge), 0.01)
-    mreme = mpn(LogMutation(v -> "\tRemove edge from $(name(v))", rem_edge), 0.01)
+    mreme = mpn(MutationFilter(v -> length(outputs(v)) > 1, LogMutation(v -> "\tRemove edge from $(name(v))", rem_edge)), 0.01)
 
     mremv = MutationFilter(g -> nv(g) > 5, mremv)
 

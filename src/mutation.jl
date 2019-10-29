@@ -269,6 +269,8 @@ Higher values of `p` will give more preference to earlier vertices of `vs`.
 If `vo` is not capable of having multiple inputs (determined by `singleinput(v) == true`), `vm = mergefun(voi)` where `voi` is a randomly selected input to `vo` will be used instead of `vo`.
 
 When selecting neurons/outputs after any eventual size change the values `valuefun(v)` will be used to determine the value of each output in vertex `v`. Note that `length(valuefun(v)) == nout_org(v)` must hold.
+
+Note: High likelyhood of large accuracy degradation after applying this mutation.
 """
 struct AddEdgeMutation{F1, F2, F3, R} <: AbstractMutation{AbstractVertex}
     mergefun::F1
@@ -342,15 +344,15 @@ function try_add_edge(vi, vo, mergefun, rng=rng_default, valuefun=default_neuron
     vi in inputs(vo) && return
     @debug "Create edge between $(name(vi)) and $(name(vo))"
 
-    create_edge!(vi, vo, strategy = add_edge_strat(vo, valuefun))
+    create_edge!(vi, vo, strategy = modify_edge_strat(vo, valuefun))
     cleanup_failed()
 end
 # Need to override this one for strange types which e.g. layers which support exactly 2 inputs or something.
 singleinput(v) = length(inputs(v)) == 1
 
-add_edge_strat(v::AbstractVertex, valuefun) = add_edge_strat(trait(v), valuefun)
-add_edge_strat(d::DecoratingTrait, valuefun) = add_edge_strat(base(d), valuefun)
-function add_edge_strat(::SizeInvariant, valuefun)
+modify_edge_strat(v::AbstractVertex, valuefun) = modify_edge_strat(trait(v), valuefun)
+modify_edge_strat(d::DecoratingTrait, valuefun) = modify_edge_strat(base(d), valuefun)
+function modify_edge_strat(::SizeInvariant, valuefun)
     alignstrat = IncreaseSmaller(DecreaseBigger(AlignSizeBoth(FailAlignSizeWarn(msgfun = (vin,vout) -> "Could not align sizes of $(name(vin)) and $(name(vout))!"))))
 
     selectstrat = OutSelect{Exact}(LogSelectionFallback("Reverting...", NoutRevert()))
@@ -362,7 +364,7 @@ function add_edge_strat(::SizeInvariant, valuefun)
 
     return CheckCreateEdgeNoSizeCycle(okstrat, nokstrat)
 end
-function add_edge_strat(::SizeStack, valuefun)
+function modify_edge_strat(::SizeStack, valuefun)
 
     alignstrat = PostAlignJuMP(DefaultJuMPΔSizeStrategy(), fallback=FailAlignSizeWarn(msgfun = (vin,vout) -> "Could not align sizes of $(name(vin)) and $(name(vout))!"))
 
@@ -382,9 +384,11 @@ Remove an edge from a vertex `vi` to another vertex `vo` randomly selected from 
 
 Vertex `vi` must have more than one output and vertex `vo` must have more than one output for the edge to be removed. Otherwise no change is made.
 
-If there are multiple edges between `vi` and `vo` one randomly chosen edge will be removed.   
+If there are multiple edges between `vi` and `vo` one randomly chosen edge will be removed.
 
 When selecting neurons/outputs after any eventual size change the values `valuefun(v)` will be used to determine the value of each output in vertex `v`. Note that `length(valuefun(v)) == nout_org(v)` must hold.
+
+Note: High likelyhood of large accuracy degradation after applying this mutation.
 """
 struct RemoveEdgeMutation{F, R} <: AbstractMutation{AbstractVertex}
     valuefun::F
@@ -395,15 +399,15 @@ RemoveEdgeMutation(;valuefun=default_neuronselect, rng=rng_default) = RemoveEdge
 function (m::RemoveEdgeMutation)(vi::AbstractVertex)
     length(outputs(vi)) < 2 && return
 
-    allverts = filter(outputs(vi)) do vo
-        allow_mutation(vo) && length(inputs(vo)) > 1
-    end
+    allverts = filter(vo -> length(inputs(vo)) > 1, outputs(vi))
 
     isempty(allverts) && return
 
     vo = rand(m.rng, allverts)
-    nr = rand(m.rng, findall(voi -> voi == vi, inputs(vo)))
-    remove_edge!(vi, vo, nr=nr, strategy=add_edge_strat(vo, m.valuefun))
+    nr = rand(m.rng, 1:sum(inputs(vo) .== vi))
+    @info "Remove edge $nr between $(name(vi)) and $(name(vo))"
+
+    remove_edge!(vi, vo, nr=nr, strategy=modify_edge_strat(vo, m.valuefun))
 end
 
 """
