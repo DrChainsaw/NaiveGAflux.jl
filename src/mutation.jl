@@ -258,16 +258,17 @@ RemoveVertexMutation() = RemoveVertexMutation(RemoveStrategy(CheckAligned(CheckN
 (m::RemoveVertexMutation)(v::AbstractVertex) = remove!(v, m.s)
 
 """
-    AddEdgeMutation{F1, F2, R} <: AbstractMutation{AbstractVertex}
-    AddEdgeMutation(p, rng=rng_default)
-    AddEdgeMutation(p::Probability, rng=rng_default)
-    AddEdgeMutation(mergefun::F, p::Probability, rng::R)
+    AddEdgeMutation <: AbstractMutation{AbstractVertex}
+    AddEdgeMutation(p; rng=rng_default, mergefun=default_mergefun(rng=rng), filtfun=no_shapechange, valuefun=default_neuronselect)
+    AddEdgeMutation(p::Probability; rng=rng_default, mergefun=default_mergefun(rng=rng), filtfun=no_shapechange, valuefun=default_neuronselect)
 
 Add an edge from a vertex `vi` to another vertex `vo` randomly selected from `vs = filtfun(vi)`.
 
 Higher values of `p` will give more preference to earlier vertices of `vs`.
 
 If `vo` is not capable of having multiple inputs (determined by `singleinput(v) == true`), `vm = mergefun(voi)` where `voi` is a randomly selected input to `vo` will be used instead of `vo`.
+
+When selecting neurons/outputs after any eventual size change the values `valuefun(v)` will be used to determine the value of each output in vertex `v`. Note that `length(valuefun(v)) == nout_org(v)` must hold.
 """
 struct AddEdgeMutation{F1, F2, F3, R} <: AbstractMutation{AbstractVertex}
     mergefun::F1
@@ -371,6 +372,38 @@ function add_edge_strat(::SizeStack, valuefun)
 
     nokstrat = FailAlignSizeWarn(msgfun = (vin,vout) -> "Could not align sizes of $(name(vin)) and $(name(vout))! Size cycle detected! Reverting...")
     return CheckCreateEdgeNoSizeCycle(okstrat, nokstrat)
+end
+
+"""
+    RemoveEdgeMutation <: AbstractMutation{AbstractVertex}
+    RemoveEdgeMutation(;valuefun=default_neuronselect, rng=rng_default)
+
+Remove an edge from a vertex `vi` to another vertex `vo` randomly selected from `outputs(vi)`.
+
+Vertex `vi` must have more than one output and vertex `vo` must have more than one output for the edge to be removed. Otherwise no change is made.
+
+If there are multiple edges between `vi` and `vo` one randomly chosen edge will be removed.   
+
+When selecting neurons/outputs after any eventual size change the values `valuefun(v)` will be used to determine the value of each output in vertex `v`. Note that `length(valuefun(v)) == nout_org(v)` must hold.
+"""
+struct RemoveEdgeMutation{F, R} <: AbstractMutation{AbstractVertex}
+    valuefun::F
+    rng::R
+end
+RemoveEdgeMutation(;valuefun=default_neuronselect, rng=rng_default) = RemoveEdgeMutation(valuefun, rng)
+
+function (m::RemoveEdgeMutation)(vi::AbstractVertex)
+    length(outputs(vi)) < 2 && return
+
+    allverts = filter(outputs(vi)) do vo
+        allow_mutation(vo) && length(inputs(vo)) > 1
+    end
+
+    isempty(allverts) && return
+
+    vo = rand(m.rng, allverts)
+    nr = rand(m.rng, findall(voi -> voi == vi, inputs(vo)))
+    remove_edge!(vi, vo, nr=nr, strategy=add_edge_strat(vo, m.valuefun))
 end
 
 """

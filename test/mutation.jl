@@ -554,7 +554,59 @@
             @test_logs (:warn, "Selection for vertex v1 failed! Reverting...") m(v1)
             @test Set(all_in_graph(v0)) == Set([v0, v1, v2, v3, v4])
         end
+    end
 
+    @testset "RemoveEdgeMutation" begin
+        dl(name, in, outsize) = mutable(name, Dense(nout(in), outsize), in)
+
+        @testset "RemoveEdgeMutation SizeStack" begin
+            m = RemoveEdgeMutation(valuefun=v->1:nout_org(v))
+
+            v0 = inputvertex("in", 3, FluxDense())
+            v1 = dl("v1", v0, 4)
+            v2 = dl("v2", v1, 5)
+
+            # No action
+            m(v1)
+            @test outputs(v1) == [v2]
+
+            v3 = dl("v3", v0, 6)
+            v4 = concat("v4", v1, v3)
+
+            @test outputs(v1) == [v2, v4]
+            @test inputs(v4) == [v1, v3]
+            # v4 fulfils the criteria for removal
+            m(v1)
+            @test outputs(v1) == [v2]
+            @test inputs(v4) == [v3]
+
+            g = CompGraph(v0, v4)
+            indata = ones(Float32, nout(v0), 3)
+
+            @test size(g(indata)) == (nout(v4), 3)
+        end
+
+        @testset "RemoveEdgeMutation SizeInvariant" begin
+            m = RemoveEdgeMutation(valuefun=v->1:nout_org(v))
+
+            v0 = inputvertex("in", 3, FluxDense())
+            v1 = dl("v1", v0, nout(v0))
+            v2 = dl("v2", v1, 5)
+            v3 = dl("v3", v0, nout(v0))
+            v4 = "v4" >> v1 + v3
+
+            @test outputs(v1) == [v2, v4]
+            @test inputs(v4) == [v1, v3]
+            # v4 fulfils the criteria for removal
+            m(v1)
+            @test outputs(v1) == [v2]
+            @test inputs(v4) == [v3]
+
+            g = CompGraph(v0, v4)
+            indata = ones(Float32, nout(v0), 3)
+
+            @test size(g(indata)) == (nout(v4), 3)
+        end
     end
 
 end
