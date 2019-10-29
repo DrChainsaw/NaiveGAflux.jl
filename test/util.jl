@@ -33,6 +33,12 @@ end
     @test allow_mutation(v2)
     @test !allow_mutation(v3)
     @test !allow_mutation(v4)
+
+    t = MutationShield(SizeAbsorb())
+    ct(::SizeAbsorb;cf) = SizeInvariant()
+    ct(x...;cf=ct) = clone(x...,cf=cf)
+    tn = ct(t)
+    @test base(tn) == SizeInvariant()
 end
 
 @testset "VertexSelection" begin
@@ -80,6 +86,14 @@ end
     check_apply(g)
 
     @test nv_pre == nv(g) + 3
+end
+
+@testset "Clone ApplyIf" begin
+    t = ApplyIf(x -> true, identity, SizeAbsorb())
+    ct(::SizeAbsorb;cf) = SizeInvariant()
+    ct(x...;cf=ct) = clone(x...,cf=cf)
+    tn = ct(t)
+    @test base(tn) == SizeInvariant()
 end
 
 @testset "PersistentArray" begin

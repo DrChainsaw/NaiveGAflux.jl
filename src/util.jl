@@ -100,6 +100,9 @@ check_apply(t::DecoratingTrait, v) = check_apply(base(t), v)
 check_apply(t::ApplyIf, v) = t.predicate(v) && t.apply(v)
 function check_apply(t, v) end
 
+NaiveNASlib.clone(t::ApplyIf;cf=clone) = ApplyIf(cf(t.predicate, cf=cf), cf(t.apply, cf=cf), cf(base(t), cf=cf))
+
+
 """
     PersistentArray{T, N} <: AbstractArray{T, N}
     PersistentArray(savedir::String, nr::Integer, generator;suffix=".jls")
