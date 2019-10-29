@@ -483,4 +483,78 @@
         end
     end
 
+    @testset "AddEdgeMutation" begin
+        import NaiveGAflux: default_mergefun
+        cl(name, in, outsize) = mutable(name, Conv((1,1), nout(in)=>outsize), in)
+
+        @testset "AddEdgeMutation pconc=$pconc" for pconc in (0, 1)
+
+            v0 = inputvertex("in", 3, FluxConv{2}())
+            v1 = cl("v1", v0, 4)
+            v2 = cl("v2", v1, 5)
+            v3 = cl("v3", v2, 3)
+            v4 = mutable("v4", MaxPool((2,2)), v3)
+            v5 = cl("v5", v4, 4)
+            v6 = cl("v6", v5, 3)
+            v7 = cl("v7", v6, 2)
+
+            g = CompGraph(v0, v7)
+
+            indata = ones(Float32,5,4,3,2)
+            @test size(g(indata)) == (2,2,2,2)
+
+            m = AddEdgeMutation(1.0, mergefun = default_mergefun(pconc), valuefun = v -> 1:nout_org(v))
+
+            # edge to v2 not possible as v1 is input to it already
+            m(v1)
+
+            vm1 = outputs(v1)[end]
+            @test outputs(v1) == [v2, vm1]
+            @test outputs(vm1) == [v3]
+            @test inputs(vm1) == [v2, v1]
+            @test size(g(indata)) == (2,2,2,2)
+
+            # Will select vm1 again which already has v1 as input
+            m(v1)
+            @test outputs(v1) == [v2, vm1]
+            @test outputs(vm1) == [v3]
+            @test inputs(vm1) == [v2, v1]
+            @test size(g(indata)) == (2,2,2,2)
+
+            m(v4)
+            vm4 = outputs(v4)[end]
+            @test outputs(v4) == [v5, vm4]
+            @test outputs(vm4) == [v6]
+            @test inputs(vm4) == [v5, v4]
+            @test size(g(indata)) == (2,2,2,2)
+        end
+
+        @testset "AddEdgeMutation fail" begin
+            m = AddEdgeMutation(1.0, mergefun=default_mergefun(1), valuefun=v -> 1:nout_org(v))
+
+            v0 = inputvertex("in", 3, FluxConv{2}())
+            v1 = cl("v1", v0, 4)
+
+            # No suitable vertx as v0 is already output to v1
+            m(v0)
+            @test all_in_graph(v0) == [v0, v1]
+            @test outputs(v0) == [v1]
+
+            v2 = cl("v2", v1, 3)
+
+            # No suitable vertx as v1 is already output to v2
+            m(v1)
+            @test all_in_graph(v0) == [v0, v1, v2]
+            @test outputs(v1) == [v2]
+
+            v3 = concat("v3", v2)
+            v4 = "v4" >> v0 + v3
+
+            # Will try to add v1 as input to v3, but v4 can not change size as v0 is immutable
+            @test_logs (:warn, "Selection for vertex v1 failed! Reverting...") m(v1)
+            @test Set(all_in_graph(v0)) == Set([v0, v1, v2, v3, v4])
+        end
+
+    end
+
 end

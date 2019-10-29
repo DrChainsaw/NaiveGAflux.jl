@@ -269,16 +269,17 @@ Higher values of `p` will give more preference to earlier vertices of `vs`.
 
 If `vo` is not capable of having multiple inputs (determined by `singleinput(v) == true`), `vm = mergefun(voi)` where `voi` is a randomly selected input to `vo` will be used instead of `vo`.
 """
-struct AddEdgeMutation{F1, F2, R} <: AbstractMutation{AbstractVertex}
+struct AddEdgeMutation{F1, F2, F3, R} <: AbstractMutation{AbstractVertex}
     mergefun::F1
     filtfun::F2
+    valuefun::F3
     p::Probability
     rng::R
 end
-AddEdgeMutation(p, rng=rng_default) = AddEdgeMutation(Probability(p, rng), rng)
-AddEdgeMutation(p::Probability, rng=rng_default) = AddEdgeMutation(default_mergefun(rng), no_shapechange, p, rng)
+AddEdgeMutation(p; rng=rng_default, mergefun=default_mergefun(rng=rng), filtfun=no_shapechange, valuefun=default_neuronselect) = AddEdgeMutation(Probability(p, rng), rng=rng, mergefun=mergefun, filtfun=filtfun, valuefun=valuefun)
+AddEdgeMutation(p::Probability; rng=rng_default, mergefun=default_mergefun(rng=rng), filtfun=no_shapechange, valuefun=default_neuronselect) = AddEdgeMutation(mergefun, filtfun, valuefun, p, rng)
 
-default_mergefun(rng=rng_default, pconc = 0.5; traitfun = MutationShield ∘ validated() ∘ default_logging(), layerfun = ActivationContribution) = function(vin)
+default_mergefun(pconc = 0.5; rng=rng_default, traitfun = MutationShield ∘ validated() ∘ default_logging(), layerfun = ActivationContribution) = function(vin)
     if rand(rng) > pconc
         return invariantvertex(layerfun(+), vin, traitdecoration=traitfun ∘ named(name(vin) * ".add"))
     end
@@ -312,10 +313,10 @@ function (m::AddEdgeMutation)(vi::AbstractVertex)
     vo = foldl(selfun, allverts, init=nothing)
     vo = vo == nothing ? rand(m.rng, allverts) : vo
 
-    try_add_edge(vi, vo, m.mergefun, m.rng)
+    try_add_edge(vi, vo, m.mergefun, m.rng, m.valuefun)
 end
 
-function try_add_edge(vi, vo, mergefun, rng=rng_default)
+function try_add_edge(vi, vo, mergefun, rng=rng_default, valuefun=default_neuronselect)
 
     # Need to add a vertex which can handle multiple inputs if vo is single input only
     # For cleaning up added vertex if the whole operation fails
@@ -340,33 +341,33 @@ function try_add_edge(vi, vo, mergefun, rng=rng_default)
     vi in inputs(vo) && return
     @debug "Create edge between $(name(vi)) and $(name(vo))"
 
-    create_edge!(vi, vo, strategy = add_edge_strat(vo))
+    create_edge!(vi, vo, strategy = add_edge_strat(vo, valuefun))
     cleanup_failed()
 end
 # Need to override this one for strange types which e.g. layers which support exactly 2 inputs or something.
 singleinput(v) = length(inputs(v)) == 1
 
-add_edge_strat(v::AbstractVertex) = add_edge_strat(trait(v))
-add_edge_strat(d::DecoratingTrait) = add_edge_strat(base(d))
-function add_edge_strat(::SizeInvariant)
+add_edge_strat(v::AbstractVertex, valuefun) = add_edge_strat(trait(v), valuefun)
+add_edge_strat(d::DecoratingTrait, valuefun) = add_edge_strat(base(d), valuefun)
+function add_edge_strat(::SizeInvariant, valuefun)
     alignstrat = IncreaseSmaller(DecreaseBigger(AlignSizeBoth(FailAlignSizeWarn(msgfun = (vin,vout) -> "Could not align sizes of $(name(vin)) and $(name(vout))!"))))
 
     selectstrat = OutSelect{Exact}(LogSelectionFallback("Reverting...", NoutRevert()))
 
-    okstrat = PostApplyMutation(SelectOutputs(selectstrat, alignstrat, default_neuronselect))
+    okstrat = PostApplyMutation(SelectOutputs(selectstrat, alignstrat, valuefun))
 
     # Tricky failure case: It is possible that CheckCreateEdgeNoSizeCycle does not detect any size cycle until after the edge has been created. When this happens, we run PostSelectOutputs to revert all size changes before removing the edge. The latter might not be strictly needed (I really don't know actually), but it does stay true to the contract of "no size change if operation does not succeed".
     nokstrat = FailAlignSizeWarn(msgfun = (vin,vout) -> "Could not align sizes of $(name(vin)) and $(name(vout))! Size cycle detected! Reverting...", andthen=PostSelectOutputs(select=NoutRevert(), align=NoSizeChange(), fallback=FailAlignSizeRevert())) # NoutRevert returns success=false, meaning that fallback will be invoked
 
     return CheckCreateEdgeNoSizeCycle(okstrat, nokstrat)
 end
-function add_edge_strat(::SizeStack)
+function add_edge_strat(::SizeStack, valuefun)
 
-    alignstrat = PostAlignJuMP(DefaultJuMPΔSizeStrategy(), FailAlignSizeWarn(msgfun = (vin,vout) -> "Could not align sizes of $(name(vin)) and $(name(vout))!"))
+    alignstrat = PostAlignJuMP(DefaultJuMPΔSizeStrategy(), fallback=FailAlignSizeWarn(msgfun = (vin,vout) -> "Could not align sizes of $(name(vin)) and $(name(vout))!"))
 
     selectstrat = OutSelect{Exact}(LogSelectionFallback("Reverting...", NoutRevert()))
 
-    okstrat = PostApplyMutation(PostSelectOutputs(selectstrat, alignstrat, default_neuronselect, FailAlignSizeRevert()))
+    okstrat = PostApplyMutation(PostSelectOutputs(selectstrat, alignstrat, valuefun, FailAlignSizeRevert()))
 
     nokstrat = FailAlignSizeWarn(msgfun = (vin,vout) -> "Could not align sizes of $(name(vin)) and $(name(vout))! Size cycle detected! Reverting...")
     return CheckCreateEdgeNoSizeCycle(okstrat, nokstrat)
