@@ -316,10 +316,10 @@ function (m::AddEdgeMutation)(vi::AbstractVertex)
     vo = foldl(selfun, allverts, init=nothing)
     vo = vo == nothing ? rand(m.rng, allverts) : vo
 
-    try_add_edge(vi, vo, m.mergefun, m.rng, m.valuefun)
+    try_add_edge(vi, vo, m.mergefun, m.valuefun)
 end
 
-function try_add_edge(vi, vo, mergefun, rng=rng_default, valuefun=default_neuronselect)
+function try_add_edge(vi, vo, mergefun, valuefun=default_neuronselect)
 
     # Need to add a vertex which can handle multiple inputs if vo is single input only
     # For cleaning up added vertex if the whole operation fails
@@ -343,7 +343,6 @@ function try_add_edge(vi, vo, mergefun, rng=rng_default, valuefun=default_neuron
     # This is mainly because FailAlignSizeRevert does not work when the same vertex is input more than once, but it also seems kinda redundant.
     vi in inputs(vo) && return
     @debug "Create edge between $(name(vi)) and $(name(vo))"
-
     create_edge!(vi, vo, strategy = create_edge_strat(vo, valuefun))
     cleanup_failed()
 end
@@ -404,12 +403,10 @@ function (m::RemoveEdgeMutation)(vi::AbstractVertex)
     isempty(allverts) && return
 
     vo = rand(m.rng, allverts)
-    nr = rand(m.rng, 1:sum(inputs(vo) .== vi))
-    @info "Remove edge $nr between $(name(vi)) and $(name(vo))"
+    sum(inputs(vo) .== vi) > 1 && return # Not implemented in NaiveNASlib
 
-    remove_edge!(vi, vo, nr=nr, strategy=remove_edge_strat(vo, m.valuefun))
-    any(v -> nin(v) != nin_org(v), all_in_graph(vi)) && error("size fail nin!!")
-    any(v -> nout(v) != nout_org(v), all_in_graph(vi)) && error("size fail nin!!")
+    @info "Remove edge between $(name(vi)) and $(name(vo))"
+    remove_edge!(vi, vo, strategy=remove_edge_strat(vo, m.valuefun))
 end
 
 remove_edge_strat(v::AbstractVertex, valuefun) = remove_edge_strat(trait(v), valuefun)
