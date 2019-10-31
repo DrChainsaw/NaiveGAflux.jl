@@ -405,7 +405,7 @@ function (m::RemoveEdgeMutation)(vi::AbstractVertex)
     vo = rand(m.rng, allverts)
     sum(inputs(vo) .== vi) > 1 && return # Not implemented in NaiveNASlib
 
-    @info "Remove edge between $(name(vi)) and $(name(vo))"
+    @debug "Remove edge between $(name(vi)) and $(name(vo))"
     remove_edge!(vi, vo, strategy=remove_edge_strat(vo, m.valuefun))
 end
 
