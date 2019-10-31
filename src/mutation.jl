@@ -383,7 +383,7 @@ Remove an edge from a vertex `vi` to another vertex `vo` randomly selected from 
 
 Vertex `vi` must have more than one output and vertex `vo` must have more than one output for the edge to be removed. Otherwise no change is made.
 
-If there are multiple edges between `vi` and `vo` one randomly chosen edge will be removed.
+If there are multiple edges between `vi` and `vo` no change will be made due to NaiveNASlib not being able to revert a failed operation in this case..
 
 When selecting neurons/outputs after any eventual size change the values `valuefun(v)` will be used to determine the value of each output in vertex `v`. Note that `length(valuefun(v)) == nout_org(v)` must hold.
 
