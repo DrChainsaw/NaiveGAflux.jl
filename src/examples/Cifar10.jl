@@ -5,7 +5,12 @@ import NaiveGAflux:globalpooling2d
 using Random
 import Logging
 using Statistics
+
+# To store program state for pause/resume
 using Serialization
+ # For longer term storage of models
+using FileIO
+using JLD2
 
 export run_experiment, iterators
 
@@ -304,6 +309,15 @@ function convspace(conf, outsizes, kernelsizes, acts; loglevel=Logging.Debug)
     return ArchSpace(ParSpace([conv2d, convbn, bnconv]))
 end
 
+function savemodels(pop::AbstractArray{<:AbstractCandidate}, dir=joinpath(defaultdir(), "models"))
+    mkpath(dir)
+    for (i, cand) in enumerate(pop)
+        model = NaiveGAflux.graph(cand)
+        FileIO.save(joinpath(dir, "$i.jld2"), "model$i", cand |> cpu)
+    end
+end
+# Curried version of the above for other dirs than the default
+savemodels(dir::AbstractString) = pop -> savemodels(pop,dir)
 
 ## Plotting stuff. Maybe move to own file if reusable...
 
