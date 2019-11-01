@@ -5,7 +5,12 @@ import NaiveGAflux:globalpooling2d
 using Random
 import Logging
 using Statistics
+
+# To store program state for pause/resume
 using Serialization
+ # For longer term storage of models
+using FileIO
+using JLD2
 
 export run_experiment, iterators
 
@@ -13,7 +18,7 @@ export PlotFitness, ScatterPop, ScatterOpt, MultiPlot, CbAll
 
 defaultdir(this="CIFAR10") = joinpath(NaiveGAflux.modeldir, this)
 
-function iterators((train_x,train_y)::Tuple; nepochs=200, batchsize=32, fitnessize=2048, nbatches_per_gen=400, seed=123)
+function iterators((train_x,train_y)::Tuple; nepochs=200, batchsize=64, fitnessize=2048, nbatches_per_gen=300, seed=123)
     batch(data) = ShuffleIterator(data, batchsize, MersenneTwister(seed))
     dataiter(x,y, wrap = FlipIterator ∘ ShiftIterator) = zip(wrap(batch(x)), Flux.onehotbatch(batch(y), 0:9))
 
@@ -77,7 +82,12 @@ function evolutionstrategy(popsize, nelites=2)
 
     combine = CombinedEvolution(elite, evolve)
     reset = ResetAfterEvolution(combine)
-    return AfterEvolution(reset, rename_models)
+    return AfterEvolution(reset, rename_models ∘ clear_redundant_vertices)
+end
+
+function clear_redundant_vertices(pop)
+    foreach(cand -> check_apply(NaiveGAflux.graph(cand)), pop)
+    return pop
 end
 
 function rename_models(pop)
@@ -122,6 +132,9 @@ function mutation()
     decrease_kernel = KernelSizeMutation(ParSpace2D([-2]))
     mutate_act = ActivationFunctionMutation(acts)
 
+    add_edge = AddEdgeMutation(0.1)
+    rem_edge = RemoveEdgeMutation()
+
     # Create a shorthand alias for MutationProbability
     mpn(m, p) = VertexMutation(MutationProbability(m, p))
     mph(m, p) = VertexMutation(HighValueMutationProbability(m, p))
@@ -135,13 +148,15 @@ function mutation()
     mkern = mpl(LogMutation(v -> "\tMutate kernel size of $(name(v))", mutate_kernel), 0.01)
     dkern = mpl(LogMutation(v -> "\tDecrease kernel size of $(name(v))", decrease_kernel), 0.005)
     mactf = mpl(LogMutation(v -> "\tMutate activation function of $(name(v))", mutate_act), 0.005)
+    madde = mph(LogMutation(v -> "\tAdd edge from $(name(v))", add_edge), 0.01)
+    mreme = mpn(MutationFilter(v -> length(outputs(v)) > 1, LogMutation(v -> "\tRemove edge from $(name(v))", rem_edge)), 0.01)
 
     mremv = MutationFilter(g -> nv(g) > 5, mremv)
 
     # Create two possible mutations: One which is guaranteed to not increase the size:
     dsize = MutationList(mremv, PostMutation(dnout, NeuronSelect()), dkern, maddm)
     # ...and another which can either decrease or increase the size:
-    msize = MutationList(mremv, PostMutation(inout, NeuronSelect()), PostMutation(dnout, NeuronSelect()), mkern, maddm, maddv)
+    msize = MutationList(mremv, PostMutation(inout, NeuronSelect()), PostMutation(dnout, NeuronSelect()), mkern, madde, mreme, maddm, maddv)
     # Add mutation last as new vertices with neuron_value == 0 screws up outputs selection as per https://github.com/DrChainsaw/NaiveNASlib.jl/issues/39
 
     # If isbig then perform the mutation operation which is guaranteed to not increase the size
@@ -160,7 +175,7 @@ canaddmaxpool(v::AbstractVertex) = is_convtype(v) && !occursin.(r"(path|res|maxp
 
 nmaxpool(vs) = sum(endswith.(name.(vs), "maxpool"))
 
-maxkernelsize(v::AbstractVertex, insize=(32,32)) = @. insize / 2^nmaxpool(flatten(v))
+maxkernelsize(v::AbstractVertex, insize=(32,32)) = @. insize / 2^nmaxpool(flatten(v)) + 1
 
 Flux.mapchildren(f, aa::AbstractArray{<:Integer, 1}) = aa
 
@@ -168,8 +183,7 @@ function add_vertex_mutation(acts)
 
     function outselect(vs)
         rss = randsubseq(vs, 0.5)
-        isempty(rss) && return [rand(vs)]
-        return rss
+        return isempty(rss) ? [rand(vs)] : rss
     end
 
     wrapitup(as) = AddVertexMutation(rep_fork_res(as, 1,loglevel=Logging.Info), outselect)
@@ -295,6 +309,15 @@ function convspace(conf, outsizes, kernelsizes, acts; loglevel=Logging.Debug)
     return ArchSpace(ParSpace([conv2d, convbn, bnconv]))
 end
 
+function savemodels(pop::AbstractArray{<:AbstractCandidate}, dir=joinpath(defaultdir(), "models"))
+    mkpath(dir)
+    for (i, cand) in enumerate(pop)
+        model = NaiveGAflux.graph(cand)
+        FileIO.save(joinpath(dir, "$i.jld2"), "model$i", cand |> cpu)
+    end
+end
+# Curried version of the above for other dirs than the default
+savemodels(dir::AbstractString) = pop -> savemodels(pop,dir)
 
 ## Plotting stuff. Maybe move to own file if reusable...
 
@@ -339,6 +362,8 @@ function plotfitness(p::PlotFitness, population)
     push!(p.plt, length(p.best), [best, avg])
 end
 
+plotgen(p::PlotFitness, gen=length(p.best)) = p.plt # Plot already loaded with data...
+
 function (p::PlotFitness)(population)
     plotfitness(p, population)
     mkpath(p.basedir)
@@ -379,6 +404,15 @@ function plotfitness(p::ScatterPop, population)
     nverts = nv.(NaiveGAflux.graph.(population))
     npars = nparams.(population)
     push!(p.data, hcat(nverts, fits, npars))
+    plotgen(p)
+end
+
+function plotgen(p::ScatterPop, gen=length(p.data))
+    gen == 1 && return p.plotfun()
+    data = p.data[gen]
+    nverts = data[:,1]
+    fits = data[:,2]
+    npars = data[:,3]
     return p.plotfun(nverts, fits, zcolor=npars/1e6, m=(:heat, 0.8), xlabel="Number of vertices", ylabel="Fitness", colorbar_title="Number of parameters (1e6)", label="")
 end
 
@@ -427,6 +461,15 @@ function plotfitness(p::ScatterOpt, population)
     ots = map(o -> typeof(o.os[]), opts)
 
     push!(p.data, hcat(fits, lrs, ots))
+    plotgen(p)
+end
+
+function plotgen(p::ScatterOpt, gen = length(p.data))
+    gen == 1 && return p.plotfun()
+    data = p.data[gen]
+    fits = data[:,1]
+    lrs = data[:,2]
+    ots = data[:,3]
 
     uots = unique(ots)
     inds = map(o -> o .== ots, uots)
@@ -462,9 +505,18 @@ struct MultiPlot
     plotfun
     plts
 end
-MultiPlot(plotfun, plts...) = MultiPlot(plotfun, plts)
+function MultiPlot(plotfun, plts...;init=true)
+    mp = MultiPlot(plotfun, plts)
+    if init
+        plotgen(mp)
+    end
+    return mp
+end
 
 (p::MultiPlot)(population) = p.plotfun(map(pp -> pp(population), p.plts)...)
+
+plotgen(p::MultiPlot) = p.plotfun(map(pp -> plotgen(pp), p.plts)...)
+plotgen(p::MultiPlot, gen) = p.plotfun(map(pp -> plotgen(pp, gen), p.plts)...)
 
 struct CbAll
     cbs

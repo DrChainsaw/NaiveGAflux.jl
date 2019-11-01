@@ -258,6 +258,163 @@ RemoveVertexMutation() = RemoveVertexMutation(RemoveStrategy(CheckAligned(CheckN
 (m::RemoveVertexMutation)(v::AbstractVertex) = remove!(v, m.s)
 
 """
+    AddEdgeMutation <: AbstractMutation{AbstractVertex}
+    AddEdgeMutation(p; rng=rng_default, mergefun=default_mergefun(rng=rng), filtfun=no_shapechange, valuefun=default_neuronselect)
+    AddEdgeMutation(p::Probability; rng=rng_default, mergefun=default_mergefun(rng=rng), filtfun=no_shapechange, valuefun=default_neuronselect)
+
+Add an edge from a vertex `vi` to another vertex `vo` randomly selected from `vs = filtfun(vi)`.
+
+Higher values of `p` will give more preference to earlier vertices of `vs`.
+
+If `vo` is not capable of having multiple inputs (determined by `singleinput(v) == true`), `vm = mergefun(voi)` where `voi` is a randomly selected input to `vo` will be used instead of `vo`.
+
+When selecting neurons/outputs after any eventual size change the values `valuefun(v)` will be used to determine the value of each output in vertex `v`. Note that `length(valuefun(v)) == nout_org(v)` must hold.
+
+Note: High likelyhood of large accuracy degradation after applying this mutation.
+"""
+struct AddEdgeMutation{F1, F2, F3, R} <: AbstractMutation{AbstractVertex}
+    mergefun::F1
+    filtfun::F2
+    valuefun::F3
+    p::Probability
+    rng::R
+end
+AddEdgeMutation(p; rng=rng_default, mergefun=default_mergefun(rng=rng), filtfun=no_shapechange, valuefun=default_neuronselect) = AddEdgeMutation(Probability(p, rng), rng=rng, mergefun=mergefun, filtfun=filtfun, valuefun=valuefun)
+AddEdgeMutation(p::Probability; rng=rng_default, mergefun=default_mergefun(rng=rng), filtfun=no_shapechange, valuefun=default_neuronselect) = AddEdgeMutation(mergefun, filtfun, valuefun, p, rng)
+
+default_mergefun(pconc = 0.5; rng=rng_default, traitfun = MutationShield ∘ RemoveIfSingleInput ∘ validated() ∘ default_logging(), layerfun = ActivationContribution) = function(vin)
+    if rand(rng) > pconc
+        return invariantvertex(layerfun(+), vin, traitdecoration=traitfun ∘ named(name(vin) * ".add"))
+    end
+    return concat(vin ,mutation=IoChange, traitfun = traitfun ∘ named(name(vin) * ".cat"), layerfun=layerfun)
+end
+
+function no_shapechange(vi, vc=vi, valid = [])
+    if vi != vc
+        if vi ∉ inputs(vc)
+            valid = vcat(valid, vc)
+        end
+        layertype(vc) == typeof(globalpooling2d) && return valid
+        if layertype(vc) == FluxNoParLayer()
+            layer(vc) isa MaxPool && return valid
+            layer(vc) isa MeanPool && return valid
+        end
+    end
+    isempty(outputs(vc)) && return valid
+    return mapfoldl(vco -> no_shapechange(vi, vco, valid), vcat, outputs(vc))
+end
+
+function (m::AddEdgeMutation)(vi::AbstractVertex)
+    # All vertices for which it is allowed to add vi as an input
+    allverts = filter(allow_mutation, m.filtfun(vi))
+    isempty(allverts) && return
+
+    # Higher probability to select a vertex close to v is desired behaviour
+    # One line less than a for loop => FP wins!!
+    selfun(::Nothing, vc) = apply(m.p) ? vc : nothing
+    selfun(vs, vd) = vs
+    vo = foldl(selfun, allverts, init=nothing)
+    vo = vo == nothing ? rand(m.rng, allverts) : vo
+
+    try_add_edge(vi, vo, m.mergefun, m.valuefun)
+end
+
+function try_add_edge(vi, vo, mergefun, valuefun=default_neuronselect)
+
+    # Need to add a vertex which can handle multiple inputs if vo is single input only
+    # For cleaning up added vertex if the whole operation fails
+    cleanup_failed = () -> nothing
+    if singleinput(vo)
+        voi = inputs(vo)[1]
+        if singleinput(voi)
+            vm = mergefun(voi)
+            # Insert vm between voi and vo, i.e voi -> vo turns into voi -> vm -> vo
+            insert!(voi, vv -> vm, vs -> [vo])
+            cleanup_failed = function()
+                length(inputs(vm)) > 1 && return
+                remove!(vm, RemoveStrategy(NoSizeChange()))
+            end
+            vo = vm # vm is the one we shall add an edge to
+            @debug "Create new vertex for merging $(name(vo))"
+        else
+            vo = voi
+        end
+    end
+    # This is mainly because FailAlignSizeRevert does not work when the same vertex is input more than once, but it also seems kinda redundant.
+    vi in inputs(vo) && return
+    @debug "Create edge between $(name(vi)) and $(name(vo))"
+    create_edge!(vi, vo, strategy = create_edge_strat(vo, valuefun))
+    cleanup_failed()
+end
+# Need to override this one for strange types which e.g. layers which support exactly 2 inputs or something.
+singleinput(v) = length(inputs(v)) == 1
+
+create_edge_strat(v::AbstractVertex, valuefun) = create_edge_strat(trait(v), valuefun)
+create_edge_strat(d::DecoratingTrait, valuefun) = create_edge_strat(base(d), valuefun)
+function create_edge_strat(::SizeInvariant, valuefun)
+    alignstrat = IncreaseSmaller(DecreaseBigger(AlignSizeBoth(FailAlignSizeWarn(msgfun = (vin,vout) -> "Could not align sizes of $(name(vin)) and $(name(vout))!"))))
+
+    selectstrat = OutSelect{Exact}(LogSelectionFallback("Reverting...", NoutRevert()))
+
+    okstrat = PostApplyMutation(SelectOutputs(selectstrat, alignstrat, valuefun))
+
+    # Tricky failure case: It is possible that CheckCreateEdgeNoSizeCycle does not detect any size cycle until after the edge has been created. When this happens, we run PostSelectOutputs to revert all size changes before removing the edge. The latter might not be strictly needed (I really don't know actually), but it does stay true to the contract of "no size change if operation does not succeed".
+    nokstrat = FailAlignSizeWarn(msgfun = (vin,vout) -> "Could not align sizes of $(name(vin)) and $(name(vout))! Size cycle detected! Reverting...", andthen=PostSelectOutputs(select=NoutRevert(), align=NoSizeChange(), fallback=FailAlignSizeRevert())) # NoutRevert returns success=false, meaning that fallback will be invoked
+
+    return CheckCreateEdgeNoSizeCycle(okstrat, nokstrat)
+end
+function create_edge_strat(::SizeStack, valuefun)
+
+    alignstrat = PostAlignJuMP(DefaultJuMPΔSizeStrategy(), fallback=FailAlignSizeWarn(msgfun = (vin,vout) -> "Could not align sizes of $(name(vin)) and $(name(vout))!"))
+
+    selectstrat = OutSelect{Exact}(LogSelectionFallback("Reverting...", NoutRevert()))
+
+    okstrat = PostApplyMutation(PostSelectOutputs(selectstrat, alignstrat, valuefun, FailAlignSizeRevert()))
+
+    nokstrat = FailAlignSizeWarn(msgfun = (vin,vout) -> "Could not align sizes of $(name(vin)) and $(name(vout))! Size cycle detected! Reverting...")
+    return CheckCreateEdgeNoSizeCycle(okstrat, nokstrat)
+end
+
+"""
+    RemoveEdgeMutation <: AbstractMutation{AbstractVertex}
+    RemoveEdgeMutation(;valuefun=default_neuronselect, rng=rng_default)
+
+Remove an edge from a vertex `vi` to another vertex `vo` randomly selected from `outputs(vi)`.
+
+Vertex `vi` must have more than one output and vertex `vo` must have more than one output for the edge to be removed. Otherwise no change is made.
+
+If there are multiple edges between `vi` and `vo` no change will be made due to NaiveNASlib not being able to revert a failed operation in this case..
+
+When selecting neurons/outputs after any eventual size change the values `valuefun(v)` will be used to determine the value of each output in vertex `v`. Note that `length(valuefun(v)) == nout_org(v)` must hold.
+
+Note: High likelyhood of large accuracy degradation after applying this mutation.
+"""
+struct RemoveEdgeMutation{F, R} <: AbstractMutation{AbstractVertex}
+    valuefun::F
+    rng::R
+end
+RemoveEdgeMutation(;valuefun=default_neuronselect, rng=rng_default) = RemoveEdgeMutation(valuefun, rng)
+
+function (m::RemoveEdgeMutation)(vi::AbstractVertex)
+    length(outputs(vi)) < 2 && return
+
+    allverts = filter(vo -> length(inputs(vo)) > 1, outputs(vi))
+
+    isempty(allverts) && return
+
+    vo = rand(m.rng, allverts)
+    sum(inputs(vo) .== vi) > 1 && return # Not implemented in NaiveNASlib
+
+    @debug "Remove edge between $(name(vi)) and $(name(vo))"
+    remove_edge!(vi, vo, strategy=remove_edge_strat(vo, m.valuefun))
+end
+
+remove_edge_strat(v::AbstractVertex, valuefun) = remove_edge_strat(trait(v), valuefun)
+remove_edge_strat(d::DecoratingTrait, valuefun) = remove_edge_strat(base(d), valuefun)
+remove_edge_strat(::SizeInvariant, valuefun) = NoSizeChange()
+remove_edge_strat(t::SizeStack, valuefun) = create_edge_strat(t, valuefun)
+
+"""
     KernelSizeMutation{N} <: AbstractMutation{AbstractVertex}
     KernelSizeMutation(Δsizespace::AbstractParSpace{N, Int}; maxsize, pad, rng)
     KernelSizeMutation2D(absΔ::Integer;maxsize, pad, rng)
