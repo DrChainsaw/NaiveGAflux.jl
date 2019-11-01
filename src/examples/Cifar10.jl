@@ -171,7 +171,15 @@ nparams(c::AbstractCandidate) = nparams(NaiveGAflux.graph(c))
 nparams(g::CompGraph) = mapreduce(prod ∘ size, +, params(g).order)
 isbig(g) = nparams(g) > 20e7
 
-canaddmaxpool(v::AbstractVertex) = is_convtype(v) && !occursin.(r"(path|res|maxpool)", name(v)) && nmaxpool(all_in_graph(v)) < 4
+canaddmaxpool(v::AbstractVertex) = is_convtype(v) && !infork(v) && nmaxpool(all_in_graph(v)) < 4
+
+function infork(v, forkcnt = 0)
+    #@show forkcnt < 0
+    forkcnt < 0 && return true
+    isempty(outputs(v)) && return false
+    cnt = length(outputs(v)) - length(inputs(v))
+    return any(infork.(outputs(v), forkcnt + cnt))
+end
 
 nmaxpool(vs) = sum(endswith.(name.(vs), "maxpool"))
 
