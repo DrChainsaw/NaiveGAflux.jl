@@ -174,7 +174,6 @@ isbig(g) = nparams(g) > 20e7
 canaddmaxpool(v::AbstractVertex) = is_convtype(v) && !infork(v) && nmaxpool(all_in_graph(v)) < 4
 
 function infork(v, forkcnt = 0)
-    #@show forkcnt < 0
     forkcnt < 0 && return true
     isempty(outputs(v)) && return false
     cnt = length(outputs(v)) - length(inputs(v))
@@ -483,9 +482,9 @@ function plotgen(p::ScatterOpt, gen = length(p.data))
     inds = map(o -> o .== ots, uots)
 
     fitso = map(indv -> fits[indv], inds)
-    lrso = map(indv -> lrs[indv], inds)
-
-    return p.plotfun(lrso, fitso, xlabel="Learning rate", ylabel="Fitness", label=string.(uots), legend=:outerright, legendfontsize=5)
+    lrso = map(indv -> log10.(lrs[indv]), inds)
+    
+    return p.plotfun(lrso, fitso, xlabel="Learning rate (log10)", ylabel="Fitness", label=string.(uots), legend=:outerright, legendfontsize=5)
 end
 
 function(p::ScatterOpt)(population)
