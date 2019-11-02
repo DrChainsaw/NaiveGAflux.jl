@@ -1,7 +1,8 @@
 module AutoFit
 
 export fit
-export ImageClassifier
+export ImageClassification, ImageClassifier
+
 
 """
     fit(x, y; cb)
@@ -17,14 +18,16 @@ The following model types are currently supported
 Keyword `cb` cen be used to supply a callback function which will be called each generation with the current population as input.
 """
 function fit(x, y; cb=identity, mdir=missing)
-    ndims(x) == 4 && return fit(ImageClassifier(), x, y;cb=identity, mdir=ismissing(mdir) ? defaultdir("ImageClassifier") : mdir)
+    ndims(x) == 4 && return fit(ImageClassifier(), x, y;cb=identity, mdir=modeldir(mdir, "ImageClassifier"))
     error("No model for $(ndims(x))D data")
 end
 fit((x,y)::Tuple; cb=identity) = fit(x, y; cb=identity, mdir=missing)
 
+modeldir(::Missing, subdir) = defaultdir(subdir)
+modeldir(d, subdir) = d
 defaultdir(subdir, basedir = NaiveGAflux.modeldir) = joinpath(basedir, subdir)
 
-include("ImageClassification.jl")
+include("imageclassification/ImageClassification.jl")
 using .ImageClassification
 
 
