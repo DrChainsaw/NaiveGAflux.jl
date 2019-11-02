@@ -48,6 +48,9 @@ export AbstractWeightInit, DefaultWeightInit, IdentityWeightInit, PartialIdentit
 # functions
 export mutate, allow_mutation, select, check_apply
 
+# Pre-built programs for fitting data
+export AutoFit
+
 # Examples
 export Cifar10
 
@@ -58,6 +61,7 @@ include("fitness.jl")
 include("candidate.jl")
 include("evolve.jl")
 include("iterators.jl")
+include("app/AutoFit.jl")
 include("examples/Cifar10.jl")
 
 end # module

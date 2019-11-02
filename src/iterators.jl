@@ -36,6 +36,8 @@ end
 
 Base.length(itr::RepeatPartitionIterator) = ceil(Int, length(itr.base) / itr.ntake)
 Base.eltype(itr::RepeatPartitionIterator{T}) where T = T
+Base.size(itr::RepeatPartitionIterator) = size(itr.base.itr)
+
 
 Base.IteratorSize(itr::RepeatPartitionIterator) = Base.IteratorSize(itr.base)
 Base.IteratorEltype(itr::RepeatPartitionIterator) = Base.HasEltype()
@@ -67,6 +69,7 @@ end
 
 Base.length(itr::RepeatStatefulIterator) = length(itr.base.itr) - itr.taken
 Base.eltype(itr::RepeatStatefulIterator) = eltype(itr.base)
+Base.size(itr::RepeatStatefulIterator) = size(itr.base.itr)
 
 Base.IteratorSize(itr::RepeatStatefulIterator) = Base.IteratorSize(itr.base)
 Base.IteratorEltype(itr::RepeatStatefulIterator) = Base.HasEltype()
@@ -114,7 +117,11 @@ function Base.iterate(itr::MapIterator, state)
 end
 
 Base.length(itr::MapIterator) = length(itr.base)
-Base.size(itr::MapIterator) = size(itr.base) # Not guaranteed to be true depending on what f does...
+Base.size(itr::MapIterator) = size(Base.IteratorSize(itr.base), itr.base)
+size(::Base.IteratorSize, itr) = sizeof(first(itr))
+sizeof(a::AbstractArray) = size(a)
+sizeof(t::Tuple) = size.(t)
+size(::Base.HasShape, iter) = size(itr)
 
 Base.IteratorSize(itr::MapIterator) = Base.IteratorSize(itr.base)
 Base.IteratorEltype(itr::MapIterator) = Base.EltypeUnknown() # Don't know what f does...
