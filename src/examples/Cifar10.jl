@@ -1,26 +1,12 @@
 module Cifar10
 
 using ..NaiveGAflux
-
- # For longer term storage of models
-using FileIO
-using JLD2
-
 export run_experiment, iterators
 
 export PlotFitness, ScatterPop, ScatterOpt, MultiPlot, CbAll
 
 defaultdir(this="CIFAR10") = joinpath(NaiveGAflux.modeldir, this)
 
-function savemodels(pop::AbstractArray{<:AbstractCandidate}, dir=joinpath(defaultdir(), "models"))
-    mkpath(dir)
-    for (i, cand) in enumerate(pop)
-        model = NaiveGAflux.graph(cand)
-        FileIO.save(joinpath(dir, "$i.jld2"), "model$i", cand |> cpu)
-    end
-end
-# Curried version of the above for other dirs than the default
-savemodels(dir::AbstractString) = pop -> savemodels(pop,dir)
 
 ## Plotting stuff. Maybe move to own file if reusable...
 

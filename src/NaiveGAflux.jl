@@ -5,8 +5,16 @@ using Reexport
 using Random
 using Logging
 using Statistics
-using Serialization
+
 using Setfield
+
+# For temporary storage of program state for pause/resume type of operations
+using Serialization
+
+# For longer term storage of models
+using FileIO
+using JLD2
+
 
 if Flux.has_cuarrays()
     using CuArrays
@@ -25,7 +33,10 @@ export evolvemodel, AbstractCandidate, CandidateModel, HostCandidate, CacheCandi
 export evolve!, AbstractEvolution, NoOpEvolution, AfterEvolution, ResetAfterEvolution, EliteSelection, SusSelection, CombinedEvolution, EvolveCandidates
 
 # misc types
-export Probability, MutationShield, ApplyIf, RemoveIfSingleInput, RepeatPartitionIterator, MapIterator, GpuIterator, BatchIterator, FlipIterator, ShiftIterator, ShuffleIterator, PersistentArray, persist
+export Probability, MutationShield, ApplyIf, RemoveIfSingleInput, RepeatPartitionIterator, MapIterator, GpuIterator, BatchIterator, FlipIterator, ShiftIterator, ShuffleIterator, PersistentArray
+
+# Persistence
+export persist, savemodels
 
 # Vertex selection types
 export AbstractVertexSelection, AllVertices, FilterMutationAllowed
