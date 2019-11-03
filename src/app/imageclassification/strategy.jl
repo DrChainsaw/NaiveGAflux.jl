@@ -1,26 +1,95 @@
+"""
+    AbstractFitnessStrategy
+
+Base type for fitness strategies.
+
+See [`fitnessfun`](@ref)
+"""
 abstract type AbstractFitnessStrategy end
 
+"""
+    fitnessfun(s::T, x, y) where T <: AbstractFitnessStrategy
+
+Returns the tuple `rem_x`, `rem_y`, `fitnessgen` where `rem_x` and `rem_y` are subsets of `x` and `y` and `fitnessgen()` produces an `AbstractFitness`.
+
+Rationale for `rem_x` and `rem_y` is to allow fitness to be calculated on a subset of the training data which the models are not trained on themselves.
+
+Rationale for `fitnessgen` not being an `AbstractFitness` is that some `AbstractFitness` implementations are stateful so that each candidate needs its own instance.
+"""
+fitnessfun(s::T, x, y) where T <: AbstractFitnessStrategy = error("Not implemented for $(T)!")
+
+"""
+    AbstractTrainStrategy
+
+Base type for strategies on how to feed training data.
+
+See [`trainiter`](@ref).
+"""
 abstract type AbstractTrainStrategy end
 
+"""
+    trainiter(s::T, x, y) where T <: AbstractTrainStrategy
+
+Returns an iterator `fit_iter` which in turn iterates over iterators `ss_iter` where each `ss_iter` iterates over a subset of the data in x and y.
+
+See [`RepeatPartitionIterator`](@ref) for an example of an iterator which fits the bill.
+"""
+trainiter(s::T, x, y) where T <: AbstractTrainStrategy = error("Not implemented for $(T)!")
+
+"""
+    AbstractEvolutionStrategy
+
+Base type for strategies on how to perform the evolution.
+
+See [`evostrategy`](@ref)
+"""
 abstract type AbstractEvolutionStrategy end
 
+"""
+    evostrategy(s::T, inshape) where T <: AbstractEvolutionStrategy
+
+Returns an `AbstractEvolution`.
+
+Argument `inshape` is the size of the input feature maps (i.e. how many pixels images are) and may be used to determine which mutation operations are allowed for example to avoid that feature maps accidentally become 0 sized.
+"""
+evostrategy(s::T, inshape) where T <: AbstractEvolutionStrategy = error("Not implemented for $(T)!")
+
+"""
+    struct TrainSplitAccuracy{T} <: AbstractFitnessStrategy
+    TrainSplitAccuracy(nexamples, batchsize, data2fitfun)
+    TrainSplitAccuracy(;nexamples=2048, batchsize=64, data2fitfun=NanGuard ∘ AccuracyVsSize)
+
+Strategy to measure fitness on a subset of the training data of size `nexamples`.
+
+Mapping from this subset to a fitness generator is done by `data2fitgen` which takes a data iterator and returns a function (or callable struct) which in turn produces an `AbstractFitness` when called with no arguments.
+"""
 struct TrainSplitAccuracy{T} <: AbstractFitnessStrategy
     nexamples::Int
     batchsize::Int
-    data2fitfun::T
+    data2fitgen::T
 end
-TrainSplitAccuracy(;nexamples=2048, batchsize=64, data2fitfun=AccuracyVsSize) = TrainSplitAccuracy(nexamples, batchsize, data2fitfun)
+TrainSplitAccuracy(;nexamples=2048, batchsize=64, data2fitfun=NanGuard ∘ AccuracyVsSize) = TrainSplitAccuracy(nexamples, batchsize, data2fitgen)
 function fitnessfun(s::TrainSplitAccuracy, x, y)
     rem_x, acc_x = split_examples(x, s.nexamples)
     rem_y, acc_y = split_examples(y, s.nexamples)
     acc_iter = GpuIterator(dataiter(acc_x, acc_y, s.batchsize, 0, identity))
-    return rem_x, rem_y, s.data2fitfun(acc_iter)
+    return rem_x, rem_y, s.data2fitgen(acc_iter)
 end
 
 split_examples(a::AbstractArray{T, 1}, splitpoint) where T = a[1:end-splitpoint], a[end-splitpoint:end]
 split_examples(a::AbstractArray{T, 2}, splitpoint) where T = a[:,1:end-splitpoint], a[:,end-splitpoint:end]
 split_examples(a::AbstractArray{T, 4}, splitpoint) where T = a[:,:,:,1:end-splitpoint], a[:,:,:,end-splitpoint:end]
 
+"""
+    struct AccuracyVsSize{T}
+    AccuracyVsSize(data, accdigits=3)
+
+Produces an `AbstractFitness` which measures fitness accuracy on `data` and based on number of parameters.
+
+The two are combined so that a candidate `a` which achieves higher accuracy rounded to the first `accdigits` digits compared to a candidate `b` will always have a better fitness.
+
+Only if the first `accdigits` of accuracy is the same will the number of parameters determine who has higher fitness.
+"""
 struct AccuracyVsSize{T}
     data::T
     accdigits::Int
@@ -33,12 +102,18 @@ function (f::AccuracyVsSize)()
     size = SizeFitness()
     sizefit = MapFitness(x -> min(10.0^-f.accdigits, 1 / x), size)
 
-    tot = AggFitness(+, truncacc, sizefit)
-
-    cache = FitnessCache(tot)
-    return NanGuard(cache)
+    return AggFitness(+, truncacc, sizefit)
 end
 
+"""
+    struct TrainStrategy{T} <: AbstractTrainStrategy
+    TrainStrategy(nepochs, batchsize, nbatches_per_gen, seed, dataaug)
+    TrainStrategy(;nepochs=200, batchsize=64, nbatches_per_gen=400, seed=123, dataaug=identity)
+
+Standard training strategy. Data is cycled `nepochs` times in partitions of `nbatches_per_gen` and batchsize of `batchsize` each generation using a [`RepeatPartitionIterator`](@ref).
+
+Data can be augmented using `dataaug`.
+"""
 struct TrainStrategy{T} <: AbstractTrainStrategy
     nepochs::Int
     batchsize::Int
@@ -54,10 +129,24 @@ function trainiter(s::TrainStrategy, x, y)
 end
 
 batch(x, batchsize, seed) = ShuffleIterator(x, batchsize, MersenneTwister(seed))
-dataiter(x,y::AbstractArray{T, 1}, bs, s, wrap = FlipIterator ∘ ShiftIterator) where T = zip(wrap(batch(x, bs, s)), Flux.onehotbatch(batch(y, bs, s), unique(y)))
-dataiter(x,y::AbstractArray{T, 2}, bs, s, wrap = FlipIterator ∘ ShiftIterator) where T = zip(wrap(batch(x, bs, s)), batch(y, bs, s))
+dataiter(x,y::AbstractArray{T, 1}, bs, s, wrap) where T = zip(wrap(batch(x, bs, s)), Flux.onehotbatch(batch(y, bs, s), unique(y)))
+dataiter(x,y::AbstractArray{T, 2}, bs, s, wrap) where T = zip(wrap(batch(x, bs, s)), batch(y, bs, s))
 
+"""
+    struct EliteAndSusSelection <: AbstractEvolutionStrategy
+    EliteAndSusSelection(popsize, nelites)
+    EliteAndSusSelection(;popsize=50, nelites=2)
 
+Standard evolution strategy.
+
+Selects `nelites` candidates to move on to the next generation without any mutation.
+
+Also selects `popsize - nelites` candidates out of the whole population using [`SusSelection`](@ref) to evolve by applying random mutation.
+
+Mutation operations are both applied to the model itself (change sizes, add/remove vertices/edges) as well as to the optimizer (change learning rate and optimizer algorithm).
+
+Finally, models are renamed so that the name of each vertex of the model of candidate `i` is prefixed with "model`i`".
+"""
 struct EliteAndSusSelection <: AbstractEvolutionStrategy
     popsize::Int
     nelites::Int
