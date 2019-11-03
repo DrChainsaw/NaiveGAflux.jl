@@ -1,8 +1,8 @@
-@testset "AutoFit" begin
+@testset "AutoFlux" begin
 
     @testset "ImageClassifier smoketest" begin
-        using NaiveGAflux.AutoFit
-        import NaiveGAflux.AutoFit.ImageClassification: TrainSplitAccuracy, TrainStrategy
+        using NaiveGAflux.AutoFlux
+        import NaiveGAflux.AutoFlux.ImageClassification: TrainSplitAccuracy, TrainStrategy
         using Random
 
         # Workaround as losses fail with Flux.OneHotMatrix on Appveyor x86 (works everywhere else)

@@ -49,16 +49,17 @@
     @testset "Save models" begin
         testdir = "test_savemodels"
 
-        struct MockCand <: AbstractCandidate
+        # Weird name to avoid collisions (e.g. MockCand is defined in another testset and therefore unusable)
+        struct SaveModelsCand <: AbstractCandidate
             i
         end
-        NaiveGAflux.graph(c::MockCand) = c.i
+        NaiveGAflux.graph(c::SaveModelsCand) = c.i
 
         ndir = joinpath(testdir,"normal")
         pdir = joinpath(testdir,"persistent")
         cdir = joinpath(testdir,"curried")
 
-        normal = MockCand.(1:10)
+        normal = SaveModelsCand.(1:10)
         persistent = PersistentArray(pdir, length(normal), i -> normal[i])
 
         curried = savemodels(cdir)

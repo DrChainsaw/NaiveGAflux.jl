@@ -57,7 +57,7 @@ evostrategy(s::T, inshape) where T <: AbstractEvolutionStrategy = error("Not imp
 """
     struct TrainSplitAccuracy{T} <: AbstractFitnessStrategy
     TrainSplitAccuracy(nexamples, batchsize, data2fitfun)
-    TrainSplitAccuracy(;nexamples=2048, batchsize=64, data2fitfun=NanGuard ∘ AccuracyVsSize)
+    TrainSplitAccuracy(;nexamples=2048, batchsize=64, data2fitgen= data -> NanGuard ∘ AccuracyVsSize(data))
 
 Strategy to measure fitness on a subset of the training data of size `nexamples`.
 
@@ -68,7 +68,7 @@ struct TrainSplitAccuracy{T} <: AbstractFitnessStrategy
     batchsize::Int
     data2fitgen::T
 end
-TrainSplitAccuracy(;nexamples=2048, batchsize=64, data2fitfun=NanGuard ∘ AccuracyVsSize) = TrainSplitAccuracy(nexamples, batchsize, data2fitgen)
+TrainSplitAccuracy(;nexamples=2048, batchsize=64, data2fitgen= data -> NanGuard ∘ AccuracyVsSize(data)) = TrainSplitAccuracy(nexamples, batchsize, data2fitgen)
 function fitnessfun(s::TrainSplitAccuracy, x, y)
     rem_x, acc_x = split_examples(x, s.nexamples)
     rem_y, acc_y = split_examples(y, s.nexamples)

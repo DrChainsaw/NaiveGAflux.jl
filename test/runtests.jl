@@ -50,10 +50,6 @@ using Test
     @info "Testing README examples"
     include("examples.jl")
 
-    @info "Testing autofit"
-    include("app/autofit.jl")
-
-    #@info "Testing CIFAR10 example"
-    #include("examples/Cifar10.jl")
-
+    @info "Testing AutoFlux"
+    include("app/autoflux.jl")
 end

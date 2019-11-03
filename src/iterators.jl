@@ -119,7 +119,7 @@ end
 Base.length(itr::MapIterator) = length(itr.base)
 Base.size(itr::MapIterator) = size(Base.IteratorSize(itr.base), itr.base)
 Base.size(::Base.IteratorSize, itr) = sizeof(first(itr))
-Base.size(::Base.HasShape, iter) = size(itr)
+Base.size(::Base.HasShape, itr) = size(itr)
 sizeof(a::AbstractArray) = size(a)
 sizeof(t::Tuple) = size.(t)
 

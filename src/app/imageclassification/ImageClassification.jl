@@ -1,7 +1,7 @@
 module ImageClassification
 
 using ...NaiveGAflux
-using ..AutoFit: fit
+using ..AutoFlux: fit
 import NaiveGAflux: globalpooling2d
 using Random
 import Logging
@@ -23,7 +23,7 @@ include("archspace.jl")
     ImageClassifier(popsize, seed, newpop)
     ImageClassifier(;popsize=50, seed=1, newpop=false)
 
-Type to make `AutoFit.fit` train an image classifier using initial population size `popsize` using random seed `seed`.
+Type to make `AutoFlux.fit` train an image classifier using initial population size `popsize` using random seed `seed`.
 
 If `newpop` is `true` the process will start with a new population and existing state in the specified directory will be overwritten.
 """
@@ -57,7 +57,7 @@ Return a population of image classifiers fitted to the given data.
 -`mdir`: Load models from this directory if present.
     -If persitence is used (e.g. by providing `cb=persist`) candidates will be stored in this directory.
 """
-function AutoFit.fit(c::ImageClassifier, x, y; cb=identity, fitnesstrategy::AbstractFitnessStrategy=TrainSplitAccuracy(), trainstrategy::AbstractTrainStrategy=TrainStrategy(), evolutionstrategy::AbstractEvolutionStrategy=EliteAndSusSelection(popsize=c.popsize), mdir)
+function AutoFlux.fit(c::ImageClassifier, x, y; cb=identity, fitnesstrategy::AbstractFitnessStrategy=TrainSplitAccuracy(), trainstrategy::AbstractTrainStrategy=TrainStrategy(), evolutionstrategy::AbstractEvolutionStrategy=EliteAndSusSelection(popsize=c.popsize), mdir)
     ndims(x) == 4 || error("Must use 4D data, got $(ndims(x))D data")
 
     x, y, fitnessgen = fitnessfun(fitnesstrategy, x, y)
@@ -87,7 +87,7 @@ Lower level version of `fit` to use when `fit(c::ImageClassifier, x, y)` doesn't
 -`mdir`: Load models from this directory if present.
     -If persitence is used (e.g. by providing `cb=persist`) candidates will be stored in this directory.
 """
-function AutoFit.fit(c::ImageClassifier, fit_iter, fitnessgen, evostrategy::AbstractEvolution; cb = identity, mdir)
+function AutoFlux.fit(c::ImageClassifier, fit_iter, fitnessgen, evostrategy::AbstractEvolution; cb = identity, mdir)
     Random.seed!(NaiveGAflux.rng_default, c.seed)
     @info "Start experiment with baseseed: $(c.seed)"
 

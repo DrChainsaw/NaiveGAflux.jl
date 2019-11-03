@@ -36,7 +36,7 @@ savemodels(pop::PersistentArray{<:AbstractCandidate}) = savemodels(pop, joinpath
 
 Return a function which accepts an argument `pop` and calls `savemodels(pop, dir)`.
 
-Useful for callbacks to `AutoFit.fit`.
+Useful for callbacks to `AutoFlux.fit`.
 """
 savemodels(dir::AbstractString) = pop -> savemodels(pop,dir)
 

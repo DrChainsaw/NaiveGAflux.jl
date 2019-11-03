@@ -1,4 +1,4 @@
-module AutoFit
+module AutoFlux
 
 export fit
 export ImageClassification, ImageClassifier
