@@ -15,7 +15,7 @@ The type of model will depend on the shape of `x`.
 The following model types are currently supported
 - 4D data -> ImageClassifier
 
-Keyword `cb` cen be used to supply a callback function which will be called each generation with the current population as input.
+Keyword `cb` can be used to supply a callback function which will be called each generation with the current population as input.
 """
 function fit(x, y; cb=identity, mdir=missing)
     ndims(x) == 4 && return fit(ImageClassifier(), x, y;cb=identity, mdir=modeldir(mdir, "ImageClassifier"))

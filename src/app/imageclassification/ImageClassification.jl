@@ -18,6 +18,15 @@ modelname(g::CompGraph) = split(name(g.inputs[]),'.')[1]
 include("strategy.jl")
 include("archspace.jl")
 
+"""
+    ImageClassifier
+    ImageClassifier(popsize, seed, newpop)
+    ImageClassifier(;popsize=50, seed=1, newpop=false)
+
+Type to make `AutoFit.fit` train an image classifier using initial population size `popsize` using random seed `seed`.
+
+If `newpop` is `true` the process will start with a new population and existing state in the specified directory will be overwritten.
+"""
 struct ImageClassifier
     popsize::Int
     seed::Int
@@ -25,7 +34,30 @@ struct ImageClassifier
 end
 ImageClassifier(;popsize=50, seed=1, newpop=false) = ImageClassifier(popsize, seed, newpop)
 
-function AutoFit.fit(c::ImageClassifier, x, y; cb=identity, fitnesstrategy=TrainSplitAccuracy(), trainstrategy=TrainStrategy(), evolutionstrategy=EliteAndSusSelection(popsize=c.popsize), mdir)
+"""
+    fit(c::ImageClassifier, x, y; cb, fitnesstrategy, trainstrategy, evolutionstrategy, mdir)
+
+Return a population of image classifiers fitted to the given data.
+
+# Arguments
+-`c::ImageClassifier`: Type of models to train. See [`ImageClassifier`](@ref).
+
+-`x`: Input data. Must be a 4D array.
+
+-`y`: Output data. Can either be an 1D array in which case it is assumed that `y` is the raw labes (e.g. `["cat", "dog", "cat", ...]`) or a 2D array in which case it is assumed that `y` is one-hot encoded.
+
+-`cb=identity`: Callback function. After training and evaluating each generation but before evolution `cb(population)` will be called where `population` is the array of candidates. Useful for persistence and plotting.
+
+-`fitnesstrategy::AbstractFitnessStrategy=TrainSplitAccuracy()`: Strategy for fitness. See: [`ImageClassification.AbstractFitnessStrategy`](@ref).
+
+-`trainstrategy::AbstractTrainStrategy=TrainStrategy()`: Strategy for training. See [`ImageClassification.AbstractTrainStrategy`](@ref)
+
+-`evolutionstrategy::AbstractEvolutionStrategy=EliteAndSusSelection(popsize=c.popsize)`: Strategy for evolution. See [`ImageClassification.AbstractEvolutionStrategy`](@ref)
+
+-`mdir`: Load models from this directory if present.
+    -If persitence is used (e.g. by providing `cb=persist`) candidates will be stored in this directory.
+"""
+function AutoFit.fit(c::ImageClassifier, x, y; cb=identity, fitnesstrategy::AbstractFitnessStrategy=TrainSplitAccuracy(), trainstrategy::AbstractTrainStrategy=TrainStrategy(), evolutionstrategy::AbstractEvolutionStrategy=EliteAndSusSelection(popsize=c.popsize), mdir)
     ndims(x) == 4 || error("Must use 4D data, got $(ndims(x))D data")
 
     x, y, fitnessgen = fitnessfun(fitnesstrategy, x, y)
@@ -34,7 +66,28 @@ function AutoFit.fit(c::ImageClassifier, x, y; cb=identity, fitnesstrategy=Train
     return fit(c, fit_iter, fitnessgen, evostrategy(evolutionstrategy, inshape); cb=cb, mdir=mdir)
 end
 
-function AutoFit.fit(c::ImageClassifier, fit_iter, fitnessgen, evostrategy; cb = identity, mdir)
+"""
+    fit(c::ImageClassifier, fit_iter, fitnessgen, evostrategy; cb = identity, mdir)
+
+Return a population of image classifiers fitted to the given data.
+
+Lower level version of `fit` to use when `fit(c::ImageClassifier, x, y)` doesn't cut it.
+
+# Arguments
+-`c::ImageClassifier`: Type of models to train. See [`ImageClassifier`](@ref).
+
+- `fit_iter`: Iterator for fitting the models. Expected to in turn produce iterators over some subset of the training data. The produced iterators are in turn expected to produce batches of input output tuples. See [`RepeatPartitionIterator`](@ref) for an example an iterator which fits the bill.
+
+- `fitnessgen`: Return an `AbstractFitness` when called with no arguments. May or may not produce the same instance depending on whether stateful fitness is used.
+
+- `evostrategy::AbstractEvolution`: Evolution strategy to use. Population `p` will be evolved through `p = evolve!(evostrategy, p)`.
+
+-`cb=identity`: Callback function. After training and evaluating each generation but before evolution `cb(population)` will be called where `population` is the array of candidates. Useful for persistence and plotting.
+
+-`mdir`: Load models from this directory if present.
+    -If persitence is used (e.g. by providing `cb=persist`) candidates will be stored in this directory.
+"""
+function AutoFit.fit(c::ImageClassifier, fit_iter, fitnessgen, evostrategy::AbstractEvolution; cb = identity, mdir)
     Random.seed!(NaiveGAflux.rng_default, c.seed)
     @info "Start experiment with baseseed: $(c.seed)"
 
