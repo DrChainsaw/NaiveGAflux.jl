@@ -47,6 +47,9 @@ using Test
     @info "Testing iterators"
     include("iterators.jl")
 
+    @info "Testing visualization"
+    include("visualization/callbacks.jl")
+
     @info "Testing README examples"
     include("examples.jl")
 

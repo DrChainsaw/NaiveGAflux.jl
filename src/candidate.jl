@@ -147,6 +147,9 @@ end
 graph(c::CacheCandidate) = graph(c.c)
 
 
+nparams(c::AbstractCandidate) = nparams(graph(c))
+nparams(g::CompGraph) = mapreduce(prod ∘ size, +, params(g).order)
+
 """
     evolvemodel(m::AbstractMutation{CompGraph}, newfields::Function=deepcopy)
 

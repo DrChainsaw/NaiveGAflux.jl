@@ -244,8 +244,6 @@ function mutation(inshape)
     return LogMutation(g -> "Mutate model $(modelname(g))", mall)
 end
 
-nparams(c::AbstractCandidate) = nparams(NaiveGAflux.graph(c))
-nparams(g::CompGraph) = mapreduce(prod ∘ size, +, params(g).order)
 isbig(g) = nparams(g) > 20e7
 
 canaddmaxpool(inshape) = v -> canaddmaxpool(v, inshape)

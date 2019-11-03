@@ -42,10 +42,10 @@ export persist, savemodels
 export AbstractVertexSelection, AllVertices, FilterMutationAllowed
 
 # mutation types
-export AbstractMutation, MutationProbability, WeightedMutationProbability, HighValueMutationProbability, LowValueMutationProbability, MutationList, RecordMutation, LogMutation, MutationFilter, PostMutation, VertexMutation, NoutMutation, AddVertexMutation, RemoveVertexMutation, AddEdgeMutation, RemoveEdgeMutation, KernelSizeMutation, KernelSizeMutation2D, ActivationFunctionMutation, NeuronSelectMutation, select, PostMutation, NeuronSelect, RemoveZeroNout
+export AbstractMutation, MutationProbability, WeightedMutationProbability, HighValueMutationProbability, LowValueMutationProbability, MutationList, RecordMutation, LogMutation, MutationFilter, PostMutation, VertexMutation, NoutMutation, AddVertexMutation, RemoveVertexMutation, AddEdgeMutation, RemoveEdgeMutation, KernelSizeMutation, KernelSizeMutation2D, ActivationFunctionMutation, NeuronSelectMutation, PostMutation, NeuronSelect, RemoveZeroNout
 
 # mutation auxillaries
-export select, NeuronSelect, RemoveZeroNout
+export NeuronSelect, RemoveZeroNout
 
 # architecture spaces
 export AbstractArchSpace, LoggingArchSpace, VertexSpace, ArchSpace, RepeatArchSpace, ListArchSpace, ForkArchSpace, ResidualArchSpace, FunVertex, GpVertex2D
@@ -57,10 +57,13 @@ export BaseLayerSpace, AbstractParSpace, SingletonParSpace, Singleton2DParSpace,
 export AbstractWeightInit, DefaultWeightInit, IdentityWeightInit, PartialIdentityWeightInit, ZeroWeightInit
 
 # functions
-export mutate, allow_mutation, select, check_apply
+export mutate, allow_mutation, select, check_apply, nparams
 
 # Pre-built programs for fitting data
 export AutoFlux
+
+# Visulization
+export PlotFitness, ScatterPop, ScatterOpt, MultiPlot, CbAll
 
 # Examples
 export Cifar10
@@ -73,6 +76,6 @@ include("candidate.jl")
 include("evolve.jl")
 include("iterators.jl")
 include("app/AutoFlux.jl")
-include("examples/Cifar10.jl")
+include("visualize/callbacks.jl")
 
 end # module
