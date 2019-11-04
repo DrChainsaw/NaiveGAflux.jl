@@ -34,7 +34,7 @@ function run_experiment((x,y)::Tuple, plt, sctr; seed=1, nepochs=200)
 
     c = ImageClassifier(popsize=50, seed=seed)
 
-    return fit(c, x, y, trainstrategy=ts, cb=cb, mdir = modeldir)
+    return fit(c, x, y, trainstrategy=ts, fitnesstrategy=fs, cb=cb, mdir = modeldir)
 end
 
 end  # module cifar10
