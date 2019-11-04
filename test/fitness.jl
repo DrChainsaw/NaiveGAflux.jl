@@ -11,6 +11,21 @@
         @test fitness(AccuracyFitness(DummyIter()), identity) == 0.5
     end
 
+    @testset "TrainAccuracyFitness" begin
+        import NaiveGAflux: Train, TrainLoss
+        x = nothing
+        f(x) = [0 1 0; 1 0 0; 0 0 1]
+        y =    [0 0 0; 1 1 0; 0 0 1]
+
+        taf = TrainAccuracyFitness()
+
+        fi = instrument(Train(), taf, f)
+        li = instrument(TrainLoss(), taf, Flux.mse)
+
+        @test li(fi(x), y) == 2//9
+        @test fitness(taf, (args...) -> error("shall not be called")) == 0.5
+    end
+
     @testset "MapFitness" begin
         NaiveGAflux.instrument(::NaiveGAflux.AbstractFunLabel, s::MockFitness, f) = x -> s.f*f(x)
 

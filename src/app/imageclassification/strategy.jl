@@ -95,15 +95,32 @@ struct AccuracyVsSize{T}
     accdigits::Int
 end
 AccuracyVsSize(data, accdigits=3) = AccuracyVsSize(data, accdigits)
-function (f::AccuracyVsSize)()
-    acc = AccuracyFitness(f.data)
-    truncacc = MapFitness(x -> round(x, digits=f.accdigits), acc)
+(f::AccuracyVsSize)() = sizevs(AccuracyFitness(f.data))
+
+function sizevs(f::AbstractFitness, accdigits = 3)
+    truncacc = MapFitness(x -> round(x, digits=accdigits), f)
 
     size = SizeFitness()
-    sizefit = MapFitness(x -> min(10.0^-f.accdigits, 1 / x), size)
+    sizefit = MapFitness(x -> min(10.0^-accdigits, 1 / x), size)
 
     return AggFitness(+, truncacc, sizefit)
 end
+
+"""
+    struct TrainAccuracyVsSize
+    TrainAccuracyVsSize()
+
+Produces an `AbstractFitness` which measures fitness accuracy on training data and based on number of parameters.
+
+The two are combined so that a candidate `a` which achieves higher accuracy rounded to the first `accdigits` digits compared to a candidate `b` will always have a better fitness.
+
+Only if the first `accdigits` of accuracy is the same will the number of parameters determine who has higher fitness.
+
+Beware that fitness as accuracy on training data will make evolution favour overfitted candidates.
+"""
+struct TrainAccuracyVsSize <: AbstractFitnessStrategy end
+fitnessfun(s::TrainAccuracyVsSize, x, y) = x, y, () -> NanGuard(sizevs(TrainAccuracyFitness()))
+
 
 """
     struct TrainStrategy{T} <: AbstractTrainStrategy

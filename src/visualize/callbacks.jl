@@ -89,6 +89,7 @@ function plotfitness(p::ScatterPop, population)
 end
 
 function plotgen(p::ScatterPop, gen=length(p.data))
+    gen == 0 && return p.plotfun()
     data = p.data[gen]
     nverts = data[:,1]
     fits = data[:,2]
@@ -148,6 +149,7 @@ ot(o) = typeof(o)
 
 
 function plotgen(p::ScatterOpt, gen = length(p.data))
+    gen == 0 && return p.plotfun()
     data = p.data[gen]
     fits = data[:,1]
     lrs = data[:,2]

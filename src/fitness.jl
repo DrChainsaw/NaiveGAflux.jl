@@ -41,7 +41,7 @@ function reset!(::AbstractFitness) end
 
 Measure fitness as the accuracy on a dataset.
 
-You probably want to use this with a `FitnessCache`.
+You probably want to use this with a `FitnessCache` or a `CacheCandidate`.
 """
 struct AccuracyFitness <: AbstractFitness
     dataset
@@ -54,6 +54,40 @@ function fitness(s::AccuracyFitness, f)
         cnt += 1
     end
     return acc / cnt
+end
+
+"""
+    mutable struct TrainAccuracyFitness <: AbstractFitness
+    TrainAccuracyFitness(drop=0.5)
+
+Measure fitness as the accuracy on the training data set. Beware of overfitting!
+
+Parameter `drop` determines the fraction of examples to drop for fitness measurement. This mitigates the penalty for newly mutated candidates as the first part of the training examples are not used for fitness.
+
+Advantage vs `AccuracyFitness` is that one does not have to run through another data set. Disadvantage is that evolution will likely favour candidates which overfit.
+"""
+mutable struct TrainAccuracyFitness <: AbstractFitness
+    acc::AbstractArray
+    ŷ::AbstractArray
+    drop::Real
+end
+TrainAccuracyFitness(drop = 0.5) = TrainAccuracyFitness([], [], drop)
+instrument(::Train,s::TrainAccuracyFitness,f) = function(x...)
+    ŷ = f(x...)
+    s.ŷ = ŷ |> cpu
+    return ŷ
+end
+instrument(::TrainLoss,s::TrainAccuracyFitness,f) = function(x...)
+    y = x[2]
+    ret = f(x...)
+    # Assume above call has also been instrument with Train, so now we have ŷ
+    append!(s.acc, Flux.onecold(s.ŷ) .== Flux.onecold(cpu(y)))
+    return ret
+end
+fitness(s::TrainAccuracyFitness, f) = mean(s.acc[max(1, 1+floor(Int, s.drop * length(s.acc))):end])
+function reset!(s::TrainAccuracyFitness)
+    s.acc = []
+    s.ŷ = []
 end
 
 """

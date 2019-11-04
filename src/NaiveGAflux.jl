@@ -24,7 +24,7 @@ const rng_default = Random.GLOBAL_RNG
 const modeldir = "models"
 
 # Fitness
-export fitness, instrument, reset!, AbstractFitness, AccuracyFitness, MapFitness, TimeFitness, SizeFitness, FitnessCache, NanGuard, AggFitness
+export fitness, instrument, reset!, AbstractFitness, AccuracyFitness, TrainAccuracyFitness, MapFitness, TimeFitness, SizeFitness, FitnessCache, NanGuard, AggFitness
 
 # Candidate
 export evolvemodel, AbstractCandidate, CandidateModel, HostCandidate, CacheCandidate
@@ -77,5 +77,7 @@ include("evolve.jl")
 include("iterators.jl")
 include("app/AutoFlux.jl")
 include("visualize/callbacks.jl")
+
+include("examples/Cifar10.jl")
 
 end # module
