@@ -84,7 +84,11 @@ instrument(::TrainLoss,s::TrainAccuracyFitness,f) = function(x...)
     append!(s.acc, Flux.onecold(s.ŷ) .== Flux.onecold(cpu(y)))
     return ret
 end
-fitness(s::TrainAccuracyFitness, f) = mean(s.acc[max(1, 1+floor(Int, s.drop * length(s.acc))):end])
+function fitness(s::TrainAccuracyFitness, f)
+    @assert !isempty(s.acc) "No accuracy metric reported! Please make sure you have instrumented the correct methods and that training has been run." 
+    startind = max(1, 1+floor(Int, s.drop * length(s.acc)))
+    mean(s.acc[startind:end])
+end
 function reset!(s::TrainAccuracyFitness)
     s.acc = []
     s.ŷ = []
