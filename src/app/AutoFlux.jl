@@ -1,5 +1,7 @@
 module AutoFlux
 
+using ..NaiveGAflux
+
 export fit
 export ImageClassification, ImageClassifier
 

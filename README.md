@@ -22,8 +22,17 @@ More concretely, this means train each model for a number of iterations, evaluat
 
 By controlling the number of training iterations before evolving the population, it is possible tune the compromise between fully training each model at the cost of longer time to evolve versus the risk of discarding a model just because it trains slower than the other members.
 
-There currently is no `model = fit(data)` type of method implemented. This design choice was made to not give the false impression that there exists one well researched and near optimal way to use this package. As such, this package in its current state is probably better suited for people who want to mess around with genetic algorithms than it is for people who want to offload the effort of finding a good enough model to the computer.
+Like any self-respecting AutoML-type library, NaiveGAflux provides an application with a deceivingly simple API:
 
+```julia
+using NaiveGAflux.AutoFlux, MLDatasets
+
+models = fit(CIFAR10.traindata())
+```
+
+However, most non-toy uses cases will probably require a dedicated application. NaiveGAflux provides the components to make building it easy and fun!
+
+Tired of tuning hyperparameters? Once you've felt the rush from reasoning about hyper-hyperparameters there is no going back!
 
 This package has the following main components:
 1. [Search spaces](#search-spaces)

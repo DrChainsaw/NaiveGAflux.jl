@@ -65,6 +65,7 @@ function rep_fork_res(s, n, min_rp=1;loglevel=Logging.Debug)
     fork = LoggingArchSpace(loglevel, msgfun, ForkArchSpace(rep, min_rp:3, conf=concconf))
     res = LoggingArchSpace(loglevel, msgfun, ResidualArchSpace(rep, resconf))
     rep = LoggingArchSpace(loglevel, msgfun, rep)
+    # Manical cackling laughter...
     return rep_fork_res(ArchSpace(ParSpace([rep, fork, res])), n-1, 0, loglevel=loglevel)
 end
 

@@ -10,7 +10,7 @@ export run_experiment
 defaultdir(this="CIFAR10") = joinpath(NaiveGAflux.modeldir, this)
 
 """
-    run_experiment((x,y)::Tuple; plt=plot, sctr=scatter, seed=1)
+    run_experiment((x,y)::Tuple; plt=plot, sctr=scatter; seed=1, nepochs=200)
 
 Run experiment for CIFAR10.
 
@@ -23,12 +23,12 @@ julia> using NaiveGAflux, NaiveGAflux.Cifar10, MLDatasets, Plots; Plots.scalefon
 julia> run_experiment(CIFAR10.traindata(), plot, scatter)
 ```
 """
-function run_experiment((x,y)::Tuple, plt, sctr, seed=1, nepochs=200)
+function run_experiment((x,y)::Tuple, plt, sctr; seed=1, nepochs=200)
 
     modeldir = defaultdir()
 
     ts= TrainStrategy(nepochs=nepochs, seed = seed, dataaug=ShiftIterator ∘ FlipIterator)
-    fs = TrainSplitAccuracy(nexamples=1024, batchsize=128)
+    fs = TrainSplitAccuracy(nexamples=2048, batchsize=128)
 
     cb = CbAll(persist, MultiPlot(display ∘ plt, PlotFitness(plt, modeldir), ScatterPop(sctr, modeldir), ScatterOpt(sctr, modeldir)))
 

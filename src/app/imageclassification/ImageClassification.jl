@@ -40,22 +40,21 @@ ImageClassifier(;popsize=50, seed=1, newpop=false) = ImageClassifier(popsize, se
 Return a population of image classifiers fitted to the given data.
 
 # Arguments
--`c::ImageClassifier`: Type of models to train. See [`ImageClassifier`](@ref).
+- `c::ImageClassifier`: Type of models to train. See [`ImageClassifier`](@ref).
 
--`x`: Input data. Must be a 4D array.
+- `x`: Input data. Must be a 4D array.
 
--`y`: Output data. Can either be an 1D array in which case it is assumed that `y` is the raw labes (e.g. `["cat", "dog", "cat", ...]`) or a 2D array in which case it is assumed that `y` is one-hot encoded.
+- `y`: Output data. Can either be an 1D array in which case it is assumed that `y` is the raw labes (e.g. `["cat", "dog", "cat", ...]`) or a 2D array in which case it is assumed that `y` is one-hot encoded.
 
--`cb=identity`: Callback function. After training and evaluating each generation but before evolution `cb(population)` will be called where `population` is the array of candidates. Useful for persistence and plotting.
+- `cb=identity`: Callback function. After training and evaluating each generation but before evolution `cb(population)` will be called where `population` is the array of candidates. Useful for persistence and plotting.
 
--`fitnesstrategy::AbstractFitnessStrategy=TrainSplitAccuracy()`: Strategy for fitness. See: [`ImageClassification.AbstractFitnessStrategy`](@ref).
+- `fitnesstrategy::AbstractFitnessStrategy=TrainSplitAccuracy()`: Strategy for fitness. See: [`ImageClassification.AbstractFitnessStrategy`](@ref).
 
--`trainstrategy::AbstractTrainStrategy=TrainStrategy()`: Strategy for training. See [`ImageClassification.AbstractTrainStrategy`](@ref)
+- `trainstrategy::AbstractTrainStrategy=TrainStrategy()`: Strategy for training. See [`ImageClassification.AbstractTrainStrategy`](@ref)
 
--`evolutionstrategy::AbstractEvolutionStrategy=EliteAndSusSelection(popsize=c.popsize)`: Strategy for evolution. See [`ImageClassification.AbstractEvolutionStrategy`](@ref)
+- `evolutionstrategy::AbstractEvolutionStrategy=EliteAndSusSelection(popsize=c.popsize)`: Strategy for evolution. See [`ImageClassification.AbstractEvolutionStrategy`](@ref)
 
--`mdir`: Load models from this directory if present.
-    -If persitence is used (e.g. by providing `cb=persist`) candidates will be stored in this directory.
+- `mdir`: Load models from this directory if present. If persistence is used (e.g. by providing `cb=persist`) candidates will be stored in this directory.
 """
 function AutoFlux.fit(c::ImageClassifier, x, y; cb=identity, fitnesstrategy::AbstractFitnessStrategy=TrainSplitAccuracy(), trainstrategy::AbstractTrainStrategy=TrainStrategy(), evolutionstrategy::AbstractEvolutionStrategy=EliteAndSusSelection(popsize=c.popsize), mdir)
     ndims(x) == 4 || error("Must use 4D data, got $(ndims(x))D data")
@@ -67,29 +66,28 @@ function AutoFlux.fit(c::ImageClassifier, x, y; cb=identity, fitnesstrategy::Abs
 end
 
 """
-    fit(c::ImageClassifier, fit_iter, fitnessgen, evostrategy; cb = identity, mdir)
+    fit(c::ImageClassifier, fit_iter, fitnessgen, evostrategy; cb, mdir)
 
 Return a population of image classifiers fitted to the given data.
 
 Lower level version of `fit` to use when `fit(c::ImageClassifier, x, y)` doesn't cut it.
 
 # Arguments
--`c::ImageClassifier`: Type of models to train. See [`ImageClassifier`](@ref).
+- `c::ImageClassifier`: Type of models to train. See [`ImageClassifier`](@ref).
 
-- `fit_iter`: Iterator for fitting the models. Expected to in turn produce iterators over some subset of the training data. The produced iterators are in turn expected to produce batches of input output tuples. See [`RepeatPartitionIterator`](@ref) for an example an iterator which fits the bill.
+- `fit_iter`: Iterator for fitting the models. Expected to produce iterators over some subset of the training data. The produced iterators are in turn expected to produce batches of input-output tuples. See [`RepeatPartitionIterator`](@ref) for an example an iterator which fits the bill.
 
 - `fitnessgen`: Return an `AbstractFitness` when called with no arguments. May or may not produce the same instance depending on whether stateful fitness is used.
 
 - `evostrategy::AbstractEvolution`: Evolution strategy to use. Population `p` will be evolved through `p = evolve!(evostrategy, p)`.
 
--`cb=identity`: Callback function. After training and evaluating each generation but before evolution `cb(population)` will be called where `population` is the array of candidates. Useful for persistence and plotting.
+- `cb=identity`: Callback function. After training and evaluating each generation but before evolution `cb(population)` will be called where `population` is the array of candidates. Useful for persistence and plotting.
 
--`mdir`: Load models from this directory if present.
-    -If persitence is used (e.g. by providing `cb=persist`) candidates will be stored in this directory.
+- `mdir`: Load models from this directory if present. If persistence is used (e.g. by providing `cb=persist`) candidates will be stored in this directory.
 """
 function AutoFlux.fit(c::ImageClassifier, fit_iter, fitnessgen, evostrategy::AbstractEvolution; cb = identity, mdir)
     Random.seed!(NaiveGAflux.rng_default, c.seed)
-    @info "Start experiment with baseseed: $(c.seed)"
+    @info "Start training with baseseed: $(c.seed)"
 
     insize, outsize = size(fit_iter)
 
@@ -104,10 +102,11 @@ function AutoFlux.fit(c::ImageClassifier, fit_iter, fitnessgen, evostrategy::Abs
 end
 
 function evolutionloop(population, evostrategy, trainingiter, cb)
+    firstgctime = nothing
     for (gen, iter) in enumerate(trainingiter)
         @info "Begin generation $gen"
 
-        for (i, cand) in enumerate(population)
+        val, t, bytes, gctime = @timed for (i, cand) in enumerate(population)
             @info "\tTrain model $i with $(nv(NaiveGAflux.graph(cand))) vertices"
             Flux.train!(cand, iter)
         end
@@ -117,6 +116,12 @@ function evolutionloop(population, evostrategy, trainingiter, cb)
             @info "\tFitness model $i: $(fitness(cand))"
         end
         cb(population)
+
+        if firstgctime == nothing
+            firstgctime = gctime
+        else
+            @info "gc overhead increase: $((gctime - firstgctime) / t)"
+        end
 
         population = evolve!(evostrategy, population)
     end

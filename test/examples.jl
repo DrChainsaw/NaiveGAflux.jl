@@ -18,11 +18,11 @@
     @test nv.(models) == [3, 5, 3, 4, 5]
 
     # Workaround as losses fail with Flux.OneHotMatrix on Appveyor x86 (works everywhere else)
-    onehot(y) = Float32.(Flux.onehotbatch(y, 0:5))
+    onehot(y) = Float32.(Flux.onehotbatch(y, 1:nlabels))
 
     # Some dummy data just to make stuff run
     batchsize = 4
-    dataset = (randn(ninputs, batchsize), onehot(rand(1:nlabels, batchsize), 1:nlabels))
+    dataset = (randn(ninputs, batchsize), onehot(rand(1:nlabels, batchsize)))
 
     # Not recommended to measure fitness on the training data for real usage.
     fitfun = AccuracyFitness([dataset])
