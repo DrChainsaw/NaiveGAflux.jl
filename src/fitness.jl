@@ -85,7 +85,7 @@ instrument(::TrainLoss,s::TrainAccuracyFitness,f) = function(x...)
     return ret
 end
 function fitness(s::TrainAccuracyFitness, f)
-    @assert !isempty(s.acc) "No accuracy metric reported! Please make sure you have instrumented the correct methods and that training has been run." 
+    @assert !isempty(s.acc) "No accuracy metric reported! Please make sure you have instrumented the correct methods and that training has been run."
     startind = max(1, 1+floor(Int, s.drop * length(s.acc)))
     mean(s.acc[startind:end])
 end
@@ -143,9 +143,9 @@ end
 
 Measure fitness as the total number of parameters in the function to be evaluated.
 
-Note: relies on Flux.params which does not work for function which have been instrumented through [`instrument`](@ref).
+Note: relies on Flux.params which does not work for functions which have been instrumented through [`instrument`](@ref).
 
-To handle intrumentation, an attempt to extract the size is also made when intrumenting for `Validation`. Whether this works or not depends on the order in which fitness functions are combined.
+To handle intrumentation, an attempt to extract the size is also made when instrumenting for `Validation`. Whether this works or not depends on the order in which fitness functions are combined.
 """
 mutable struct SizeFitness <: AbstractFitness
     size::Int

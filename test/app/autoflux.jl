@@ -2,7 +2,7 @@
 
     @testset "ImageClassifier smoketest" begin
         using NaiveGAflux.AutoFlux
-        import NaiveGAflux.AutoFlux.ImageClassification: TrainSplitAccuracy, TrainStrategy
+        import NaiveGAflux.AutoFlux.ImageClassification: TrainSplitAccuracy, TrainStrategy, TrainAccuracyVsSize
         using Random
 
         # Workaround as losses fail with Flux.OneHotMatrix on Appveyor x86 (works everywhere else)
@@ -19,6 +19,11 @@
         dummydir = joinpath(NaiveGAflux.modeldir, "ImageClassifier_smoketest")
 
         pop = @test_logs (:info, "Begin generation 1") (:info, "Begin generation 2") (:info, "Begin generation 3") (:info, r"Mutate model") match_mode=:any fit(c, x, y, fitnesstrategy=f, trainstrategy=t, mdir = dummydir)
+
+        @test length(pop) == c.popsize
+
+        # Now try TrainAccuracyVsSize
+        pop = @test_logs (:info, "Begin generation 1") (:info, "Begin generation 2") (:info, "Begin generation 3") (:info, r"Mutate model") match_mode=:any fit(c, x, y, fitnesstrategy=TrainAccuracyVsSize(), trainstrategy=t, mdir = dummydir)
 
         @test length(pop) == c.popsize
 
