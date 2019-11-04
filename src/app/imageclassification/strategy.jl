@@ -146,7 +146,7 @@ function trainiter(s::TrainStrategy, x, y)
 end
 
 batch(x, batchsize, seed) = ShuffleIterator(x, batchsize, MersenneTwister(seed))
-dataiter(x,y::AbstractArray{T, 1}, bs, s, wrap) where T = zip(wrap(batch(x, bs, s)), Flux.onehotbatch(batch(y, bs, s), unique(y)))
+dataiter(x,y::AbstractArray{T, 1}, bs, s, wrap) where T = zip(wrap(batch(x, bs, s)), Flux.onehotbatch(batch(y, bs, s), sort(unique(y))))
 dataiter(x,y::AbstractArray{T, 2}, bs, s, wrap) where T = zip(wrap(batch(x, bs, s)), batch(y, bs, s))
 
 """
