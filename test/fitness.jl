@@ -46,7 +46,7 @@
 
     @testset "TimeFitness" begin
         import NaiveGAflux: Train, Validate
-        tf = TimeFitness(Train())
+        tf = TimeFitness(Train(), 1)
         function sleepret(t)
             sleep(t)
             return t
@@ -54,6 +54,8 @@
 
         @test fitness(tf, identity) == 0
 
+        # First call doesn't count
+        @test instrument(Train(), tf, sleepret)(0.5) == 0.5
         @test instrument(Train(), tf, sleepret)(0.02) == 0.02
         @test instrument(Validate(), tf, sleepret)(0.5) == 0.5
         @test instrument(Train(), tf, sleepret)(0.04) == 0.04

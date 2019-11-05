@@ -110,23 +110,29 @@ reset!(s::MapFitness) = reset!(s.base)
 
 """
     TimeFitness{T} <: AbstractFitness where T <: AbstractFunLabel
-    TimeFitness(t::T) where T <: AbstractFunLabel
+    TimeFitness(t::T, nskip=0) where T <: AbstractFunLabel
 
 Measure fitness as time to evaluate a function.
+
+Time for first `nskip` evaluations will be discarded.
 
 Function needs to be instrumented using [`instrument`](@ref).
 """
 mutable struct TimeFitness{T} <: AbstractFitness where T <: AbstractFunLabel
     totaltime
-    neval
+    neval::Int
+    nskip::Int
 end
-TimeFitness(t::T) where T = TimeFitness{T}(0.0, 0)
-fitness(s::TimeFitness, f) = s.neval == 0 ? 0 : s.totaltime / s.neval
+TimeFitness(t::T, nskip = 0) where T = TimeFitness{T}(0.0, 0, nskip)
+fitness(s::TimeFitness, f) = s.neval <= s.nskip ? 0 : s.totaltime / (s.neval-s.nskip)
 
 function instrument(::T, s::TimeFitness{T}, f) where T <: AbstractFunLabel
     return function(x...)
-        res, t = @timed f(x...)
-        s.totaltime += t
+        res, t, bytes, gctime = @timed f(x...)
+        # Skip first time(s) e.g. due to compilation
+        if s.neval >= s.nskip
+            s.totaltime += t - gctime
+        end
         s.neval += 1
         return res
     end

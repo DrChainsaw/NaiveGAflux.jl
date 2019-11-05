@@ -220,10 +220,12 @@ The following basic mutation operations are currently supported:
 1. Change the output size of vertices using `NoutMutation`.
 2. Remove vertices using `RemoveVertexMutation`.
 3. Add vertices using `AddVertexMutation`.
-4. Mutation of kernel size for conv layers using `KernelSizeMutation`.
-5. Change of activation function using `ActivationFunctionMutation`.
+4. Remove edges between vertices using `RemoveEdgeMutation`.
+5. Add edges between vertices using `AddEdgeMutation`.
+6. Mutation of kernel size for conv layers using `KernelSizeMutation`.
+7. Change of activation function using `ActivationFunctionMutation`.
 
-It is also possible to implement mutation of learning rate and optimizer using `evolve_candidate`, but a convenient way to do this still TBA, see Cifar10 example in the meantime.
+It is also possible to implement mutation of learning rate and optimizer using `evolve_candidate`, but a convenient way to do this still TBA, see `AutoFlux.ImageClassification.evolvecandidate` in the meantime.
 
 In addition to the basic mutation operations, there are numerous utilities for adding behaviour and convenience. Here are a few examples:
 

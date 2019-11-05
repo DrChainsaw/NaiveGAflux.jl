@@ -107,7 +107,7 @@ function sizevs(f::AbstractFitness, accdigits = 3)
 end
 
 """
-    struct TrainAccuracyVsSize
+    struct TrainAccuracyVsSize <: AbstractFitnessStrategy
     TrainAccuracyVsSize()
 
 Produces an `AbstractFitness` which measures fitness accuracy on training data and based on number of parameters.
@@ -121,6 +121,29 @@ Beware that fitness as accuracy on training data will make evolution favour over
 struct TrainAccuracyVsSize <: AbstractFitnessStrategy end
 fitnessfun(s::TrainAccuracyVsSize, x, y) = x, y, () -> NanGuard(sizevs(TrainAccuracyFitness()))
 
+"""
+    struct PruneLongRunning{T <: AbstractFitnessStrategy, D <: Real} <: AbstractFitnessStrategy
+    PruneLongRunning(s::AbstractFitnessStrategy, t1, t2)
+
+Produces an `AbstractFitness` generator which multiplies the fitness produced by `s` with a factor `f < 1` if training time takes longer than `t1`. If training time takes longer than t2, fitness will be zero.
+
+As the name suggests, the purpose is to get rid of models which take too long to train.
+"""
+struct PruneLongRunning{T <: AbstractFitnessStrategy, D <: Real} <: AbstractFitnessStrategy
+    s::T
+    t1::D
+    t2::D
+end
+function fitnessfun(s::PruneLongRunning, x, y)
+    x, y, fitgen = fitnessfun(s.s, x, y)
+    return x, y, () -> prunelongrunning(fitgen(), s.t1, s.t2)
+end
+
+function prunelongrunning(s::AbstractFitness, t1, t2)
+    mapping(t) = 1 - (t - t1) / (t2 - t1)
+    scaled = MapFitness(t -> clamp(mapping(t), 0, 1), TimeFitness(NaiveGAflux.Train(), 1))
+    return AggFitness(*, scaled, s)
+end
 
 """
     struct TrainStrategy{T} <: AbstractTrainStrategy
