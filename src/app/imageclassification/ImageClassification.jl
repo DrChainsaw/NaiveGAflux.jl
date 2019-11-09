@@ -111,13 +111,13 @@ function evolutionloop(population, evostrategy, trainingiter, cb, gcthreshold)
         @info "Begin generation $gen"
 
         val, t, bytes, gctime = @timed for (i, cand) in enumerate(population)
-            @info "\tTrain model $i with $(nv(NaiveGAflux.graph(cand))) vertices"
+            @info "\tTrain candidate $i with $(nv(NaiveGAflux.graph(cand))) vertices"
             Flux.train!(cand, iter)
         end
 
         # TODO: Bake into evolution? Would anyways like to log selected models...
         for (i, cand) in enumerate(population)
-            @info "\tFitness model $i: $(fitness(cand))"
+            @info "\tFitness candidate $i: $(fitness(cand))"
         end
         cb(population)
 
@@ -131,7 +131,9 @@ end
 
 function checkgctime(firstgctime, time, gctime, threshold)
     firstgctime == nothing && return gctime, true
-    return firstgctime, (gctime - firstgctime) / time < threshold
+    gcoh = (gctime - firstgctime) / time
+    @info "GC overhead increase: $gcoh"
+    return firstgctime,  gcoh < threshold
 end
 
 function initial_models(nr, mdir, newpop, fitnessgen, insize, outsize)

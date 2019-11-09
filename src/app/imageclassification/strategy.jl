@@ -94,10 +94,10 @@ struct AccuracyVsSize{T}
     data::T
     accdigits::Int
 end
-AccuracyVsSize(data, accdigits=3) = AccuracyVsSize(data, accdigits)
+AccuracyVsSize(data, accdigits=2) = AccuracyVsSize(data, accdigits)
 (f::AccuracyVsSize)() = sizevs(AccuracyFitness(f.data))
 
-function sizevs(f::AbstractFitness, accdigits = 3)
+function sizevs(f::AbstractFitness, accdigits = 2)
     truncacc = MapFitness(x -> round(x, digits=accdigits), f)
 
     size = SizeFitness()

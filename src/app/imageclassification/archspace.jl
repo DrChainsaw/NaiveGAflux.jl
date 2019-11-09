@@ -26,7 +26,7 @@ function initial_archspace(inshape, outsize)
     red2 = ListArchSpace(rfr2, maxpoolvertex)
 
     # How many times can shape be reduced by a factor 2
-    maxreps = Int.(min(6, log2(minimum(inshape))))
+    maxreps = min(6, floor(Int, log2(minimum(inshape))))
     # Block 1 (large kernels and small sizes) repeated up to 2 times
     block1 = RepeatArchSpace(red1, 1:maxreps ÷ 2)
     # And the same for block type 2

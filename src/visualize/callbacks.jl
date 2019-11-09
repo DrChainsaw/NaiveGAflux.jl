@@ -94,7 +94,7 @@ function plotgen(p::ScatterPop, gen=length(p.data))
     nverts = data[:,1]
     fits = data[:,2]
     npars = data[:,3]
-    return p.plotfun(nverts, fits, zcolor=npars/1e6, m=(:heat, 0.8), xlabel="Number of vertices", ylabel="Fitness", colorbar_title="Number of parameters (1e6)", label="")
+    return p.plotfun(nverts, fits, zcolor=log10.(npars), m=(:heat, 0.8), xlabel="Number of vertices", ylabel="Fitness", colorbar_title="Number of parameters (log10)", label="")
 end
 
 function(p::ScatterPop)(population)
