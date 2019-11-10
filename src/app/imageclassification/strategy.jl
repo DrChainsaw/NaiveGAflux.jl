@@ -299,7 +299,11 @@ end
 nmaxpool(vs) = sum(endswith.(name.(vs), "maxpool"))
 
 maxkernelsize(inshape) = v -> maxkernelsize(v, inshape)
-maxkernelsize(v::AbstractVertex, inshape) = @. inshape / 2^nmaxpool(flatten(v)) + 1
+function maxkernelsize(v::AbstractVertex, inshape)
+    ks = inshape .÷ 2^nmaxpool(flatten(v))
+    # Kernel sizes must be odd due to CuArrays issue# 356 (odd kernel size => symmetric padding)
+    return @. ks - !isodd(ks)
+ end
 
 Flux.mapchildren(f, aa::AbstractArray{<:Integer, 1}) = aa
 
