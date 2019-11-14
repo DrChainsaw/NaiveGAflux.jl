@@ -4,7 +4,7 @@
 [![Build Status](https://ci.appveyor.com/api/projects/status/github/DrChainsaw/NaiveGAflux.jl?svg=true)](https://ci.appveyor.com/project/DrChainsaw/NaiveGAflux-jl)
 [![Codecov](https://codecov.io/gh/DrChainsaw/NaiveGAflux.jl/branch/master/graph/badge.svg)](https://codecov.io/gh/DrChainsaw/NaiveGAflux.jl)
 
-Naive neural architecture search for [Flux](https://github.com/FluxML/Flux.jl) models using genetic algorithms.
+Neural architecture search for [Flux](https://github.com/FluxML/Flux.jl) models using genetic algorithms.
 
 A marketing person might describe it as "practical proxyless NAS using an unrestricted search space".
 
@@ -17,6 +17,10 @@ Pkg.add("https://github.com/DrChainsaw/NaiveGAflux.jl")
 ```
 
 The basic idea is to create not just one model, but a population of several candidate models with different hyperparameters. The whole population is then evolved while the models are being trained.
+
+| MNIST                                 | CIFAR10                                |
+|:-------------------------------------:|:--------------------------------------:|
+| <img src="gif/MNIST.gif" width="500"> | <img src="gif/CIFAR10.gif" width="500">  |
 
 More concretely, this means train each model for a number of iterations, evaluate the fitness of each model, select the ones with highest fitness, apply random mutations (e.g. add/remove neurons/layers) to some of them and repeat until a model with the desired fitness has been produced.
 
