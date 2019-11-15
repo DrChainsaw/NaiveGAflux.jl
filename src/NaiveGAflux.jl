@@ -65,9 +65,6 @@ export AutoFlux
 # Visulization
 export PlotFitness, ScatterPop, ScatterOpt, MultiPlot, CbAll
 
-# Examples
-export Cifar10, Mnist
-
 include("util.jl")
 include("archspace.jl")
 include("mutation.jl")
@@ -77,8 +74,5 @@ include("evolve.jl")
 include("iterators.jl")
 include("app/AutoFlux.jl")
 include("visualize/callbacks.jl")
-
-include("examples/Cifar10.jl")
-include("examples/Mnist.jl")
 
 end # module

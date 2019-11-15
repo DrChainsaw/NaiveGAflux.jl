@@ -16,7 +16,7 @@ julia> using NaiveGAflux, Plots
 
 julia> gr();
 
-julia> run_experiment(50, iterators(CIFAR10.traindata())...; cb=PlotFitness(plot));
+julia> cb=PlotFitness(plot);
 ```
 """
 struct PlotFitness
@@ -153,15 +153,15 @@ function plotgen(p::ScatterOpt, gen = length(p.data))
     data = p.data[gen]
     fits = data[:,1]
     lrs = data[:,2]
-    ots = data[:,3]
+    ots = string.(data[:,3])
 
-    uots = unique(ots)
+    uots = sort(unique(ots))
     inds = map(o -> o .== ots, uots)
 
     fitso = map(indv -> fits[indv], inds)
     lrso = map(indv -> log10.(lrs[indv]), inds)
 
-    return p.plotfun(lrso, fitso, xlabel="Learning rate (log10)", ylabel="Fitness", label=string.(uots), legend=:outerright, legendfontsize=5)
+    return p.plotfun(lrso, fitso, xlabel="Learning rate (log10)", ylabel="Fitness", label=uots, legend=:outerright, legendfontsize=5)
 end
 
 function(p::ScatterOpt)(population)

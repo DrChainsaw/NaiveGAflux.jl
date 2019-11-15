@@ -148,7 +148,7 @@ end
 """
     struct TrainStrategy{T} <: AbstractTrainStrategy
     TrainStrategy(nepochs, batchsize, nbatches_per_gen, seed, dataaug)
-    TrainStrategy(;nepochs=200, batchsize=64, nbatches_per_gen=400, seed=123, dataaug=identity)
+    TrainStrategy(;nepochs=200, batchsize=32, nbatches_per_gen=400, seed=123, dataaug=identity)
 
 Standard training strategy. Data is cycled `nepochs` times in partitions of `nbatches_per_gen` and batchsize of `batchsize` each generation using a [`RepeatPartitionIterator`](@ref).
 
@@ -161,7 +161,7 @@ struct TrainStrategy{T} <: AbstractTrainStrategy
     seed::Int
     dataaug::T
 end
-TrainStrategy(;nepochs=200, batchsize=64, nbatches_per_gen=400, seed=123, dataaug=identity) = TrainStrategy(nepochs, batchsize, nbatches_per_gen, seed, dataaug)
+TrainStrategy(;nepochs=200, batchsize=32, nbatches_per_gen=400, seed=123, dataaug=identity) = TrainStrategy(nepochs, batchsize, nbatches_per_gen, seed, dataaug)
 function trainiter(s::TrainStrategy, x, y)
     baseiter = dataiter(x, y, s.batchsize, s.seed, s.dataaug)
     epochiter = Iterators.cycle(baseiter, s.nepochs)
