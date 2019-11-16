@@ -4,7 +4,7 @@
 [![Build Status](https://ci.appveyor.com/api/projects/status/github/DrChainsaw/NaiveGAflux.jl?svg=true)](https://ci.appveyor.com/project/DrChainsaw/NaiveGAflux-jl)
 [![Codecov](https://codecov.io/gh/DrChainsaw/NaiveGAflux.jl/branch/master/graph/badge.svg)](https://codecov.io/gh/DrChainsaw/NaiveGAflux.jl)
 
-Naive neural architecture search for [Flux](https://github.com/FluxML/Flux.jl) models using genetic algorithms.
+Neural architecture search for [Flux](https://github.com/FluxML/Flux.jl) models using genetic algorithms.
 
 A marketing person might describe it as "practical proxyless NAS using an unrestricted search space".
 
@@ -18,12 +18,25 @@ Pkg.add("https://github.com/DrChainsaw/NaiveGAflux.jl")
 
 The basic idea is to create not just one model, but a population of several candidate models with different hyperparameters. The whole population is then evolved while the models are being trained.
 
+| MNIST                                 | CIFAR10                                |
+|:-------------------------------------:|:--------------------------------------:|
+| <img src="gif/MNIST.gif" width="500"> | <img src="gif/CIFAR10.gif" width="500">  |
+
 More concretely, this means train each model for a number of iterations, evaluate the fitness of each model, select the ones with highest fitness, apply random mutations (e.g. add/remove neurons/layers) to some of them and repeat until a model with the desired fitness has been produced.
 
 By controlling the number of training iterations before evolving the population, it is possible tune the compromise between fully training each model at the cost of longer time to evolve versus the risk of discarding a model just because it trains slower than the other members.
 
-There currently is no `model = fit(data)` type of method implemented. This design choice was made to not give the false impression that there exists one well researched and near optimal way to use this package. As such, this package in its current state is probably better suited for people who want to mess around with genetic algorithms than it is for people who want to offload the effort of finding a good enough model to the computer.
+Like any self-respecting AutoML-type library, NaiveGAflux provides an application with a deceivingly simple API:
 
+```julia
+using NaiveGAflux.AutoFlux, MLDatasets
+
+models = fit(CIFAR10.traindata())
+```
+
+However, most non-toy uses cases will probably require a dedicated application. NaiveGAflux provides the components to make building it easy and fun!
+
+Tired of tuning hyperparameters? Once you've felt the rush from reasoning about hyper-hyperparameters there is no going back!
 
 This package has the following main components:
 1. [Search spaces](#search-spaces)
@@ -211,10 +224,12 @@ The following basic mutation operations are currently supported:
 1. Change the output size of vertices using `NoutMutation`.
 2. Remove vertices using `RemoveVertexMutation`.
 3. Add vertices using `AddVertexMutation`.
-4. Mutation of kernel size for conv layers using `KernelSizeMutation`.
-5. Change of activation function using `ActivationFunctionMutation`.
+4. Remove edges between vertices using `RemoveEdgeMutation`.
+5. Add edges between vertices using `AddEdgeMutation`.
+6. Mutation of kernel size for conv layers using `KernelSizeMutation`.
+7. Change of activation function using `ActivationFunctionMutation`.
 
-It is also possible to implement mutation of learning rate and optimizer using `evolve_candidate`, but a convenient way to do this still TBA, see Cifar10 example in the meantime.
+It is also possible to implement mutation of learning rate and optimizer using `evolve_candidate`, but a convenient way to do this still TBA, see `AutoFlux.ImageClassification.evolvecandidate` in the meantime.
 
 In addition to the basic mutation operations, there are numerous utilities for adding behaviour and convenience. Here are a few examples:
 

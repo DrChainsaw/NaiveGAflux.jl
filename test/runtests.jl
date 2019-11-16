@@ -47,10 +47,12 @@ using Test
     @info "Testing iterators"
     include("iterators.jl")
 
+    @info "Testing visualization"
+    include("visualization/callbacks.jl")
+
     @info "Testing README examples"
     include("examples.jl")
 
-    @info "Testing CIFAR10 example"
-    include("examples/Cifar10.jl")
-
+    @info "Testing AutoFlux"
+    include("app/autoflux.jl")
 end

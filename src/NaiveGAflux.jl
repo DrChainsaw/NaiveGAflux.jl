@@ -5,8 +5,16 @@ using Reexport
 using Random
 using Logging
 using Statistics
-using Serialization
+
 using Setfield
+
+# For temporary storage of program state for pause/resume type of operations
+using Serialization
+
+# For longer term storage of models
+using FileIO
+using JLD2
+
 
 if Flux.has_cuarrays()
     using CuArrays
@@ -16,7 +24,7 @@ const rng_default = Random.GLOBAL_RNG
 const modeldir = "models"
 
 # Fitness
-export fitness, instrument, reset!, AbstractFitness, AccuracyFitness, MapFitness, TimeFitness, SizeFitness, FitnessCache, NanGuard, AggFitness
+export fitness, instrument, reset!, AbstractFitness, AccuracyFitness, TrainAccuracyFitness, MapFitness, TimeFitness, SizeFitness, FitnessCache, NanGuard, AggFitness
 
 # Candidate
 export evolvemodel, AbstractCandidate, CandidateModel, HostCandidate, CacheCandidate
@@ -25,16 +33,19 @@ export evolvemodel, AbstractCandidate, CandidateModel, HostCandidate, CacheCandi
 export evolve!, AbstractEvolution, NoOpEvolution, AfterEvolution, ResetAfterEvolution, EliteSelection, SusSelection, CombinedEvolution, EvolveCandidates
 
 # misc types
-export Probability, MutationShield, ApplyIf, RemoveIfSingleInput, RepeatPartitionIterator, MapIterator, GpuIterator, BatchIterator, FlipIterator, ShiftIterator, ShuffleIterator, PersistentArray, persist
+export Probability, MutationShield, ApplyIf, RemoveIfSingleInput, RepeatPartitionIterator, MapIterator, GpuIterator, BatchIterator, FlipIterator, ShiftIterator, ShuffleIterator, PersistentArray
+
+# Persistence
+export persist, savemodels
 
 # Vertex selection types
 export AbstractVertexSelection, AllVertices, FilterMutationAllowed
 
 # mutation types
-export AbstractMutation, MutationProbability, WeightedMutationProbability, HighValueMutationProbability, LowValueMutationProbability, MutationList, RecordMutation, LogMutation, MutationFilter, PostMutation, VertexMutation, NoutMutation, AddVertexMutation, RemoveVertexMutation, AddEdgeMutation, RemoveEdgeMutation, KernelSizeMutation, KernelSizeMutation2D, ActivationFunctionMutation, NeuronSelectMutation, select, PostMutation, NeuronSelect, RemoveZeroNout
+export AbstractMutation, MutationProbability, WeightedMutationProbability, HighValueMutationProbability, LowValueMutationProbability, MutationList, RecordMutation, LogMutation, MutationFilter, PostMutation, VertexMutation, NoutMutation, AddVertexMutation, RemoveVertexMutation, AddEdgeMutation, RemoveEdgeMutation, KernelSizeMutation, KernelSizeMutation2D, ActivationFunctionMutation, NeuronSelectMutation, PostMutation, NeuronSelect, RemoveZeroNout
 
 # mutation auxillaries
-export select, NeuronSelect, RemoveZeroNout
+export NeuronSelect, RemoveZeroNout
 
 # architecture spaces
 export AbstractArchSpace, LoggingArchSpace, VertexSpace, ArchSpace, RepeatArchSpace, ListArchSpace, ForkArchSpace, ResidualArchSpace, FunVertex, GpVertex2D
@@ -46,10 +57,13 @@ export BaseLayerSpace, AbstractParSpace, SingletonParSpace, Singleton2DParSpace,
 export AbstractWeightInit, DefaultWeightInit, IdentityWeightInit, PartialIdentityWeightInit, ZeroWeightInit
 
 # functions
-export mutate, allow_mutation, select, check_apply
+export mutate, allow_mutation, select, check_apply, nparams
 
-# Examples
-export Cifar10
+# Pre-built programs for fitting data
+export AutoFlux
+
+# Visulization
+export PlotFitness, ScatterPop, ScatterOpt, MultiPlot, CbAll
 
 include("util.jl")
 include("archspace.jl")
@@ -58,6 +72,7 @@ include("fitness.jl")
 include("candidate.jl")
 include("evolve.jl")
 include("iterators.jl")
-include("examples/Cifar10.jl")
+include("app/AutoFlux.jl")
+include("visualize/callbacks.jl")
 
 end # module

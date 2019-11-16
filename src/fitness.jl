@@ -41,7 +41,7 @@ function reset!(::AbstractFitness) end
 
 Measure fitness as the accuracy on a dataset.
 
-You probably want to use this with a `FitnessCache`.
+You probably want to use this with a `FitnessCache` or a `CacheCandidate`.
 """
 struct AccuracyFitness <: AbstractFitness
     dataset
@@ -54,6 +54,44 @@ function fitness(s::AccuracyFitness, f)
         cnt += 1
     end
     return acc / cnt
+end
+
+"""
+    mutable struct TrainAccuracyFitness <: AbstractFitness
+    TrainAccuracyFitness(drop=0.5)
+
+Measure fitness as the accuracy on the training data set. Beware of overfitting!
+
+Parameter `drop` determines the fraction of examples to drop for fitness measurement. This mitigates the penalty for newly mutated candidates as the first part of the training examples are not used for fitness.
+
+Advantage vs `AccuracyFitness` is that one does not have to run through another data set. Disadvantage is that evolution will likely favour candidates which overfit.
+"""
+mutable struct TrainAccuracyFitness <: AbstractFitness
+    acc::AbstractArray
+    ŷ::AbstractArray
+    drop::Real
+end
+TrainAccuracyFitness(drop = 0.5) = TrainAccuracyFitness([], [], drop)
+instrument(::Train,s::TrainAccuracyFitness,f) = function(x...)
+    ŷ = f(x...)
+    s.ŷ = ŷ |> cpu
+    return ŷ
+end
+instrument(::TrainLoss,s::TrainAccuracyFitness,f) = function(x...)
+    y = x[2]
+    ret = f(x...)
+    # Assume above call has also been instrument with Train, so now we have ŷ
+    append!(s.acc, Flux.onecold(s.ŷ) .== Flux.onecold(cpu(y)))
+    return ret
+end
+function fitness(s::TrainAccuracyFitness, f)
+    @assert !isempty(s.acc) "No accuracy metric reported! Please make sure you have instrumented the correct methods and that training has been run."
+    startind = max(1, 1+floor(Int, s.drop * length(s.acc)))
+    mean(s.acc[startind:end])
+end
+function reset!(s::TrainAccuracyFitness)
+    s.acc = []
+    s.ŷ = []
 end
 
 """
@@ -72,23 +110,29 @@ reset!(s::MapFitness) = reset!(s.base)
 
 """
     TimeFitness{T} <: AbstractFitness where T <: AbstractFunLabel
-    TimeFitness(t::T) where T <: AbstractFunLabel
+    TimeFitness(t::T, nskip=0) where T <: AbstractFunLabel
 
 Measure fitness as time to evaluate a function.
+
+Time for first `nskip` evaluations will be discarded.
 
 Function needs to be instrumented using [`instrument`](@ref).
 """
 mutable struct TimeFitness{T} <: AbstractFitness where T <: AbstractFunLabel
     totaltime
-    neval
+    neval::Int
+    nskip::Int
 end
-TimeFitness(t::T) where T = TimeFitness{T}(0.0, 0)
-fitness(s::TimeFitness, f) = s.neval == 0 ? 0 : s.totaltime / s.neval
+TimeFitness(t::T, nskip = 0) where T = TimeFitness{T}(0.0, 0, nskip)
+fitness(s::TimeFitness, f) = s.neval <= s.nskip ? 0 : s.totaltime / (s.neval-s.nskip)
 
 function instrument(::T, s::TimeFitness{T}, f) where T <: AbstractFunLabel
     return function(x...)
-        res, t = @timed f(x...)
-        s.totaltime += t
+        res, t, bytes, gctime = @timed f(x...)
+        # Skip first time(s) e.g. due to compilation
+        if s.neval >= s.nskip
+            s.totaltime += t - gctime
+        end
         s.neval += 1
         return res
     end
@@ -105,9 +149,9 @@ end
 
 Measure fitness as the total number of parameters in the function to be evaluated.
 
-Note: relies on Flux.params which does not work for function which have been instrumented through [`instrument`](@ref).
+Note: relies on Flux.params which does not work for functions which have been instrumented through [`instrument`](@ref).
 
-To handle intrumentation, an attempt to extract the size is also made when intrumenting for `Validation`. Whether this works or not depends on the order in which fitness functions are combined.
+To handle intrumentation, an attempt to extract the size is also made when instrumenting for `Validation`. Whether this works or not depends on the order in which fitness functions are combined.
 """
 mutable struct SizeFitness <: AbstractFitness
     size::Int

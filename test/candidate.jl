@@ -46,4 +46,42 @@
         Flux.train!(newcand, data(newcand))
     end
 
+    @testset "Save models" begin
+        testdir = "test_savemodels"
+
+        # Weird name to avoid collisions (e.g. MockCand is defined in another testset and therefore unusable)
+        struct SaveModelsCand <: AbstractCandidate
+            i
+        end
+        NaiveGAflux.graph(c::SaveModelsCand) = c.i
+
+        ndir = joinpath(testdir,"normal")
+        pdir = joinpath(testdir,"persistent")
+        cdir = joinpath(testdir,"curried")
+
+        normal = SaveModelsCand.(1:10)
+        persistent = PersistentArray(pdir, length(normal), i -> normal[i])
+
+        curried = savemodels(cdir)
+
+        filenames = map(i -> "$i.jld2", 1:length(normal))
+
+        try
+            savemodels(normal, ndir)
+            @test all(isfile.(joinpath.(ndir, filenames)))
+            rm(ndir, force=true, recursive=true)
+
+            savemodels(persistent)
+            @test all(isfile.(joinpath.(pdir, "models", filenames)))
+            rm(pdir, force=true, recursive=true)
+
+            curried(normal)
+            @test all(isfile.(joinpath.(cdir, filenames)))
+            rm(cdir, force=true, recursive=true)
+        finally
+            rm(testdir, force=true, recursive=true)
+        end
+
+    end
+
 end
