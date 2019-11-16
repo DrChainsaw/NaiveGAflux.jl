@@ -153,7 +153,7 @@ function plotgen(p::ScatterOpt, gen = length(p.data))
     data = p.data[gen]
     fits = data[:,1]
     lrs = data[:,2]
-    ots = string.(data[:,3])
+    ots = map(ostr -> last(split(ostr, ".")), string.(data[:,3]))
 
     uots = sort(unique(ots))
     inds = map(o -> o .== ots, uots)
