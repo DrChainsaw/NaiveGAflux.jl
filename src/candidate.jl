@@ -95,23 +95,12 @@ function Flux.train!(c::HostCandidate, data)
     Flux.train!(c.c |> gpu, data)
     cleanopt(c) # As optimizer state does not survive transfer from gpu -> cpu
     c.c |> cpu # As some parts, namely CompGraph change internal state when mapping to GPU
-    gpu_gc()
 end
 
 function fitness(c::HostCandidate)
     fitval = fitness(c.c |> gpu)
     c.c |> cpu # As some parts, namely CompGraph change internal state when mapping to GPU
-    gpu_gc()
     return fitval
-end
-
-const gpu_gc = if Flux.has_cuarrays()
-    function()
-        GC.gc()
-        CuArrays.reclaim(true)
-    end
-else
-    () -> nothing
 end
 
 reset!(c::HostCandidate) = reset!(c.c)
