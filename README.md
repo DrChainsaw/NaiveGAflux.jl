@@ -13,7 +13,7 @@ The more honest purpose is to serve as a pipe cleaner and example for [NaiveNASf
 ## Basic Usage
 
 ```julia
-Pkg.add("https://github.com/DrChainsaw/NaiveGAflux.jl")
+]add NaiveGAflux
 ```
 
 The basic idea is to create not just one model, but a population of several candidate models with different hyperparameters. The whole population is then evolved while the models are being trained.
