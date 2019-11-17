@@ -15,11 +15,6 @@ using Serialization
 using FileIO
 using JLD2
 
-
-if Flux.has_cuarrays()
-    using CuArrays
-end
-
 const rng_default = Random.GLOBAL_RNG
 const modeldir = "models"
 
