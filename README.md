@@ -34,6 +34,32 @@ using NaiveGAflux.AutoFlux, MLDatasets
 models = fit(CIFAR10.traindata())
 ```
 
+It is possible (and strongly recommended) to supply a callback function which will receive the whole population of models as input after fitness for each generation has been calculated. A few useful functions are provided:
+
+```julia
+using NaiveGAflux, Plots
+# Persist the whole population in directory models/CIFAR10 so that optimization can be resumed if aborted:
+models = fit(CIFAR10.traindata(), cb=persist, mdir="models/CIFAR10")
+
+# Plot best and average fitness for each generation
+plotfitness = PlotFitness(plot, "models/CIFAR10");
+# Plot data will be serialized in a subdir of "models/CIFAR10" for later postprocessing and for resuming optimization.
+models = fit(CIFAR10.traindata(), cb=plotfitness, mdir="models/CIFAR10")
+
+
+# Scatter plots from examples above:
+scatterpop = ScatterPop(scatter, "models/CIFAR10");
+scatteropt = ScatterOpt(scatter, "models/CIFAR10");
+
+# Combine multiple plots in one figure:
+multiplot = MultiPlot(display ∘ plot, plotfitness, scatterpop, scatteropt)
+
+# Combine multiple callbacks in one function:
+callbacks = CbAll(persist, multiplot)
+
+models = fit(CIFAR10.traindata(), cb=callbacks, mdir="models/CIFAR10")
+```  
+
 However, most non-toy uses cases will probably require a dedicated application. NaiveGAflux provides the components to make building it easy and fun!
 
 Tired of tuning hyperparameters? Once you've felt the rush from reasoning about hyper-hyperparameters there is no going back!
