@@ -16,7 +16,7 @@ julia> using NaiveGAflux, Plots
 
 julia> gr();
 
-julia> cb=PlotFitness(plot);
+julia> cb=PlotFitness(plot, "models/test");
 ```
 """
 struct PlotFitness
@@ -64,7 +64,7 @@ Also serializes data so that plotting can be resumed if evolution is aborted.
 ```julia-repl
 julia> using NaiveGAflux, Plots
 
-julia> cb=ScatterPop(scatter);
+julia> cb=ScatterPop(scatter, "models/test");
 ```
 """
 struct ScatterPop
@@ -115,7 +115,7 @@ Also serializes data so that plotting can be resumed if evolution is aborted.
 ```julia-repl
 julia> using NaiveGAflux, Plots
 
-julia> cb=ScatterOpt(scatter);
+julia> cb=ScatterOpt(scatter, "models/test");
 ```
 """
 struct ScatterOpt
@@ -180,7 +180,9 @@ Multiple plots in the same figure.
 ```julia-repl
 julia> using NaiveGAflux, Plots
 
-julia> cb = MultiPlot(display ∘ plot, PlotFitness(plot), ScatterPop(scatter), ScatterOpt(scatter)));
+julia> pdir = "models/test"
+
+julia> cb = MultiPlot(display ∘ plot, PlotFitness(plot, pdir), ScatterPop(scatter, pdir), ScatterOpt(scatter, pdir)));
 ```
 """
 struct MultiPlot
@@ -210,7 +212,9 @@ Aggregates several callbacks into one struct.
 ```julia-repl
 julia> using NaiveGAflux, Plots
 
-julia> cb = CbAll(persist, MultiPlot(display ∘ plot, PlotFitness(plot), ScatterPop(scatter), ScatterOpt(scatter)))
+julia> pdir = "models/test"
+
+julia> cb = CbAll(persist, MultiPlot(display ∘ plot, PlotFitness(plot, pdir), ScatterPop(scatter, pdir), ScatterOpt(scatter, pdir)))
 ```
 """
 struct CbAll
