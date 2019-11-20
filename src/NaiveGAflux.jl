@@ -6,9 +6,11 @@ using Random
 using Logging
 using Statistics
 
-# Used to reclaim memory after model has been trained
-import Pkg
-using CuArrays
+if Flux.has_cuarrays()
+    # Used to reclaim memory after model has been trained to somewhat mitigate the effects of issue #13
+    import Pkg
+    using CuArrays
+end
 
 using Setfield
 
