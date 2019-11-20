@@ -6,6 +6,10 @@ using Random
 using Logging
 using Statistics
 
+# Used to reclaim memory after model has been trained
+import Pkg
+using CuArrays
+
 using Setfield
 
 # For temporary storage of program state for pause/resume type of operations
