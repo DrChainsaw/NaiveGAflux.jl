@@ -53,8 +53,10 @@ struct CandidateModel <: AbstractCandidate
     fitness::AbstractFitness
 end
 
-Flux.children(c::CandidateModel) = (c.graph, c.opt, c.lossfun, c.fitness)
-Flux.mapchildren(f, c::CandidateModel) = CandidateModel(f(c.graph), f(c.opt), f(c.lossfun), c.fitness)
+#Flux.children(c::CandidateModel) = (c.graph, c.opt, c.lossfun, c.fitness)
+#Flux.mapchildren(f, c::CandidateModel) = CandidateModel(f(c.graph), f(c.opt), f(c.lossfun), c.fitness)
+Flux.functor(c::CandidateModel) = (c.graph, c.opt, c.lossfun), gcl -> CandidateModel(gcl..., c.fitness)
+
 
 function Flux.train!(model::CandidateModel, data::AbstractArray{<:Tuple})
     f = instrument(Train(), model.fitness, model.graph)
@@ -89,7 +91,7 @@ struct HostCandidate <: AbstractCandidate
     c::AbstractCandidate
 end
 
-Flux.@treelike HostCandidate
+Flux.@functor HostCandidate
 
 function Flux.train!(c::HostCandidate, data)
     Flux.train!(c.c |> gpu, data)
@@ -108,7 +110,7 @@ end
 reset!(c::HostCandidate) = reset!(c.c)
 graph(c::HostCandidate) = graph(c.c)
 
-const gpu_gc = if Flux.has_cuarrays()
+const gpu_gc = if Flux.use_cuda[]
     ins = Pkg.installed()
 
     if "CuArrays" ∉ keys(ins)

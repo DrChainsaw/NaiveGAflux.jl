@@ -258,7 +258,7 @@ end
 @testset "Fitness functions" begin
     # Function to compute fitness for does not have to be a CompGraph, or even a neural network
     candidate1 = x -> 3:-1:1
-    candidate2 = Dense(param(ones(3,3)), param(1:3))
+    candidate2 = Dense(ones(3,3), 1:3)
 
     # Fitness is accuracy on the provided data set
     accfitness = AccuracyFitness([(ones(3, 1), 1:3)])
@@ -318,7 +318,7 @@ end
     # This however adds state which needs to be reset shall the function be used for something else
     @test fitness(nparams, sum) == 12
     reset!(nparams)
-    @test fitness(nparams, param(1:3)) == 3
+    @test fitness(nparams, 1:3) == 3
 
     # Combining fitness is straight forward
     # Note that one typically wants to map low number of parameters to high fitness (omitted here for brevity)
@@ -344,7 +344,7 @@ end
     @test training_guarded(ones(3,1)) == validation_guarded(ones(3,1)) == candidate2(ones(3,1))
 
     # Now the model gets corrupted somehow...
-    candidate2.W.data[1,1] = NaN
+    candidate2.W[1,1] = NaN
 
     @test any(isnan, candidate2(ones(3,1)))
 
@@ -355,7 +355,7 @@ end
     @test fitness(nanguard, candidate2) == 0
 
     # After a Nan is detected the function will no longer be evaluated until reset
-    candidate2.W.data[1,1] = 1
+    candidate2.W[1,1] = 1
 
     @test !any(isnan, candidate2(ones(3,1)))
     @test training_guarded(ones(3,1)) == zeros(3,1)

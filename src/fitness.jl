@@ -253,7 +253,6 @@ function instrument(l::T, s::NanGuard{T}, f) where T <: AbstractFunLabel
 end
 instrument(l::AbstractFunLabel, s::NanGuard, f) = instrument(l, s.base, f)
 
-dummyvalue(::Type{<:TrackedArray{<:Any, <:Any, <:AT}}, shape, val) where AT <: AbstractArray = param(dummyvalue(AT, shape, val))
 dummyvalue(::Type{<:AT}, shape, val) where AT <: AbstractArray = fill!(similar(AT, shape), val)
 dummyvalue(::Type{T}, shape, val) where T <: Number = T(val)
 

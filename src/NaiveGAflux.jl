@@ -6,7 +6,7 @@ using Random
 using Logging
 using Statistics
 
-if Flux.has_cuarrays()
+if Flux.use_cuda[]
     # Used to reclaim memory after model has been trained to somewhat mitigate the effects of issue #13
     import Pkg
     using CuArrays

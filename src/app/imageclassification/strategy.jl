@@ -305,7 +305,7 @@ function maxkernelsize(v::AbstractVertex, inshape)
     return @. ks - !isodd(ks)
  end
 
-Flux.mapchildren(f, aa::AbstractArray{<:Integer, 1}) = aa
+#Flux.functor(a::AbstractArray{<:Integer, 1}) = a, n -> a
 
 function add_vertex_mutation(acts)
 
