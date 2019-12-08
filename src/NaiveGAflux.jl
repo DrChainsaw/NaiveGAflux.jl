@@ -75,5 +75,6 @@ include("evolve.jl")
 include("iterators.jl")
 include("app/AutoFlux.jl")
 include("visualize/callbacks.jl")
+include("zygote.jl")
 
 end # module

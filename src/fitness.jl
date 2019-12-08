@@ -235,17 +235,24 @@ function instrument(l::T, s::NanGuard{T}, f) where T <: AbstractFunLabel
     return function(x...)
         s.shield && return s.lastout(s.replaceval)
         y = fi(x...)
-        # Broadcast to avoid scalar operations when using CuArrays
-        anynan = any(isnan.(y))
-        anyinf = any(isinf.(y))
 
-        s.shield = anynan || anyinf
-        tt = typeof(y)
-        ss = size(y)
-        s.lastout = val -> dummyvalue(tt, ss, val)
+        anynan = nograd() do
+            # Broadcast to avoid scalar operations when using CuArrays
+            anynan = any(isnan.(y))
+            anyinf = any(isinf.(y))
+
+            s.shield = anynan || anyinf
+            tt = typeof(y)
+            ss = size(y)
+            s.lastout = val -> dummyvalue(tt, ss, val)
+            return anynan
+        end
+
         if s.shield
-            badval = anynan ? "NaN" : "Inf"
-            @warn "$badval detected for function with label $l"
+            nograd() do
+                badval = anynan ? "NaN" : "Inf"
+                @warn "$badval detected for function with label $l"
+            end
             return s.lastout(s.replaceval)
         end
         return y
