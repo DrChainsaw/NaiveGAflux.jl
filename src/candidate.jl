@@ -110,21 +110,10 @@ end
 reset!(c::HostCandidate) = reset!(c.c)
 graph(c::HostCandidate) = graph(c.c)
 
-const gpu_gc = if Flux.use_cuda[]
-    ins = Pkg.installed()
-
-    if "CuArrays" ∉ keys(ins)
-        () -> nothing
-    elseif ins["CuArrays"] == v"1.3.0"
-        function()
-            GC.gc()
-            CuArrays.BinnedPool.reclaim(true)
-        end
-    else
-        function()
-            GC.gc()
-            CuArrays.reclaim(true)
-        end
+const gpu_gc = if CuArrays.functional()
+    function()
+        GC.gc()
+        CuArrays.reclaim()
     end
 else
     () -> nothing
