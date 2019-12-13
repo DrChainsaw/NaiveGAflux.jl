@@ -260,8 +260,13 @@ function instrument(l::T, s::NanGuard{T}, f) where T <: AbstractFunLabel
 end
 instrument(l::AbstractFunLabel, s::NanGuard, f) = instrument(l, s.base, f)
 
+
 dummyvalue(::Type{<:AT}, shape, val) where AT <: AbstractArray = fill!(similar(AT, shape), val)
 dummyvalue(::Type{T}, shape, val) where T <: Number = T(val)
+Flux.Zygote.@nograd dummyvalue
+# Flux.Zygote.@adjoint function dummyvalue(t, shape, val)
+#     return dummyvalue(t, shape, val), _ -> (nothing, 0, 0)
+# end
 
 """
     AggFitness <: AbstractFitness

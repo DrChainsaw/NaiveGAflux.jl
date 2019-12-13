@@ -53,26 +53,16 @@ struct CandidateModel <: AbstractCandidate
     fitness::AbstractFitness
 end
 
-#Flux.children(c::CandidateModel) = (c.graph, c.opt, c.lossfun, c.fitness)
-#Flux.mapchildren(f, c::CandidateModel) = CandidateModel(f(c.graph), f(c.opt), f(c.lossfun), c.fitness)
 Flux.functor(c::CandidateModel) = (c.graph, c.opt, c.lossfun), gcl -> CandidateModel(gcl..., c.fitness)
 
-
-function Flux.train!(model::CandidateModel, data::AbstractArray{<:Tuple})
+function Flux.train!(model::CandidateModel, data)
     f = instrument(Train(), model.fitness, model.graph)
     loss(x,y) = model.lossfun(f(x), y)
     iloss = instrument(TrainLoss(), model.fitness, loss)
-    Flux.train!(iloss, params(model.graph), data, model.opt)
+    Flux.train!(iloss, Flux.params(model.graph), data, model.opt)
 end
 
 Flux.train!(model::CandidateModel, data::Tuple{<:AbstractArray, <:AbstractArray}) = Flux.train!(model, [data])
-
-# Assume iterator in the general case
-function Flux.train!(model::CandidateModel, iter)
-    for data in iter
-        Flux.train!(model, data)
-    end
-end
 
 fitness(model::CandidateModel) = fitness(model.fitness, instrument(Validate(), model.fitness, model.graph))
 
