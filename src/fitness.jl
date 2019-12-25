@@ -218,10 +218,10 @@ mutable struct NanGuard{T} <: AbstractFitness where T <: AbstractFunLabel
     base::AbstractFitness
     shield::Bool
     replaceval
-    lastout
+    lastout::IdDict
 end
 NanGuard(base::AbstractFitness, replaceval = 0.0) = foldl((b, l) -> NanGuard(l, b, replaceval), (Train(), TrainLoss(), Validate()), init=base)
-NanGuard(t::T, base::AbstractFitness, replaceval = 0.0) where T <: AbstractFunLabel = NanGuard{T}(base, false, replaceval, identity)
+NanGuard(t::T, base::AbstractFitness, replaceval = 0.0) where T <: AbstractFunLabel = NanGuard{T}(base, false, replaceval, IdDict())
 
 fitness(s::NanGuard, f) = s.shield ? 0.0 : fitness(s.base, f)
 
@@ -230,13 +230,20 @@ function reset!(s::NanGuard)
     reset!(s.base)
 end
 
-function instrument(l::T, s::NanGuard{T}, f) where T <: AbstractFunLabel
-    fi = instrument(l, s.base, f)
+function NaiveGAflux.instrument(l::T, s::NanGuard{T}, f) where T <: NaiveGAflux.AbstractFunLabel
+    fi = NaiveGAflux.instrument(l, s.base, f)
     return function(x...)
-        s.shield && return s.lastout(s.replaceval)
+        if s.shield
+            lastout = NaiveGAflux.nograd() do
+                get(s.lastout, size.(x), nothing)
+            end
+
+            !isnothing(lastout) && return lastout(s.replaceval)
+        end
         y = fi(x...)
 
-        anynan = nograd() do
+        wasshield = s.shield
+        anynan = NaiveGAflux.nograd() do
             # Broadcast to avoid scalar operations when using CuArrays
             anynan = any(isnan.(y))
             anyinf = any(isinf.(y))
@@ -244,16 +251,19 @@ function instrument(l::T, s::NanGuard{T}, f) where T <: AbstractFunLabel
             s.shield = anynan || anyinf
             tt = typeof(y)
             ss = size(y)
-            s.lastout = val -> dummyvalue(tt, ss, val)
+
+            s.lastout[size.(x)] = val -> NaiveGAflux.dummyvalue(tt, ss, val)
             return anynan
         end
 
         if s.shield
-            nograd() do
-                badval = anynan ? "NaN" : "Inf"
-                @warn "$badval detected for function with label $l"
+            NaiveGAflux.nograd() do
+                if !wasshield
+                    badval = anynan ? "NaN" : "Inf"
+                    @warn "$badval detected for function with label $l for x of size $(size.(x))"
+                end
             end
-            return s.lastout(s.replaceval)
+            return s.lastout[size.(x)](s.replaceval)
         end
         return y
     end

@@ -144,6 +144,10 @@
             @test (@test_logs (:warn, Regex("$val detected")) nokfun([1,2,3])) == [0,0,0]
             @test nokfun([1,2,3]) == [0,0,0]
 
+            # New size of input, typically a different batch size
+            @test nokfun(ones(2,3,4)) == zeros(2,3,4)
+            @test okfun(ones(2,3,4)) == zeros(2,3,4)
+
             @test fitness(ng, identity) == 0
         end
 
