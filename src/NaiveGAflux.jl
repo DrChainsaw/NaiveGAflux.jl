@@ -2,6 +2,7 @@ module NaiveGAflux
 
 using Reexport
 @reexport using NaiveNASflux
+import NaiveNASflux: nograd
 using Random
 using Logging
 using Statistics
@@ -70,6 +71,5 @@ include("evolve.jl")
 include("iterators.jl")
 include("app/AutoFlux.jl")
 include("visualize/callbacks.jl")
-include("zygote.jl")
 
 end # module

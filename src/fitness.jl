@@ -236,7 +236,7 @@ function NaiveGAflux.instrument(l::T, s::NanGuard{T}, f) where T <: NaiveGAflux.
     fi = NaiveGAflux.instrument(l, s.base, f)
     return function(x...)
         if s.shield
-            lastout = NaiveGAflux.nograd() do
+            lastout = nograd() do
                 get(s.lastout, size.(x), nothing)
             end
 
@@ -245,7 +245,7 @@ function NaiveGAflux.instrument(l::T, s::NanGuard{T}, f) where T <: NaiveGAflux.
         y = fi(x...)
 
         wasshield = s.shield
-        anynan = NaiveGAflux.nograd() do
+        anynan = nograd() do
             # Broadcast to avoid scalar operations when using CuArrays
             anynan = any(isnan.(y))
             anyinf = any(isinf.(y))
@@ -259,7 +259,7 @@ function NaiveGAflux.instrument(l::T, s::NanGuard{T}, f) where T <: NaiveGAflux.
         end
 
         if s.shield
-            NaiveGAflux.nograd() do
+            nograd() do
                 if !wasshield
                     badval = anynan ? "NaN" : "Inf"
                     @warn "$badval detected for function with label $l for x of size $(size.(x))"
