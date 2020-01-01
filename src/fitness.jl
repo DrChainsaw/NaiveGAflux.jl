@@ -80,8 +80,10 @@ end
 instrument(::TrainLoss,s::TrainAccuracyFitness,f) = function(x...)
     y = x[2]
     ret = f(x...)
-    # Assume above call has also been instrument with Train, so now we have ŷ
-    append!(s.acc, Flux.onecold(s.ŷ) .== Flux.onecold(cpu(y)))
+    nograd() do
+        # Assume above call has also been instrument with Train, so now we have ŷ
+        append!(s.acc, Flux.onecold(s.ŷ) .== Flux.onecold(cpu(y)))
+    end
     return ret
 end
 function fitness(s::TrainAccuracyFitness, f)

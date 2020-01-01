@@ -390,7 +390,7 @@
             g = CompGraph(inpt, v)
 
             indata = reshape(1:2*nout(inpt)*4*5, 5,4,nout(inpt), 2)
-            @test g(indata) == indata
+            @test round.(Int, (g(indata))) == indata
         end
 
         @testset "RepeatArchSpace identity" begin
