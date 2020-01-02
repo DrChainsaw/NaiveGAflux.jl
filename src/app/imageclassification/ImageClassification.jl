@@ -35,7 +35,7 @@ end
 ImageClassifier(;popsize=50, seed=1, newpop=false) = ImageClassifier(popsize, seed, newpop)
 
 """
-    fit(c::ImageClassifier, x, y; cb, fitnesstrategy, trainstrategy, evolutionstrategy, mdir, gcthreshold)
+    fit(c::ImageClassifier, x, y; cb, fitnesstrategy, trainstrategy, evolutionstrategy, mdir)
 
 Return a population of image classifiers fitted to the given data.
 
@@ -56,15 +56,14 @@ Return a population of image classifiers fitted to the given data.
 
 - `mdir`: Load models from this directory if present. If persistence is used (e.g. by providing `cb=persist`) candidates will be stored in this directory.
 
-- `gcthreshold`: Return population if garbage collection time increased by this amount compared to first generation. Workaround for https://github.com/DrChainsaw/NaiveGAflux.jl/issues/13
 """
-function AutoFlux.fit(c::ImageClassifier, x, y; cb=identity, fitnesstrategy::AbstractFitnessStrategy=TrainSplitAccuracy(), trainstrategy::AbstractTrainStrategy=TrainStrategy(), evolutionstrategy::AbstractEvolutionStrategy=EliteAndSusSelection(popsize=c.popsize), mdir, gcthreshold=Inf)
+function AutoFlux.fit(c::ImageClassifier, x, y; cb=identity, fitnesstrategy::AbstractFitnessStrategy=TrainSplitAccuracy(), trainstrategy::AbstractTrainStrategy=TrainStrategy(), evolutionstrategy::AbstractEvolutionStrategy=EliteAndSusSelection(popsize=c.popsize), mdir)
     ndims(x) == 4 || error("Must use 4D data, got $(ndims(x))D data")
 
     x, y, fitnessgen = fitnessfun(fitnesstrategy, x, y)
     fit_iter = trainiter(trainstrategy, x, y)
     inshape = size(x)[1:2]
-    return fit(c, fit_iter, fitnessgen, evostrategy(evolutionstrategy, inshape); cb=cb, mdir=mdir, gcthreshold=gcthreshold)
+    return fit(c, fit_iter, fitnessgen, evostrategy(evolutionstrategy, inshape); cb=cb, mdir=mdir)
 end
 
 """
@@ -86,10 +85,8 @@ Lower level version of `fit` to use when `fit(c::ImageClassifier, x, y)` doesn't
 - `cb=identity`: Callback function. After training and evaluating each generation but before evolution `cb(population)` will be called where `population` is the array of candidates. Useful for persistence and plotting.
 
 - `mdir`: Load models from this directory if present. If persistence is used (e.g. by providing `cb=persist`) candidates will be stored in this directory.
-
-- `gcthreshold`: Return population if garbage collection time increased by this amount compared to first generation. Workaround for https://github.com/DrChainsaw/NaiveGAflux.jl/issues/13
 """
-function AutoFlux.fit(c::ImageClassifier, fit_iter, fitnessgen, evostrategy::AbstractEvolution; cb = identity, mdir, gcthreshold=Inf)
+function AutoFlux.fit(c::ImageClassifier, fit_iter, fitnessgen, evostrategy::AbstractEvolution; cb = identity, mdir)
     Random.seed!(NaiveGAflux.rng_default, c.seed)
     @info "Start training with baseseed: $(c.seed)"
 
@@ -102,18 +99,16 @@ function AutoFlux.fit(c::ImageClassifier, fit_iter, fitnessgen, evostrategy::Abs
         population = evolve!(evostrategy, population)
     end
 
-    return evolutionloop(population, evostrategy, fit_iter, cb, gcthreshold)
+    return evolutionloop(population, evostrategy, fit_iter, cb)
 end
 
-function evolutionloop(population, evostrategy, trainingiter, cb, gcthreshold)
-    firstgctime = nothing
+function evolutionloop(population, evostrategy, trainingiter, cb)
     for (gen, iter) in enumerate(trainingiter)
         @info "Begin generation $gen"
 
-        ctime, gctime = 0,0
         for (i, cand) in enumerate(population)
             @info "\tTrain candidate $i with $(nv(NaiveGAflux.graph(cand))) vertices"
-            val, ctime, bytes, gctime = @timed Flux.train!(cand, iter)
+            Flux.train!(cand, iter)
         end
 
         # TODO: Bake into evolution? Would anyways like to log selected models...
@@ -122,19 +117,9 @@ function evolutionloop(population, evostrategy, trainingiter, cb, gcthreshold)
         end
         cb(population)
 
-        firstgctime, gcok = checkgctime(firstgctime, ctime, gctime, gcthreshold)
-        gcok || return population
-
         population = evolve!(evostrategy, population)
     end
     return population
-end
-
-function checkgctime(firstgctime, ctime, gctime, threshold)
-    firstgctime == nothing && return gctime, true
-    gcoh = (gctime - firstgctime) / ctime
-    @info "GC overhead increase: $gcoh"
-    return firstgctime,  gcoh < threshold
 end
 
 function initial_models(nr, mdir, newpop, fitnessgen, insize, outsize)
