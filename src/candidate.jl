@@ -53,24 +53,16 @@ struct CandidateModel <: AbstractCandidate
     fitness::AbstractFitness
 end
 
-Flux.children(c::CandidateModel) = (c.graph, c.opt, c.lossfun, c.fitness)
-Flux.mapchildren(f, c::CandidateModel) = CandidateModel(f(c.graph), f(c.opt), f(c.lossfun), c.fitness)
+Flux.functor(c::CandidateModel) = (c.graph, c.opt, c.lossfun), gcl -> CandidateModel(gcl..., c.fitness)
 
-function Flux.train!(model::CandidateModel, data::AbstractArray{<:Tuple})
+function Flux.train!(model::CandidateModel, data)
     f = instrument(Train(), model.fitness, model.graph)
     loss(x,y) = model.lossfun(f(x), y)
     iloss = instrument(TrainLoss(), model.fitness, loss)
-    Flux.train!(iloss, params(model.graph), data, model.opt)
+    Flux.train!(iloss, Flux.params(model.graph), data, model.opt)
 end
 
 Flux.train!(model::CandidateModel, data::Tuple{<:AbstractArray, <:AbstractArray}) = Flux.train!(model, [data])
-
-# Assume iterator in the general case
-function Flux.train!(model::CandidateModel, iter)
-    for data in iter
-        Flux.train!(model, data)
-    end
-end
 
 fitness(model::CandidateModel) = fitness(model.fitness, instrument(Validate(), model.fitness, model.graph))
 
@@ -89,7 +81,7 @@ struct HostCandidate <: AbstractCandidate
     c::AbstractCandidate
 end
 
-Flux.@treelike HostCandidate
+Flux.@functor HostCandidate
 
 function Flux.train!(c::HostCandidate, data)
     Flux.train!(c.c |> gpu, data)
@@ -108,21 +100,10 @@ end
 reset!(c::HostCandidate) = reset!(c.c)
 graph(c::HostCandidate) = graph(c.c)
 
-const gpu_gc = if Flux.has_cuarrays()
-    ins = Pkg.installed()
-
-    if "CuArrays" ∉ keys(ins)
-        () -> nothing
-    elseif ins["CuArrays"] == v"1.3.0"
-        function()
-            GC.gc()
-            CuArrays.BinnedPool.reclaim(true)
-        end
-    else
-        function()
-            GC.gc()
-            CuArrays.reclaim(true)
-        end
+const gpu_gc = if CuArrays.functional()
+    function()
+        GC.gc()
+        CuArrays.reclaim()
     end
 else
     () -> nothing

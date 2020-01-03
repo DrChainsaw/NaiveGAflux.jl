@@ -2,15 +2,11 @@ module NaiveGAflux
 
 using Reexport
 @reexport using NaiveNASflux
+import NaiveNASflux: nograd
 using Random
 using Logging
 using Statistics
-
-if Flux.has_cuarrays()
-    # Used to reclaim memory after model has been trained to somewhat mitigate the effects of issue #13
-    import Pkg
-    using CuArrays
-end
+using CuArrays
 
 using Setfield
 

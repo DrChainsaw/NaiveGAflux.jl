@@ -80,8 +80,10 @@ end
 instrument(::TrainLoss,s::TrainAccuracyFitness,f) = function(x...)
     y = x[2]
     ret = f(x...)
-    # Assume above call has also been instrument with Train, so now we have ŷ
-    append!(s.acc, Flux.onecold(s.ŷ) .== Flux.onecold(cpu(y)))
+    nograd() do
+        # Assume above call has also been instrument with Train, so now we have ŷ
+        append!(s.acc, Flux.onecold(s.ŷ) .== Flux.onecold(cpu(y)))
+    end
     return ret
 end
 function fitness(s::TrainAccuracyFitness, f)
@@ -218,10 +220,10 @@ mutable struct NanGuard{T} <: AbstractFitness where T <: AbstractFunLabel
     base::AbstractFitness
     shield::Bool
     replaceval
-    lastout
+    lastout::IdDict
 end
 NanGuard(base::AbstractFitness, replaceval = 0.0) = foldl((b, l) -> NanGuard(l, b, replaceval), (Train(), TrainLoss(), Validate()), init=base)
-NanGuard(t::T, base::AbstractFitness, replaceval = 0.0) where T <: AbstractFunLabel = NanGuard{T}(base, false, replaceval, identity)
+NanGuard(t::T, base::AbstractFitness, replaceval = 0.0) where T <: AbstractFunLabel = NanGuard{T}(base, false, replaceval, IdDict())
 
 fitness(s::NanGuard, f) = s.shield ? 0.0 : fitness(s.base, f)
 
@@ -230,32 +232,53 @@ function reset!(s::NanGuard)
     reset!(s.base)
 end
 
-function instrument(l::T, s::NanGuard{T}, f) where T <: AbstractFunLabel
-    fi = instrument(l, s.base, f)
+function NaiveGAflux.instrument(l::T, s::NanGuard{T}, f) where T <: NaiveGAflux.AbstractFunLabel
+    fi = NaiveGAflux.instrument(l, s.base, f)
     return function(x...)
-        s.shield && return s.lastout(s.replaceval)
-        y = fi(x...)
-        # Broadcast to avoid scalar operations when using CuArrays
-        anynan = any(isnan.(y))
-        anyinf = any(isinf.(y))
-
-        s.shield = anynan || anyinf
-        tt = typeof(y)
-        ss = size(y)
-        s.lastout = val -> dummyvalue(tt, ss, val)
         if s.shield
-            badval = anynan ? "NaN" : "Inf"
-            @warn "$badval detected for function with label $l"
-            return s.lastout(s.replaceval)
+            lastout = nograd() do
+                get(s.lastout, size.(x), nothing)
+            end
+
+            !isnothing(lastout) && return lastout(s.replaceval)
+        end
+        y = fi(x...)
+
+        wasshield = s.shield
+        anynan = nograd() do
+            # Broadcast to avoid scalar operations when using CuArrays
+            anynan = any(isnan.(y))
+            anyinf = any(isinf.(y))
+
+            s.shield = anynan || anyinf
+            tt = typeof(y)
+            ss = size(y)
+
+            s.lastout[size.(x)] = val -> NaiveGAflux.dummyvalue(tt, ss, val)
+            return anynan
+        end
+
+        if s.shield
+            nograd() do
+                if !wasshield
+                    badval = anynan ? "NaN" : "Inf"
+                    @warn "$badval detected for function with label $l for x of size $(size.(x))"
+                end
+            end
+            return s.lastout[size.(x)](s.replaceval)
         end
         return y
     end
 end
 instrument(l::AbstractFunLabel, s::NanGuard, f) = instrument(l, s.base, f)
 
-dummyvalue(::Type{<:TrackedArray{<:Any, <:Any, <:AT}}, shape, val) where AT <: AbstractArray = param(dummyvalue(AT, shape, val))
+
 dummyvalue(::Type{<:AT}, shape, val) where AT <: AbstractArray = fill!(similar(AT, shape), val)
 dummyvalue(::Type{T}, shape, val) where T <: Number = T(val)
+Flux.Zygote.@nograd dummyvalue
+# Flux.Zygote.@adjoint function dummyvalue(t, shape, val)
+#     return dummyvalue(t, shape, val), _ -> (nothing, 0, 0)
+# end
 
 """
     AggFitness <: AbstractFitness

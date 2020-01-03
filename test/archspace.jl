@@ -389,7 +389,7 @@
             v = space(inpt, outsize=nout(inpt), wi=IdentityWeightInit())
             g = CompGraph(inpt, v)
 
-            indata = reshape(1:2*nout(inpt)*4*5, 5,4,nout(inpt), 2)
+            indata = reshape(1:nout(inpt)*4*5, 5,4,nout(inpt), 1)
             @test g(indata) == indata
         end
 

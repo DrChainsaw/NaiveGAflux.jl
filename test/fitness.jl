@@ -109,10 +109,7 @@
             x[1] = val
             return x
         end
-        function badfun(x::TrackedArray, val=NaN)
-            badfun(x.data, val)
-            return x
-        end
+        badfun(x::AbstractArray{<:Integer}, val=NaN) = badfun(Float64.(x), val)
 
         @testset "NanGuard $val" for val in (NaN, Inf)
 
@@ -144,8 +141,12 @@
             @test okfun(5) == 5
             @test fitness(ng, identity) == 1
 
-            @test (@test_logs (:warn, Regex("$val detected")) nokfun(param([1,2,3]))) == [0,0,0]
-            @test nokfun(param([1,2,3])) == [0,0,0]
+            @test (@test_logs (:warn, Regex("$val detected")) nokfun([1,2,3])) == [0,0,0]
+            @test nokfun([1,2,3]) == [0,0,0]
+
+            # New size of input, typically a different batch size
+            @test nokfun(ones(2,3,4)) == zeros(2,3,4)
+            @test okfun(ones(2,3,4)) == zeros(2,3,4)
 
             @test fitness(ng, identity) == 0
         end
@@ -158,31 +159,31 @@
 
             @test okfun(Train())(3) == 3
             @test okfun(TrainLoss())([1,2,3]) == [1,2,3]
-            @test okfun(Validate())(param([1,2,3])) == [1,2,3]
+            @test okfun(Validate())([1,2,3]) == [1,2,3]
 
             @test fitness(ng, identity) == 1
 
             @test (@test_logs (:warn, r"NaN detected") nokfun(Train())(3)) == 0
             @test okfun(TrainLoss())([1,2,3]) == [1,2,3]
-            @test okfun(Validate())(param([1,2,3])) == [1,2,3]
+            @test okfun(Validate())([1,2,3]) == [1,2,3]
 
             @test fitness(ng, identity) == 0
 
             @test okfun(Train())(3) == 0
             @test (@test_logs (:warn, r"NaN detected") nokfun(TrainLoss())(Float32[1,2,3])) == [0,0,0]
-            @test okfun(Validate())(param([1,2,3])) == [1,2,3]
+            @test okfun(Validate())([1,2,3]) == [1,2,3]
 
             @test fitness(ng, identity) == 0
 
             @test okfun(Train())(3) == 0
             @test okfun(TrainLoss())([1,2,3]) == [0,0,0]
-            @test (@test_logs (:warn, r"NaN detected") nokfun(Validate())(param([1,2,3]))) == [0,0,0]
+            @test (@test_logs (:warn, r"NaN detected") nokfun(Validate())([1,2,3])) == [0,0,0]
 
             @test fitness(ng, identity) == 0
 
             @test okfun(Train())(3) == 0
             @test okfun(TrainLoss())([1,2,3]) == [0,0,0]
-            @test okfun(Validate())(param([1,2,3])) == [0,0,0]
+            @test okfun(Validate())([1,2,3]) == [0,0,0]
 
             @test fitness(ng, identity) == 0
 
@@ -190,7 +191,7 @@
 
             @test okfun(Train())(3) == 3
             @test okfun(TrainLoss())([1,2,3]) == [1,2,3]
-            @test okfun(Validate())(param([1,2,3])) == [1,2,3]
+            @test okfun(Validate())([1,2,3]) == [1,2,3]
 
             @test fitness(ng, identity) == 1
         end

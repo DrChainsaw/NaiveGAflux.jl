@@ -289,11 +289,21 @@ isbig(g) = nparams(g) > 20e7
 canaddmaxpool(inshape) = v -> canaddmaxpool(v, inshape)
 canaddmaxpool(v::AbstractVertex, inshape) = is_convtype(v) && !infork(v) && nmaxpool(all_in_graph(v)) < log2(minimum(inshape))
 
-function infork(v, forkcnt = 0)
-    forkcnt < 0 && return true
-    isempty(outputs(v)) && return false
-    cnt = length(outputs(v)) - length(inputs(v))
-    return any(infork.(outputs(v), forkcnt + cnt))
+function infork(v, inputcnt = Dict{AbstractVertex, Int}(inputs(v) .=> 1), seen = Set())
+    v in seen && return any(x -> x < 0, values(inputcnt))
+    push!(seen, v)
+
+    # How many times do we expect to find v as input to some subsequent vertex if we did not start inside a fork?
+    inputcnt[v] = get(inputcnt, v, 0) + length(outputs(v))
+
+    for vi in inputs(v)
+        # And now subtract by 1 each time we find it
+        inputcnt[vi] = get(inputcnt, vi, 0) - 1
+    end
+
+    foreach(vo -> infork(vo, inputcnt, seen), outputs(v))
+    # If we have any "unaccounted" for inputs when we hit the output then we started inside a fork
+    return any(x -> x < 0, values(inputcnt))
 end
 
 nmaxpool(vs) = sum(endswith.(name.(vs), "maxpool"))
@@ -305,7 +315,7 @@ function maxkernelsize(v::AbstractVertex, inshape)
     return @. ks - !isodd(ks)
  end
 
-Flux.mapchildren(f, aa::AbstractArray{<:Integer, 1}) = aa
+#Flux.functor(a::AbstractArray{<:Integer, 1}) = a, n -> a
 
 function add_vertex_mutation(acts)
 

@@ -30,7 +30,7 @@ function PlotFitness(plotfun, rootdir, subdir="PlotFitness")
     basedir = joinpath(rootdir, subdir)
     best = loadifpresent(joinpath(basedir, "best.jls"))
     avg = loadifpresent(joinpath(basedir, "avg.jls"))
-    plt = plotfun(hcat(best,avg), label=["Best", "Avg"], xlabel="Generation", ylabel="Fitness", m=[:circle, :circle], legend=:bottomright)
+    plt = plotfun(hcat(best,avg), label=["Best" "Avg"], xlabel="Generation", ylabel="Fitness", m=[:circle, :circle], legend=:bottomright)
     return PlotFitness(best, avg, plt, basedir)
 end
 
@@ -161,7 +161,7 @@ function plotgen(p::ScatterOpt, gen = length(p.data))
     fitso = map(indv -> fits[indv], inds)
     lrso = map(indv -> log10.(lrs[indv]), inds)
 
-    return p.plotfun(lrso, fitso, xlabel="Learning rate (log10)", ylabel="Fitness", label=uots, legend=:outerright, legendfontsize=5)
+    return p.plotfun(lrso, fitso, xlabel="Learning rate (log10)", ylabel="Fitness", label=reshape(uots,1,:), legend=:outerright, legendfontsize=5)
 end
 
 function(p::ScatterOpt)(population)
