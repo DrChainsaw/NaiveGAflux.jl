@@ -87,6 +87,47 @@ function evolve!(e::SusSelection, pop::AbstractArray{<:AbstractCandidate})
 end
 
 """
+    TournamentSelection <: AbstractEvolution
+    TournamentSelection(nselect::Integer, k::Integer, p::Real, evo::AbstractEvolution, rng=rng_default)
+
+Selects candidates for further evolution using tournament selection.
+
+Holds `nselect` tournaments with one winner each where each tournament has `k`
+random candidates from the given population.
+
+Winner of a tournament is selected as the candidate with highest fitness with a
+probability `p`, second highest fitness with a probability `p(p-1)`, third highest
+fitness with a probability of `p((p-1)^2)` and so on.
+"""
+struct TournamentSelection <: AbstractEvolution
+    nselect::Integer
+    k::Integer
+    p::Vector{<:Real}
+    evo::AbstractEvolution
+    rng
+    function TournamentSelection(nselect, k, p, evo, rng=rng_default)
+        @assert 0 <= p <= 1 "0 <= p <= 1 not fulfilled! p = $p"
+        return new(nselect, k, p .* ((1 - p) .^ collect(0:k-1)), evo, rng)
+    end
+end
+
+function evolve!(e::TournamentSelection, pop::AbstractArray{<:AbstractCandidate})
+    # Step 1: Create a random tournament order with as little repetition as possible so that we can select
+    # e.nselect candidates out of e.nselect tournaments with e.k random candidates in each tournament
+    n = e.nselect * e.k
+    nrem = mod(n, length(pop))
+    nrep = max(0, n ÷ length(pop))
+    torder = mapfoldl(i -> shuffle(e.rng, pop), vcat, 1:nrep, init = shuffle(e.rng, pop)[1:nrem])
+
+    selected = similar(pop, e.nselect)
+    for (i, cands) in enumerate(Iterators.partition(torder, e.k))
+        score = rand(e.rng, e.k) .* e.p
+        selected[i] = partialsort(cands, argmax(score), by=fitness, rev=true)
+    end
+    return evolve!(e.evo, selected)
+end
+
+"""
     CombinedEvolution <: AbstractEvolution
     CombinedEvolution(evos::AbstractArray{<:AbstractEvolution})
     CombinedEvolution(evos::AbstractEvolution...)

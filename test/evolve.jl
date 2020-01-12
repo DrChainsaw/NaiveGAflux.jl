@@ -29,6 +29,22 @@
         @test fitness.(evolve!(SusSelection(4, NoOpEvolution(), MockRng([0.05])), pop)) == [0.1, 0.4, 0.6, 0.7]
     end
 
+    @testset "TournamentSelection" begin
+        pop = MockCand.(1:10)
+        Random.shuffle(::MockRng, a::AbstractVector) = reverse(a)
+        Random.rand(r::MockRng, n::Int) = map(i -> rand(r), 1:n)
+
+        @test fitness.(evolve!(TournamentSelection(4, 2, 1, NoOpEvolution(), MockRng([0.05])), pop)) == [10, 8, 6, 4]
+        @test fitness.(evolve!(TournamentSelection(8, 3, 0.7, NoOpEvolution(), MockRng([0.01, 0.9, 0.01])), pop)) == [9, 9, 7, 4, 2, 8, 5, 2]
+
+        @test fitness.(evolve!(TournamentSelection(20, 2, 1, NoOpEvolution(), MockRng([0.01])), pop)) == repeat(10:-2:2, 4)
+
+        # Edge case, nselect*k % popsize == 0
+        @test fitness.(evolve!(TournamentSelection(5, 2, 1, NoOpEvolution(), MockRng([0.01])), pop)) == 10:-2:2
+        # Edge case, nselect*k % popsize == 1
+        @test fitness.(evolve!(TournamentSelection(2, 2, 1, NoOpEvolution(), MockRng([0.01])), MockCand.(1:3))) == [3, 2]
+    end
+
     @testset "CombinedEvolution" begin
         pop = [DummyCand() for i in 1:5]
         @test evolve!(CombinedEvolution(NoOpEvolution(), NoOpEvolution()), pop) == vcat(pop,pop)
