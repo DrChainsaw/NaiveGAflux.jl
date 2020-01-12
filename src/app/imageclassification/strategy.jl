@@ -204,6 +204,40 @@ function evostrategy(s::EliteAndSusSelection, inshape)
     return AfterEvolution(reset, rename_models ∘ clear_redundant_vertices)
 end
 
+"""
+    struct EliteAndTournamentSelection <: AbstractEvolutionStrategy
+    EliteAndTournamentSelection(popsize, nelites, k, p)
+    EliteAndTournamentSelection(;popsize=50, nelites=2; k=4, p=0.9)
+
+Standard evolution strategy.
+
+Selects `nelites` candidates to move on to the next generation without any mutation.
+
+Also selects `popsize - nelites` candidates out of the whole population using [`TournamentSelection`](@ref) to evolve by applying random mutation.
+
+Mutation operations are both applied to the model itself (change sizes, add/remove vertices/edges) as well as to the optimizer (change learning rate and optimizer algorithm).
+
+Finally, models are renamed so that the name of each vertex of the model of candidate `i` is prefixed with "model`i`".
+"""
+struct EliteAndTournamentSelection <: AbstractEvolutionStrategy
+    popsize::Int
+    nelites::Int
+    k::Int
+    p::Real
+end
+EliteAndTournamentSelection(;popsize=50, nelites=2, k=4, p=0.9) = EliteAndTournamentSelection(popsize, nelites, k, p)
+
+function evostrategy(s::EliteAndTournamentSelection, inshape)
+    elite = EliteSelection(s.nelites)
+
+    mutate = EvolveCandidates(evolvecandidate(inshape))
+    evolve = TournamentSelection(s.popsize - s.nelites, s.k, s.p, mutate)
+
+    combine = CombinedEvolution(elite, evolve)
+    reset = ResetAfterEvolution(combine)
+    return AfterEvolution(reset, rename_models ∘ clear_redundant_vertices)
+end
+
 function clear_redundant_vertices(pop)
     foreach(cand -> check_apply(NaiveGAflux.graph(cand)), pop)
     return pop

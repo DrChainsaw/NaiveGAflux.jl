@@ -52,12 +52,12 @@ Return a population of image classifiers fitted to the given data.
 
 - `trainstrategy::AbstractTrainStrategy=TrainStrategy()`: Strategy for training. See [`ImageClassification.AbstractTrainStrategy`](@ref)
 
-- `evolutionstrategy::AbstractEvolutionStrategy=EliteAndSusSelection(popsize=c.popsize)`: Strategy for evolution. See [`ImageClassification.AbstractEvolutionStrategy`](@ref)
+- `evolutionstrategy::AbstractEvolutionStrategy=EliteAndTournamentSelection(popsize=c.popsize)`: Strategy for evolution. See [`ImageClassification.AbstractEvolutionStrategy`](@ref)
 
 - `mdir`: Load models from this directory if present. If persistence is used (e.g. by providing `cb=persist`) candidates will be stored in this directory.
 
 """
-function AutoFlux.fit(c::ImageClassifier, x, y; cb=identity, fitnesstrategy::AbstractFitnessStrategy=TrainSplitAccuracy(), trainstrategy::AbstractTrainStrategy=TrainStrategy(), evolutionstrategy::AbstractEvolutionStrategy=EliteAndSusSelection(popsize=c.popsize), mdir)
+function AutoFlux.fit(c::ImageClassifier, x, y; cb=identity, fitnesstrategy::AbstractFitnessStrategy=TrainSplitAccuracy(), trainstrategy::AbstractTrainStrategy=TrainStrategy(), evolutionstrategy::AbstractEvolutionStrategy=EliteAndTournamentSelection(popsize=c.popsize), mdir)
     ndims(x) == 4 || error("Must use 4D data, got $(ndims(x))D data")
 
     x, y, fitnessgen = fitnessfun(fitnesstrategy, x, y)
