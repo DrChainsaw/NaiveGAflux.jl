@@ -63,6 +63,33 @@
 
         sleepreti(0.7)
         @test fitness(ff, x -> [1 0; 0 1]) == 0
+    end
 
+    @testset "sizevs" begin
+        import NaiveGAflux.AutoFlux.ImageClassification: sizevs
+        import Flux.params
+        struct SizeVsTestFitness <: AbstractFitness
+            fitness
+        end
+        NaiveGAflux.fitness(s::SizeVsTestFitness, f) = s.fitness
+
+        struct SizeVsTestFakeModel
+            nparams::Int
+        end
+        Flux.params(s::SizeVsTestFakeModel) = (order=1:s.nparams,)
+
+        basefitness = SizeVsTestFitness(0.12345678)
+
+        testfitness = sizevs(basefitness, 2)
+        @test fitness(testfitness, SizeVsTestFakeModel(1)) == 0.121
+        @test fitness(testfitness, SizeVsTestFakeModel(100_000)) ≈ 0.12001
+
+        testfitness = sizevs(basefitness, 3)
+        @test fitness(testfitness, SizeVsTestFakeModel(1)) == 0.1231
+        @test fitness(testfitness, SizeVsTestFakeModel(100_000)) ≈ 0.12301
+
+        testfitness = sizevs(basefitness, 4)
+        @test fitness(testfitness, SizeVsTestFakeModel(1)) == 0.12351
+        @test fitness(testfitness, SizeVsTestFakeModel(100_000)) ≈ 0.12351
     end
 end

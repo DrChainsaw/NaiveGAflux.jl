@@ -95,20 +95,20 @@ struct AccuracyVsSize{T}
     accdigits::Int
 end
 AccuracyVsSize(data, accdigits=2) = AccuracyVsSize(data, accdigits)
-(f::AccuracyVsSize)() = sizevs(AccuracyFitness(f.data))
+(f::AccuracyVsSize)() = sizevs(AccuracyFitness(f.data), f.accdigits)
 
-function sizevs(f::AbstractFitness, accdigits = 2)
+function sizevs(f::AbstractFitness, accdigits)
     truncacc = MapFitness(x -> round(x, digits=accdigits), f)
 
     size = SizeFitness()
-    sizefit = MapFitness(x -> min(10.0^-accdigits, 1 / x), size)
+    sizefit = MapFitness(x -> min(10.0^-(accdigits+1), 1 / x), size)
 
     return AggFitness(+, truncacc, sizefit)
 end
 
 """
     struct TrainAccuracyVsSize <: AbstractFitnessStrategy
-    TrainAccuracyVsSize()
+    TrainAccuracyVsSize(accdigits=3)
 
 Produces an `AbstractFitness` which measures fitness accuracy on training data and based on number of parameters.
 
@@ -118,8 +118,11 @@ Only if the first `accdigits` of accuracy is the same will the number of paramet
 
 Beware that fitness as accuracy on training data will make evolution favour overfitted candidates.
 """
-struct TrainAccuracyVsSize <: AbstractFitnessStrategy end
-fitnessfun(s::TrainAccuracyVsSize, x, y) = x, y, () -> NanGuard(sizevs(TrainAccuracyFitness()))
+struct TrainAccuracyVsSize <: AbstractFitnessStrategy
+    accdigits::Int
+end
+TrainAccuracyVsSize() = TrainAccuracyVsSize(3)
+fitnessfun(s::TrainAccuracyVsSize, x, y) = x, y, () -> NanGuard(sizevs(TrainAccuracyFitness(), s.accdigits))
 
 """
     struct PruneLongRunning{T <: AbstractFitnessStrategy, D <: Real} <: AbstractFitnessStrategy
