@@ -56,10 +56,10 @@
 
         @test sleepreti(0.01) == 0.01
         @test sleepreti(0.02) == 0.02
-        @test fitness(ff, x -> [1 0; 0 1]) == 0.51 #SizeFitness gives 0.01 extra
+        @test fitness(ff, x -> [1 0; 0 1]) == 0.501 #SizeFitness gives 0.001 extra
 
         sleepreti(0.4)
-        @test fitness(ff, x -> [1 0; 0 1]) < 0.51  #SizeFitness gives 0.01 extra
+        @test fitness(ff, x -> [1 0; 0 1]) < 0.501  #SizeFitness gives 0.001 extra
 
         sleepreti(0.7)
         @test fitness(ff, x -> [1 0; 0 1]) == 0
@@ -67,7 +67,6 @@
 
     @testset "sizevs" begin
         import NaiveGAflux.AutoFlux.ImageClassification: sizevs
-        import Flux.params
         struct SizeVsTestFitness <: AbstractFitness
             fitness
         end
