@@ -210,7 +210,7 @@ end
 """
     struct EliteAndTournamentSelection <: AbstractEvolutionStrategy
     EliteAndTournamentSelection(popsize, nelites, k, p)
-    EliteAndTournamentSelection(;popsize=50, nelites=2; k=4, p=0.9)
+    EliteAndTournamentSelection(;popsize=50, nelites=2; k=2, p=1.0)
 
 Standard evolution strategy.
 
@@ -228,7 +228,7 @@ struct EliteAndTournamentSelection <: AbstractEvolutionStrategy
     k::Int
     p::Real
 end
-EliteAndTournamentSelection(;popsize=50, nelites=2, k=4, p=0.9) = EliteAndTournamentSelection(popsize, nelites, k, p)
+EliteAndTournamentSelection(;popsize=50, nelites=2, k=2, p=1.0) = EliteAndTournamentSelection(popsize, nelites, k, p)
 
 function evostrategy(s::EliteAndTournamentSelection, inshape)
     elite = EliteSelection(s.nelites)
