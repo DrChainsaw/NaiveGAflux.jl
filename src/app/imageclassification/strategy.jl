@@ -267,9 +267,9 @@ function evolvecandidate(inshape)
 end
 
 newlr(o::Flux.Optimise.Optimiser) = newlr(o.os[].eta)
-newlr(lr::Number) = clamp(lr + (rand() - 0.5) * lr, 1e-6, 0.3) +  (NaiveGAflux.apply(Probability(0.05)) ? 0.2*rand() : 0)
+newlr(lr::Number) = clamp(lr + (rand() - 0.5) * lr, 1e-6, 0.3) + (NaiveGAflux.apply(Probability(0.05)) ? 0.2*rand() : 0)
 
-newopt(lr::Number) = Flux.Optimise.Optimiser([rand([Descent, Momentum, Nesterov, ADAM, NADAM])(lr)])
+newopt(lr::Number) = Flux.Optimise.Optimiser([rand([Descent, Momentum, Nesterov, ADAM, NADAM, ADAGrad])(lr)])
 newopt(opt::Flux.Optimise.Optimiser) = NaiveGAflux.apply(Probability(0.05)) ? newopt(newlr(opt)) : sameopt(opt.os[], newlr(opt))
 sameopt(::T, lr) where T = Flux.Optimise.Optimiser([T(lr)])
 
