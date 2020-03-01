@@ -27,7 +27,7 @@ export fitness, instrument, reset!, AbstractFitness, AccuracyFitness, TrainAccur
 export evolvemodel, AbstractCandidate, CandidateModel, HostCandidate, CacheCandidate
 
 # Evolution
-export evolve!, AbstractEvolution, NoOpEvolution, AfterEvolution, ResetAfterEvolution, EliteSelection, SusSelection, CombinedEvolution, EvolveCandidates
+export evolve!, AbstractEvolution, NoOpEvolution, AfterEvolution, ResetAfterEvolution, EliteSelection, SusSelection, TournamentSelection, CombinedEvolution, EvolveCandidates
 
 # misc types
 export Probability, MutationShield, ApplyIf, RemoveIfSingleInput, RepeatPartitionIterator, MapIterator, GpuIterator, BatchIterator, FlipIterator, ShiftIterator, ShuffleIterator, PersistentArray

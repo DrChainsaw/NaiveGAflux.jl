@@ -5,8 +5,8 @@
 
     @testset "AccuracyFitness" begin
         struct DummyIter end
-        Base.iterate(::DummyIter) = (([0 1 0; 1 0 0; 0 0 1], [1 0 0; 0 1 0; 0 0 1]), 1)
-        Base.iterate(::DummyIter, state) = state == 1 ? (([0 1 0; 1 0 0; 0 0 1], [0 1 0; 1 0 1; 0 0 0]), 2) : nothing
+        Base.iterate(::DummyIter) = (([0 1 0 0; 1 0 0 1; 0 0 1 0], [1 0 0 0; 1 0 0 1; 0 0 1 0]), 1)
+        Base.iterate(::DummyIter, state) = state == 1 ? (([1 0; 0 0; 0 1], [0 0; 1 1; 0 0]), 2) : nothing
 
         @test fitness(AccuracyFitness(DummyIter()), identity) == 0.5
     end

@@ -95,20 +95,20 @@ struct AccuracyVsSize{T}
     accdigits::Int
 end
 AccuracyVsSize(data, accdigits=2) = AccuracyVsSize(data, accdigits)
-(f::AccuracyVsSize)() = sizevs(AccuracyFitness(f.data))
+(f::AccuracyVsSize)() = sizevs(AccuracyFitness(f.data), f.accdigits)
 
-function sizevs(f::AbstractFitness, accdigits = 2)
+function sizevs(f::AbstractFitness, accdigits)
     truncacc = MapFitness(x -> round(x, digits=accdigits), f)
 
     size = SizeFitness()
-    sizefit = MapFitness(x -> min(10.0^-accdigits, 1 / x), size)
+    sizefit = MapFitness(x -> min(10.0^-(accdigits+1), 1 / x), size)
 
     return AggFitness(+, truncacc, sizefit)
 end
 
 """
     struct TrainAccuracyVsSize <: AbstractFitnessStrategy
-    TrainAccuracyVsSize()
+    TrainAccuracyVsSize(accdigits=3)
 
 Produces an `AbstractFitness` which measures fitness accuracy on training data and based on number of parameters.
 
@@ -118,8 +118,11 @@ Only if the first `accdigits` of accuracy is the same will the number of paramet
 
 Beware that fitness as accuracy on training data will make evolution favour overfitted candidates.
 """
-struct TrainAccuracyVsSize <: AbstractFitnessStrategy end
-fitnessfun(s::TrainAccuracyVsSize, x, y) = x, y, () -> NanGuard(sizevs(TrainAccuracyFitness()))
+struct TrainAccuracyVsSize <: AbstractFitnessStrategy
+    accdigits::Int
+end
+TrainAccuracyVsSize() = TrainAccuracyVsSize(3)
+fitnessfun(s::TrainAccuracyVsSize, x, y) = x, y, () -> NanGuard(sizevs(TrainAccuracyFitness(), s.accdigits))
 
 """
     struct PruneLongRunning{T <: AbstractFitnessStrategy, D <: Real} <: AbstractFitnessStrategy
@@ -204,6 +207,40 @@ function evostrategy(s::EliteAndSusSelection, inshape)
     return AfterEvolution(reset, rename_models ∘ clear_redundant_vertices)
 end
 
+"""
+    struct EliteAndTournamentSelection <: AbstractEvolutionStrategy
+    EliteAndTournamentSelection(popsize, nelites, k, p)
+    EliteAndTournamentSelection(;popsize=50, nelites=2; k=2, p=1.0)
+
+Standard evolution strategy.
+
+Selects `nelites` candidates to move on to the next generation without any mutation.
+
+Also selects `popsize - nelites` candidates out of the whole population using [`TournamentSelection`](@ref) to evolve by applying random mutation.
+
+Mutation operations are both applied to the model itself (change sizes, add/remove vertices/edges) as well as to the optimizer (change learning rate and optimizer algorithm).
+
+Finally, models are renamed so that the name of each vertex of the model of candidate `i` is prefixed with "model`i`".
+"""
+struct EliteAndTournamentSelection <: AbstractEvolutionStrategy
+    popsize::Int
+    nelites::Int
+    k::Int
+    p::Real
+end
+EliteAndTournamentSelection(;popsize=50, nelites=2, k=2, p=1.0) = EliteAndTournamentSelection(popsize, nelites, k, p)
+
+function evostrategy(s::EliteAndTournamentSelection, inshape)
+    elite = EliteSelection(s.nelites)
+
+    mutate = EvolveCandidates(evolvecandidate(inshape))
+    evolve = TournamentSelection(s.popsize - s.nelites, s.k, s.p, mutate)
+
+    combine = CombinedEvolution(elite, evolve)
+    reset = ResetAfterEvolution(combine)
+    return AfterEvolution(reset, rename_models ∘ clear_redundant_vertices)
+end
+
 function clear_redundant_vertices(pop)
     foreach(cand -> check_apply(NaiveGAflux.graph(cand)), pop)
     return pop
@@ -230,9 +267,14 @@ function evolvecandidate(inshape)
 end
 
 newlr(o::Flux.Optimise.Optimiser) = newlr(o.os[].eta)
-newlr(lr::Number) = clamp(lr + (rand() - 0.5) * lr, 1e-6, 0.3) +  (NaiveGAflux.apply(Probability(0.05)) ? 0.2*rand() : 0)
+function newlr(lr::Number)
+    nudge =lr + (rand() - 0.5) * lr
+    bigup = NaiveGAflux.apply(Probability(0.05)) ? 10*rand() : 1
+    bigdown = NaiveGAflux.apply(Probability(0.05)) ? 10*rand() : 1
+    return clamp(nudge * bigup / bigdown, 1e-6, 0.3)
+end
 
-newopt(lr::Number) = Flux.Optimise.Optimiser([rand([Descent, Momentum, Nesterov, ADAM, NADAM])(lr)])
+newopt(lr::Number) = Flux.Optimise.Optimiser([rand([Descent, Momentum, Nesterov, ADAM, NADAM, ADAGrad])(lr)])
 newopt(opt::Flux.Optimise.Optimiser) = NaiveGAflux.apply(Probability(0.05)) ? newopt(newlr(opt)) : sameopt(opt.os[], newlr(opt))
 sameopt(::T, lr) where T = Flux.Optimise.Optimiser([T(lr)])
 
