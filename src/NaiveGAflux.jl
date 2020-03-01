@@ -62,6 +62,7 @@ export AutoFlux
 # Visulization
 export PlotFitness, ScatterPop, ScatterOpt, MultiPlot, CbAll
 
+include("optstate.jl")
 include("util.jl")
 include("archspace.jl")
 include("mutation.jl")
