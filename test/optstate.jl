@@ -1,13 +1,14 @@
 @testset "Optimizer state mutation" begin
     import NaiveGAflux: StateAlign, Stateless, Stateful, withopt, optstate,opttype
 
-    # SOTA on CIFAR10 :) 
+    # SOTA on CIFAR10 :)
     MultiOpt() = Flux.Optimise.Optimiser(ADAM(), ExpDecay(), Descent(), Nesterov())
 
     allopts = (Descent, Momentum, Nesterov, ADAM, RMSProp, RADAM, AdaMax, ADAGrad, ADADelta, AMSGrad, NADAM, ADAMW, InvDecay, ExpDecay, WeightDecay, MultiOpt)
 
     function test_opt_mutation(g, v, opt, x = randn(Float32, nout(g.inputs[]), 2))
         loss(x,y) = Flux.mse(g(x), y)
+        @test !isempty(params(g))
         Flux.train!(loss, params(g), [(x, g(x) .* 0.7)], opt)
         test_keys(opt, g)
 
@@ -25,17 +26,38 @@
     function test_keys(::Stateful, opt, g)
         pars = Set(params(g).order)
         for state in optstate(opt)
+            @test length(state) == length(pars)
             @test keys(state) == pars
         end
     end
 
-    dense(name, vin, outsize, lf) =  mutable(name, Dense(nout(vin), outsize), vin; layerfun=lf)
+    dense(name, vin, outsize, lf) = mutable(name, Dense(nout(vin), outsize), vin; layerfun=lf)
 
     @testset "StateAlign only with optimizer $optfun" for optfun in allopts
         opt = optfun()
         v0 = inputvertex("in", 3, FluxDense())
         v1 = dense("v1", v0, 5, withopt(opt))
         v2 = dense("v2", v1, 3, withopt(opt))
+
+        g = CompGraph(v0, v2)
+        test_opt_mutation(g, v2, opt)
+    end
+
+    @testset "LazyMutable and StateAlign with optimizer $optfun" for optfun in allopts
+        opt = optfun()
+        v0 = inputvertex("in", 3, FluxDense())
+        v1 = dense("v1", v0, 5, LazyMutable ∘ withopt(opt))
+        v2 = dense("v2", v1, 3, LazyMutable ∘ withopt(opt))
+
+        g = CompGraph(v0, v2)
+        test_opt_mutation(g, v2, opt)
+    end
+
+    @testset "ActivationContribution, LazyMutable and StateAlign with optimizer $optfun" for optfun in allopts
+        opt = optfun()
+        v0 = inputvertex("in", 3, FluxDense())
+        v1 = dense("v1", v0, 5, ActivationContribution ∘ LazyMutable ∘ withopt(opt))
+        v2 = dense("v2", v1, 3, ActivationContribution ∘ LazyMutable ∘ withopt(opt))
 
         g = CompGraph(v0, v2)
         test_opt_mutation(g, v2, opt)
