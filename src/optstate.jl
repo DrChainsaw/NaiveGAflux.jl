@@ -1,5 +1,38 @@
 # TODO: Move to NaiveNASflux one mature enough
 
+struct Stateful end
+struct Stateless end
+
+opttype(x) = @error "No optimizer type defined for $x"
+
+macro stateful(OT)
+    statetype(OT, Stateful)
+end
+macro stateless(OT)
+    statetype(OT, Stateless)
+end
+
+statetype(OT, T) =  :(statetype(@__MODULE__, $(esc(OT)), $(esc(T))))
+statetype(m::Module, OT, T) = @eval m opttype(::$OT) = $(T())
+
+for opt in (Momentum, Nesterov, ADAM, RMSProp, RADAM, AdaMax, ADAGrad, ADADelta, AMSGrad, NADAM, InvDecay, ExpDecay)
+    @stateful opt
+end
+
+for opt in (Descent, WeightDecay)
+    @stateless opt
+end
+
+
+optstate(opt::Flux.Optimise.Optimiser) = mapreduce(o -> optstate(o), vcat, opt.os)
+optstate(opt) = optstate(opttype(opt), opt)
+optstate(::Stateful, opt::T) where T = mapreduce(fn -> getfield(opt, fn), addstate, fieldnames(T), init=[])
+optstate(::Stateless, opt) = []
+
+addstate(a, x) = a
+addstate(a, d::AbstractDict) = vcat(a, d)
+
+
 """
     StateAlign{T<:AbstractDict, F} <: AbstractMutableComp
     StateAlign{T}(state::T, m::F)
@@ -12,10 +45,16 @@ struct StateAlign{T<:AbstractDict} <: AbstractMutableComp
     state::T
     m::AbstractMutableComp
 end
-StateAlign(state::T) where T = m -> StateAlign{T}(state, m)
+StateAlign(state::T) where T<:AbstractDict = m -> StateAlign{T}(state, m)
+
+withopt(opt::Flux.Optimise.Optimiser) = mapreduce(withopt, ∘, opt.os)
+withopt(opt) = withopt(opttype(opt), opt)
+withopt(::Stateless, opt) = identity
+withopt(::Stateful, opt) = StateAlign(first(optstate(opt)))
+
 (m::StateAlign)(x...) = m.m(x...)
-wrapped(m::StateAlign) = m.m
-layer(m::StateAlign) = layer(wrapped(m))
+NaiveNASflux.wrapped(m::StateAlign) = m.m
+NaiveNASflux.layer(m::StateAlign) = layer(NaiveNASflux.wrapped(m))
 
 NaiveNASlib.mutate_inputs(m::StateAlign, inputs::AbstractArray{<:Integer,1}...) = NaiveNASflux.mutate(m; inputs=inputs[1], outputs=1:nout(m))
 NaiveNASlib.mutate_outputs(m::StateAlign, outputs) = NaiveNASflux.mutate(m; inputs=Base.OneTo.(nin(m)), outputs=outputs)
