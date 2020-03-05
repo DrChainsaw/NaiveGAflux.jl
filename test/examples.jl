@@ -146,18 +146,18 @@ end
     output = ListArchSpace(drep, dout)
 
     # Aaaand lets glue it together: Feature extracting conv+bn layers -> global pooling -> dense layers
-    archspace = ListArchSpace(featureextract, GpVertex2D(), output)
+    archspace = ListArchSpace(featureextract, GlobalPoolSpace2D(), output)
 
     # Input is 3 channel image
     inputshape = inputvertex("input", 3, FluxConv{2}())
 
     # Sample one architecture from the search space
     graph1 = CompGraph(inputshape, archspace(inputshape))
-    @test nv(graph1) == 66
+    @test nv(graph1) == 64
 
     # And one more...
     graph2 = CompGraph(inputshape, archspace(inputshape))
-    @test nv(graph2) == 81
+    @test nv(graph2) == 50
 end
 
 @testset "Mutation examples" begin

@@ -378,5 +378,5 @@ is_convtype(v::AbstractVertex) = any(is_globpool.(outputs(v))) || any(is_convtyp
 is_globpool(v::AbstractVertex) = is_globpool(base(v))
 is_globpool(v::InputVertex) = false
 is_globpool(v::CompVertex) = is_globpool(v.computation)
-is_globpool(l::ActivationContribution) = is_globpool(NaiveNASflux.wrapped(l))
-is_globpool(f) = f == globalpooling2d
+is_globpool(l::AbstractMutableComp) = is_globpool(NaiveNASflux.wrapped(l))
+is_globpool(f) = f isa NaiveGAflux.GlobalPool

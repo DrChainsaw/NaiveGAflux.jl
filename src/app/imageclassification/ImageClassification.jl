@@ -2,7 +2,7 @@ module ImageClassification
 
 using ...NaiveGAflux
 using ..AutoFlux: fit
-import NaiveGAflux: globalpooling2d
+import NaiveGAflux: GlobalPool
 using Random
 import Logging
 using Statistics
