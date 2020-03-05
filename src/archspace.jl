@@ -498,9 +498,9 @@ resinitW(::Union{IdentityWeightInit, PartialIdentityWeightInit}) = ZeroWeightIni
 
 """
     FunctionSpace <: AbstractArchSpace
-    FunctionSpace(fun::Function, namesuff::String, conf=LayerVertexConf(ActivationContribution, validated() ∘ default_logging()))
+    FunctionSpace(funs...; namesuff::String, conf=LayerVertexConf(ActivationContribution, validated() ∘ default_logging()))
 
-Return a `SizeInvariant` vertex representing `fun(x)` when invoked with `in` as input vertex where `x` is output of `in`.
+Return a `SizeInvariant` vertex representing `fun(x)` when invoked with `in` as input vertex where `x` is output of `in` where `fun` is uniformly selected from `funs`.
 """
 struct FunctionSpace <: AbstractArchSpace
     conf::LayerVertexConf
@@ -520,19 +520,19 @@ funvertex(name::String, s::FunctionSpace, in::AbstractVertex, rng) =
 invariantvertex(s.conf.layerfun(s.funspace(rng)), in, mutation=IoChange, traitdecoration = s.conf.traitfun ∘ named(name))
 
 """
-    GlobalPoolSpace2D()
-    GlobalPoolSpace2D(conf::LayerVertexConf)
+    GlobalPoolSpace(Ts...)
+    GlobalPoolSpace(conf::LayerVertexConf, Ts...)
 
 Short for `FunctionSpace` with global average or global max pooling.
 
 Also adds a `MutationShield` to prevent the vertex from being removed by default.
 """
-GlobalPoolSpace2D() = GlobalPoolSpace2D(LayerVertexConf(ActivationContribution, MutationShield ∘ validated() ∘ default_logging()))
-GlobalPoolSpace2D(conf) = FunctionSpace(GlobalPool.(2, (MaxPool, MeanPool))..., namesuff = ".globpool", conf=conf)
+GlobalPoolSpace(Ts...) = GlobalPoolSpace(LayerVertexConf(ActivationContribution, MutationShield ∘ validated() ∘ default_logging()), Ts...)
+GlobalPoolSpace(conf::LayerVertexConf, Ts...=(MaxPool, MeanPool)...) = FunctionSpace(GlobalPool.(Ts)..., namesuff = ".globpool", conf=conf)
 # About 50% faster on GPU to create a MeanPool and use it compared to dropdims(mean(x, dims=[1:2]), dims=(1,2)). CBA to figure out why...
-struct GlobalPool{N, PT} end
-GlobalPool(nd::Int, PT) = GlobalPool{nd, PT}()
-(::GlobalPool{N, PT})(x) where {N, PT} = dropdims(PT(size(x)[1:N])(x),dims=Tuple(1:N))
+struct GlobalPool{PT} end
+GlobalPool(PT) = GlobalPool{PT}()
+(::GlobalPool{PT})(x::AbstractArray{<:Any, N}) where {N, PT} = dropdims(PT(size(x)[1:N-2])(x),dims=Tuple(1:N-2))
 
 NaiveNASflux.layertype(gp::GlobalPool) = gp
 NaiveNASflux.layer(gp::GlobalPool) = gp

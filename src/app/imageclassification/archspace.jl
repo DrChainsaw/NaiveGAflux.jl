@@ -38,13 +38,13 @@ function initial_archspace(inshape, outsize)
     # Option 1: Just a global pooling layer
     # For this to work we need to ensure that the layer before the global pool has exactly 10 outputs, that is what this is all about (or else we could just have allowed 0 dense layers in the search space for option 2).
     convout = convspace(outconf, outsize, 1:2:5, identity)
-    blockcout = ListArchSpace(convout, GlobalPoolSpace2D())
+    blockcout = ListArchSpace(convout, GlobalPoolSpace())
 
     # Option 2: 1-3 Dense layers after the global pool
     dense = VertexSpace(layerconf, NamedLayerSpace("dense", DenseSpace(16:512, acts)))
     drep = RepeatArchSpace(dense, 0:2)
     dout=VertexSpace(outconf, NamedLayerSpace("dense", DenseSpace(outsize, identity)))
-    blockdout = ListArchSpace(GlobalPoolSpace2D(), drep, dout)
+    blockdout = ListArchSpace(GlobalPoolSpace(), drep, dout)
 
     blockout = ArchSpace(ParSpace([blockdout, blockcout]))
 

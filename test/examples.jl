@@ -146,7 +146,7 @@ end
     output = ListArchSpace(drep, dout)
 
     # Aaaand lets glue it together: Feature extracting conv+bn layers -> global pooling -> dense layers
-    archspace = ListArchSpace(featureextract, GlobalPoolSpace2D(), output)
+    archspace = ListArchSpace(featureextract, GlobalPoolSpace(), output)
 
     # Input is 3 channel image
     inputshape = inputvertex("input", 3, FluxConv{2}())

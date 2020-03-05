@@ -271,7 +271,7 @@ function newlr(lr::Number)
     nudge =lr + (rand() - 0.5) * lr
     bigup = NaiveGAflux.apply(Probability(0.05)) ? 10*rand() : 1
     bigdown = NaiveGAflux.apply(Probability(0.05)) ? 10*rand() : 1
-    return clamp(nudge * bigup / bigdown, 1e-6, 0.3)
+    return clamp(nudge * bigup / bigdown, 1e-6, 1.0)
 end
 
 newopt(lr::Number) = Flux.Optimise.Optimiser([rand([Descent, Momentum, Nesterov, ADAM, NADAM, ADAGrad])(lr)])
@@ -318,10 +318,12 @@ function mutation(inshape)
     msize = MutationList(mremv, PostMutation(inout, NeuronSelect()), PostMutation(dnout, NeuronSelect()), mkern, madde, mreme, maddm, maddv)
     # Add mutation last as new vertices with neuron_value == 0 screws up outputs selection as per https://github.com/DrChainsaw/NaiveNASlib.jl/issues/39
 
-    # If isbig then perform the mutation operation which is guaranteed to not increase the size
+    mgp = VertexMutation(MutationProbability(LogMutation(v -> "\tMutate global pool type for $(name(v))", MutateGlobalPool()), 0.001), SelectGlobalPool())
+
+        # If isbig then perform the mutation operation which is guaranteed to not increase the size
     # Otherwise perform the mutation which might decrease or increase the size
     # This is done mostly to avoid OOM and time outs. Doesn't hurt that it also speeds things up
-    mall = MutationList(MutationFilter(isbig, dsize), MutationFilter(!isbig, msize), mactf)
+    mall = MutationList(MutationFilter(isbig, dsize), MutationFilter(!isbig, msize), mactf, mgp)
 
     return LogMutation(g -> "Mutate model $(modelname(g))", mall)
 end
@@ -380,3 +382,23 @@ is_globpool(v::InputVertex) = false
 is_globpool(v::CompVertex) = is_globpool(v.computation)
 is_globpool(l::AbstractMutableComp) = is_globpool(NaiveNASflux.wrapped(l))
 is_globpool(f) = f isa NaiveGAflux.GlobalPool
+
+struct SelectGlobalPool <:AbstractVertexSelection
+    s::AbstractVertexSelection
+end
+SelectGlobalPool() = SelectGlobalPool(AllVertices())
+NaiveGAflux.select(s::SelectGlobalPool, g::CompGraph) = filter(is_globpool, NaiveGAflux.select(s.s, g))
+
+struct MutateGlobalPool <: AbstractMutation{AbstractVertex} end
+function (::MutateGlobalPool)(v::AbstractVertex)
+    # Remove the old vertex and replace it with a new one with a different global pool type
+    iv = inputs(v)[]
+    RemoveVertexMutation()(v)
+    v in outputs(iv) && return # failed to remove for some reason
+
+    newname = first(splitext(name(v)))
+    insert!(iv, vx -> GlobalPoolSpace(newpool(layer(v)))(newname, vx))
+end
+
+newpool(::GlobalPool{MaxPool}) = MeanPool
+newpool(::GlobalPool{MeanPool}) = MaxPool

@@ -337,7 +337,7 @@
         @test nout(v) == 3
         @test v([1 2 3]) == [2 4 6]
 
-        space = GlobalPoolSpace2D()
+        space = GlobalPoolSpace()
         v = space("v", inpt)
 
         @test size(v(ones(Float32, 3,4,5,6))) == (5,6)
