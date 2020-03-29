@@ -268,10 +268,10 @@ end
 
 newlr(o::Flux.Optimise.Optimiser) = newlr(o.os[].eta)
 function newlr(lr::Number)
-    nudge =lr + (rand() - 0.5) * lr
-    bigup = NaiveGAflux.apply(Probability(0.05)) ? 10*rand() : 1
-    bigdown = NaiveGAflux.apply(Probability(0.05)) ? 10*rand() : 1
-    return clamp(nudge * bigup / bigdown, 1e-6, 1.0)
+    # GA has a strong tendency to get stuck in local minima by lowering the
+    # learning rate to the smallest allowed value
+    nudge =lr + (rand() - 0.5) * lr * 0.3
+    return clamp(nudge, 1e-6, 1.0)
 end
 
 newopt(lr::Number) = Flux.Optimise.Optimiser([rand([Descent, Momentum, Nesterov, ADAM, NADAM, ADAGrad])(lr)])
@@ -281,13 +281,13 @@ sameopt(::T, lr) where T = Flux.Optimise.Optimiser([T(lr)])
 function mutation(inshape)
     acts = [identity, relu, elu, selu]
 
-    increase_nout = NeuronSelectMutation(NoutMutation(0, 0.05)) # Max 5% change in output size
-    decrease_nout = NeuronSelectMutation(NoutMutation(-0.05, 0))
+    increase_nout = NeuronSelectMutation(NoutMutation(0, 0.1)) # Max 10% change in output size
+    decrease_nout = NeuronSelectMutation(NoutMutation(-0.1, 0))
     add_vertex = add_vertex_mutation(acts)
     add_maxpool = AddVertexMutation(VertexSpace(default_layerconf(), NamedLayerSpace("maxpool", MaxPoolSpace(PoolSpace2D([2])))))
     rem_vertex = RemoveVertexMutation()
     # [-2, 2] keeps kernel size odd due to CuArrays issue# 356 (odd kernel size => symmetric padding)
-    mutate_kernel = KernelSizeMutation(ParSpace2D([-2, 2]), maxsize=maxkernelsize(inshape))
+    increase_kernel = KernelSizeMutation(ParSpace2D([ 2]), maxsize=maxkernelsize(inshape))
     decrease_kernel = KernelSizeMutation(ParSpace2D([-2]))
     mutate_act = ActivationFunctionMutation(acts)
 
@@ -299,31 +299,41 @@ function mutation(inshape)
     mph(m, p) = VertexMutation(HighValueMutationProbability(m, p))
     mpl(m, p) = VertexMutation(LowValueMutationProbability(m, p))
 
-    inout = mph(LogMutation(v -> "\tIncrease size of vertex $(name(v))", increase_nout), 0.025)
-    dnout = mpl(LogMutation(v -> "\tReduce size of vertex $(name(v))", decrease_nout), 0.025)
+    inout = mph(LogMutation(v -> "\tIncrease size of vertex $(name(v))", increase_nout), 0.05)
+    dnout = mpl(LogMutation(v -> "\tReduce size of vertex $(name(v))", decrease_nout), 0.05)
     maddv = mph(LogMutation(v -> "\tAdd vertex after $(name(v))", add_vertex), 0.005)
-    maddm = mpn(MutationFilter(canaddmaxpool(inshape), LogMutation(v -> "\tAdd maxpool after $(name(v))", add_maxpool)), 0.0005)
-    mremv = mpl(LogMutation(v -> "\tRemove vertex $(name(v))", rem_vertex), 0.005)
-    mkern = mpl(LogMutation(v -> "\tMutate kernel size of $(name(v))", mutate_kernel), 0.01)
+    maddm = mpn(MutationFilter(canaddmaxpool(inshape), LogMutation(v -> "\tAdd maxpool after $(name(v))", add_maxpool)), 0.01)
+    mremv = mpl(LogMutation(v -> "\tRemove vertex $(name(v))", rem_vertex), 0.01)
+    ikern = mpl(LogMutation(v -> "\tMutate kernel size of $(name(v))", increase_kernel), 0.01)
     dkern = mpl(LogMutation(v -> "\tDecrease kernel size of $(name(v))", decrease_kernel), 0.005)
     mactf = mpl(LogMutation(v -> "\tMutate activation function of $(name(v))", mutate_act), 0.005)
-    madde = mph(LogMutation(v -> "\tAdd edge from $(name(v))", add_edge), 0.01)
-    mreme = mpn(MutationFilter(v -> length(outputs(v)) > 1, LogMutation(v -> "\tRemove edge from $(name(v))", rem_edge)), 0.01)
+    madde = mph(LogMutation(v -> "\tAdd edge from $(name(v))", add_edge), 0.02)
+    mreme = mpn(MutationFilter(v -> length(outputs(v)) > 1, LogMutation(v -> "\tRemove edge from $(name(v))", rem_edge)), 0.02)
 
     mremv = MutationFilter(g -> nv(g) > 5, mremv)
 
     # Create two possible mutations: One which is guaranteed to not increase the size:
-    dsize = MutationList(mremv, PostMutation(dnout, NeuronSelect()), dkern, maddm)
-    # ...and another which can either decrease or increase the size:
-    msize = MutationList(mremv, PostMutation(inout, NeuronSelect()), PostMutation(dnout, NeuronSelect()), mkern, madde, mreme, maddm, maddv)
+    dsize = MutationList(mremv, PostMutation(dnout, NeuronSelect()), dkern, mreme, maddm)
+    # ...and another which can (and typically does) increase the size:
+    isize = MutationList(PostMutation(inout, NeuronSelect()), ikern, madde, maddm, maddv)
     # Add mutation last as new vertices with neuron_value == 0 screws up outputs selection as per https://github.com/DrChainsaw/NaiveNASlib.jl/issues/39
 
-    mgp = VertexMutation(MutationProbability(LogMutation(v -> "\tMutate global pool type for $(name(v))", MutateGlobalPool()), 0.001), SelectGlobalPool())
+    mgp = VertexMutation(MutationProbability(LogMutation(v -> "\tMutate global pool type for $(name(v))", MutateGlobalPool()), 0.1), SelectGlobalPool())
 
-        # If isbig then perform the mutation operation which is guaranteed to not increase the size
-    # Otherwise perform the mutation which might decrease or increase the size
-    # This is done mostly to avoid OOM and time outs. Doesn't hurt that it also speeds things up
-    mall = MutationList(MutationFilter(isbig, dsize), MutationFilter(!isbig, msize), mactf, mgp)
+    # If isbig then perform the mutation operation which is guaranteed to not increase the size
+    # This is done mostly to avoid OOM and time outs.
+    # If not big then randomly decide whether to increase the model complexity or decrease it
+    decr = nothing
+    function decrease_size(g)
+        if !isnothing(decr)
+            rv = decr
+            decr = nothing
+            return rv
+        end
+        decr = isbig(g) || rand() > 0.5 # Perhaps this can be determined somehow...
+        return decr
+    end
+    mall = MutationList(MutationFilter(decrease_size, dsize), MutationFilter(!decrease_size, isize), mactf, mgp)
 
     return LogMutation(g -> "Mutate model $(modelname(g))", mall)
 end
@@ -358,8 +368,6 @@ function maxkernelsize(v::AbstractVertex, inshape)
     # Kernel sizes must be odd due to CuArrays issue# 356 (odd kernel size => symmetric padding)
     return @. ks - !isodd(ks)
  end
-
-#Flux.functor(a::AbstractArray{<:Integer, 1}) = a, n -> a
 
 function add_vertex_mutation(acts)
 
