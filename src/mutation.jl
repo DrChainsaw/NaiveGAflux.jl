@@ -294,7 +294,7 @@ function no_shapechange(vi, vc=vi, valid = [])
         if vi ∉ inputs(vc)
             valid = vcat(valid, vc)
         end
-        layertype(vc) == typeof(globalpooling2d) && return valid
+        layertype(vc) isa GlobalPool && return valid
         if layertype(vc) == FluxNoParLayer()
             layer(vc) isa MaxPool && return valid
             layer(vc) isa MeanPool && return valid

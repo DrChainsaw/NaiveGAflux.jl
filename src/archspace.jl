@@ -310,7 +310,7 @@ struct LayerVertexConf
     traitfun
 end
 LayerVertexConf() = LayerVertexConf(ActivationContribution ∘ LazyMutable, validated() ∘ default_logging())
-Shielded(base=LayerVertexConf()) = LayerVertexConf(base.layerfun, MutationShield ∘ base.traitfun) 
+Shielded(base=LayerVertexConf()) = LayerVertexConf(base.layerfun, MutationShield ∘ base.traitfun)
 
 
 (c::LayerVertexConf)(in::AbstractVertex, l) = mutable(l,in,layerfun=c.layerfun, mutation=IoChange, traitfun=c.traitfun)
@@ -497,35 +497,46 @@ resinitW(wi::AbstractWeightInit) = wi
 resinitW(::Union{IdentityWeightInit, PartialIdentityWeightInit}) = ZeroWeightInit()
 
 """
-    FunVertex <: AbstractArchSpace
-    FunVertex(fun::Function, namesuff::String, conf=LayerVertexConf(ActivationContribution, validated() ∘ default_logging()))
+    FunctionSpace <: AbstractArchSpace
+    FunctionSpace(funs...; namesuff::String, conf=LayerVertexConf(ActivationContribution, validated() ∘ default_logging()))
 
-Return a `SizeInvariant` vertex representing `fun(x)` when invoked with `in` as input vertex where `x` is output of `in`.
+Return a `SizeInvariant` vertex representing `fun(x)` when invoked with `in` as input vertex where `x` is output of `in` where `fun` is uniformly selected from `funs`.
 """
-struct FunVertex <: AbstractArchSpace
+struct FunctionSpace <: AbstractArchSpace
     conf::LayerVertexConf
-    fun::Function
+    funspace::AbstractParSpace
     namesuff::String
 end
-FunVertex(fun::Function, namesuff::String, conf=LayerVertexConf(ActivationContribution, validated() ∘ default_logging())) = FunVertex(conf, fun, namesuff)
+funspace_default_conf() = LayerVertexConf(ActivationContribution, validated() ∘ default_logging())
 
-(s::FunVertex)(in::AbstractVertex, rng=nothing; outsize=nothing, wi=nothing) = funvertex(s, in)
-(s::FunVertex)(name::String, in::AbstractVertex, rng=nothing; outsize=nothing, wi=nothing) = funvertex(join([name,s.namesuff]), s, in)
+FunctionSpace(funs...; namesuff::String, conf=funspace_default_conf()) = FunctionSpace(conf, ParSpace1D(funs...), namesuff)
 
-funvertex(s, in::AbstractVertex) = invariantvertex(s.conf.layerfun(s.fun), in, mutation=IoChange, traitdecoration = s.conf.traitfun)
+(s::FunctionSpace)(in::AbstractVertex, rng=rng_default; outsize=nothing, wi=nothing) = funvertex(s, in, rng)
+(s::FunctionSpace)(name::String, in::AbstractVertex, rng=rng_default; outsize=nothing, wi=nothing) = funvertex(join([name,s.namesuff]), s, in, rng)
 
-funvertex(name::String, s, in::AbstractVertex) =
-invariantvertex(s.conf.layerfun(s.fun), in, mutation=IoChange, traitdecoration = s.conf.traitfun ∘ named(name))
+funvertex(s::FunctionSpace, in::AbstractVertex, rng) = invariantvertex(s.conf.layerfun(s.funspace(rng)), in, mutation=IoChange, traitdecoration = s.conf.traitfun)
+
+funvertex(name::String, s::FunctionSpace, in::AbstractVertex, rng) =
+invariantvertex(s.conf.layerfun(s.funspace(rng)), in, mutation=IoChange, traitdecoration = s.conf.traitfun ∘ named(name))
 
 """
-    GpVertex()
-    GpVertex(conf::LayerVertexConf)
+    GlobalPoolSpace(Ts...)
+    GlobalPoolSpace(conf::LayerVertexConf, Ts...)
 
-Short for `FunVertex` with `fun = globalpooling2d`.
+Short for `FunctionSpace` with global average or global max pooling.
 
-Also adds a `MutationShield` to prevent the vertex from being removed.
+Also adds a `MutationShield` to prevent the vertex from being removed by default.
 """
-GpVertex2D() = FunVertex(globalpooling2d, ".globpool", LayerVertexConf(ActivationContribution, MutationShield ∘ validated() ∘ default_logging()))
-GpVertex2D(conf) = FunVertex(globalpooling2d, ".globpool", conf)
+GlobalPoolSpace(Ts...) = GlobalPoolSpace(LayerVertexConf(ActivationContribution, MutationShield ∘ validated() ∘ default_logging()), Ts...)
+GlobalPoolSpace(conf::LayerVertexConf, Ts...=(MaxPool, MeanPool)...) = FunctionSpace(GlobalPool.(Ts)..., namesuff = ".globpool", conf=conf)
 # About 50% faster on GPU to create a MeanPool and use it compared to dropdims(mean(x, dims=[1:2]), dims=(1,2)). CBA to figure out why...
-globalpooling2d(x) = dropdims(MeanPool(size(x)[1:2])(x),dims=(1,2))
+struct GlobalPool{PT} end
+GlobalPool(PT) = GlobalPool{PT}()
+(::GlobalPool{PT})(x::AbstractArray{<:Any, N}) where {N, PT} = dropdims(PT(size(x)[1:N-2])(x),dims=Tuple(1:N-2))
+
+NaiveNASflux.layertype(gp::GlobalPool) = gp
+NaiveNASflux.layer(gp::GlobalPool) = gp
+NaiveNASlib.minΔninfactor(::GlobalPool) = 1
+NaiveNASlib.minΔnoutfactor(::GlobalPool) = 1
+function NaiveNASlib.mutate_inputs(::GlobalPool, args...) end
+function NaiveNASlib.mutate_outputs(::GlobalPool, args...) end
