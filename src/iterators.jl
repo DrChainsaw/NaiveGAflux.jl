@@ -196,9 +196,15 @@ flip(dim::Integer, (data,state)::Tuple) = reverse(data, dims=dim), state
 """
     ShiftIterator{T, S<:AbstractParSpace, R<:AbstractRNG}
     ShiftIterator(base;rng=rng_default)
-    ShiftIterator(base, cs::Integer...;rng=rng_default)
+    ShiftIterator(base, cs...;rng=rng_default)
 
-Randomly shifts data from `base` in the interval `0:cs` pixels while keeping the orignal size by cropping and padding.
+Randomly shifts data from `base` while keeping the orignal size by cropping and padding.
+
+Argument `cs` determines the possible range for each dimension and can be any combination of the following:
+Positive `Integer`: Shift is uniformly drawn from 0:cs
+Negative `Integer`: Shift is uniformly drawn from l:-1:l - cs + 1 where l is the number of elements in the dimension
+Tuple{<:Integer, <:Integer} : Shift is drawn from cs[1] : cs[2]
+AbstractArray{<:Integer}: Shift is uniformly drawn from cs 
 """
 struct ShiftIterator{T, S<:AbstractParSpace, R<:AbstractRNG}
     shift::S
@@ -206,7 +212,10 @@ struct ShiftIterator{T, S<:AbstractParSpace, R<:AbstractRNG}
     base::T
 end
 ShiftIterator(base;rng=rng_default) = ShiftIterator(base, 4,4,0,0,rng=rng)
-ShiftIterator(base, cs::Integer...;rng=rng_default) = ShiftIterator(ParSpace(UnitRange.(0, cs)), rng, base)
+ShiftIterator(base, cs...;rng=rng_default) = ShiftIterator(ParSpace(shiftrange.(cs)), rng, base)
+shiftrange(s::Integer) = s > 0 ? (0:s) : (s:0)
+shiftrange(s::AbstractArray{<:Integer}) = s
+shiftrange((start, stop)::Tuple{<:Integer, <:Integer}) = start:stop
 
 Base.length(itr::ShiftIterator) = length(itr.base)
 Base.size(itr::ShiftIterator) = size(itr.base)
@@ -222,7 +231,12 @@ function shift(itr::ShiftIterator, (data,state)::Tuple)
     s = itr.shift(itr.rng)
     sdata = circshift(data, s)
     for (dim, sdim) in enumerate(s)
-        selectdim(sdata, dim, 1:sdim) .= 0
+        if sdim >= 0
+            selectdim(sdata, dim, 1:sdim) .= 0
+        else
+            l = size(sdata, dim)
+            selectdim(sdata, dim, l:-1:l+sdim+1) .= 0
+        end
     end
     return sdata, state
 end

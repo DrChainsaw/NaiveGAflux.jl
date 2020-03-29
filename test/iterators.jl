@@ -69,10 +69,28 @@ end
 end
 
 @testset "ShiftIterator" begin
-    itr = ShiftIterator([[1 2 3 4; 5 6 7 8], [5 6 7 8; 1 2 3 4]], 0, 2, rng=SeqRng(0))
+    @testset "Positive shift" begin
+        itr = ShiftIterator([[1 2 3 4; 5 6 7 8], [5 6 7 8; 1 2 3 4]], 0, 2, rng=SeqRng(0))
 
-    for (act, exp) in zip(itr, [[0 1 2 3; 0 5 6 7], [0 5 6 7; 0 1 2 3]])
-        @test act == exp
+        for (act, exp) in zip(itr, [[0 1 2 3; 0 5 6 7], [0 5 6 7; 0 1 2 3]])
+            @test act == exp
+        end
+    end
+
+    @testset "Negative shift" begin
+        itr = ShiftIterator([[1 2; 3 4; 5 6; 7 8], [5 6; 7 8; 1 2; 3 4]], -2, 0, rng=SeqRng(0))
+
+        for (act, exp) in zip(itr, [[5 6; 7 8; 0 0; 0 0], [7 8; 1 2; 3 4; 0 0]])
+            @test act == exp
+        end
+    end
+
+    @testset "Mixed shift" begin
+        itr = ShiftIterator((ones(4,4,4,4),), [2, -2], (-3, 3), 1, -2, rng=SeqRng(0))
+
+        act = first(itr)
+        @test sum(act) == 48
+
     end
 end
 
