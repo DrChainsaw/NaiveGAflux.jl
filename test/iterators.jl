@@ -35,6 +35,16 @@
     end
 end
 
+@testset "SeedIterator" begin
+    rng = MersenneTwister(123)
+    testitr = SeedIterator(MapIterator(x -> x * rand(rng, Int), ones(10)); rng=rng, seed=12)
+    @test collect(testitr) == collect(testitr)
+
+    rng = MersenneTwister(1234)
+    nesteditr = SeedIterator(MapIterator(x -> x * rand(rng, Int), testitr); rng=rng, seed=1)
+    @test collect(nesteditr) == collect(nesteditr)
+end
+
 @testset "MapIterator" begin
     itr = MapIterator(x -> 2x, [1,2,3,4,5])
     @test collect(itr) == [2,4,6,8,10]

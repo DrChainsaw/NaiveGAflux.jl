@@ -74,6 +74,46 @@ Base.size(itr::RepeatStatefulIterator) = size(itr.base.itr)
 Base.IteratorSize(itr::RepeatStatefulIterator) = Base.IteratorSize(itr.base)
 Base.IteratorEltype(itr::RepeatStatefulIterator) = Base.HasEltype()
 
+"""
+    SeedIterator
+    SeedIterator(base; rng=rng_default, seed=rand(rng, UInt32))
+
+Iterator which has the random seed of an `AbstractRNG` as state.
+
+Calls `Random.seed!(rng, seed)` every iteration so that wrapped iterators which depend on `rng` will produce the same sequence.
+
+Useful in conjunction with [`RepeatPartitionIterator`](@ref) and random data augmentation so that all candidates in a generation are trained with identical augmentation.
+"""
+struct SeedIterator{R <: AbstractRNG,T}
+    rng::R
+    seed::UInt32
+    base::T
+end
+SeedIterator(base; rng=rng_default, seed=rand(rng, UInt32)) = SeedIterator(rng, UInt32(seed), base)
+
+function Base.iterate(itr::SeedIterator)
+    Random.seed!(itr.rng, itr.seed)
+    valstate = iterate(itr.base)
+    valstate === nothing && return nothing
+    val, state = valstate
+    return val, (rand(itr.rng, UInt32), state)
+end
+
+function Base.iterate(itr::SeedIterator, state)
+    seed,basestate = state
+    Random.seed!(itr.rng, seed)
+    valstate = iterate(itr.base, basestate)
+    valstate === nothing && return nothing
+    val, state = valstate
+    return val, (rand(itr.rng, UInt32), state)
+end
+
+Base.length(itr::SeedIterator) = length(itr.base)
+Base.eltype(itr::SeedIterator) = eltype(itr.base)
+Base.size(itr::SeedIterator) = size(itr.base)
+
+Base.IteratorSize(itr::SeedIterator) = Base.IteratorSize(itr.base)
+Base.IteratorEltype(itr::SeedIterator) = Base.IteratorEltype(itr.base)
 
 """
     MapIterator{F, T}
@@ -204,7 +244,7 @@ Argument `cs` determines the possible range for each dimension and can be any co
 Positive `Integer`: Shift is uniformly drawn from 0:cs
 Negative `Integer`: Shift is uniformly drawn from l:-1:l - cs + 1 where l is the number of elements in the dimension
 Tuple{<:Integer, <:Integer} : Shift is drawn from cs[1] : cs[2]
-AbstractArray{<:Integer}: Shift is uniformly drawn from cs 
+AbstractArray{<:Integer}: Shift is uniformly drawn from cs
 """
 struct ShiftIterator{T, S<:AbstractParSpace, R<:AbstractRNG}
     shift::S
