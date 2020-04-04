@@ -29,9 +29,12 @@ end
 RepeatPartitionIterator(base, nrep) = RepeatPartitionIterator(Iterators.Stateful(base), nrep)
 RepeatPartitionIterator(base::Iterators.Stateful, nrep) = RepeatPartitionIterator(base, nrep)
 
-function Base.iterate(itr::RepeatPartitionIterator, state=nothing)
+function Base.iterate(itr::RepeatPartitionIterator, reset=true)
+    if reset
+        Iterators.reset!(itr.base, itr.base.itr)
+    end
     length(itr) == 0 && return nothing
-    return Iterators.take(RepeatStatefulIterator(itr.base), itr.ntake), nothing
+    return Iterators.take(RepeatStatefulIterator(itr.base), itr.ntake), false
 end
 
 Base.length(itr::RepeatPartitionIterator) = ceil(Int, length(itr.base) / itr.ntake)
@@ -39,16 +42,9 @@ Base.eltype(itr::RepeatPartitionIterator{T}) where T = T
 Base.size(itr::RepeatPartitionIterator) = size(itr.base.itr)
 
 
-Base.IteratorSize(itr::RepeatPartitionIterator) = Base.IteratorSize(itr.base)
+Base.IteratorSize(itr::RepeatPartitionIterator) = Base.IteratorSize(itr.base.itr)
 Base.IteratorEltype(itr::RepeatPartitionIterator) = Base.HasEltype()
 
-
-"""
-    cycle(itr, nreps)
-
-An iterator that cycles through `itr nreps` times.
-"""
-Base.Iterators.cycle(itr, nreps) = Iterators.take(Iterators.cycle(itr), nreps * length(itr))
 
 struct RepeatStatefulIterator{T, VS}
     base::Iterators.Stateful{T, VS}
@@ -71,8 +67,15 @@ Base.length(itr::RepeatStatefulIterator) = length(itr.base.itr) - itr.taken
 Base.eltype(itr::RepeatStatefulIterator) = eltype(itr.base)
 Base.size(itr::RepeatStatefulIterator) = size(itr.base.itr)
 
-Base.IteratorSize(itr::RepeatStatefulIterator) = Base.IteratorSize(itr.base)
+Base.IteratorSize(itr::RepeatStatefulIterator) = Base.IteratorSize(itr.base.itr)
 Base.IteratorEltype(itr::RepeatStatefulIterator) = Base.HasEltype()
+
+"""
+    cycle(itr, nreps)
+
+An iterator that cycles through `itr nreps` times.
+"""
+Base.Iterators.cycle(itr, nreps) = Iterators.take(Iterators.cycle(itr), nreps * length(itr))
 
 """
     SeedIterator
@@ -96,7 +99,7 @@ function Base.iterate(itr::SeedIterator)
     valstate = iterate(itr.base)
     valstate === nothing && return nothing
     val, state = valstate
-    return val, (rand(itr.rng, UInt32), state)
+    return val, (itr.seed+1, state)
 end
 
 function Base.iterate(itr::SeedIterator, state)
@@ -105,7 +108,7 @@ function Base.iterate(itr::SeedIterator, state)
     valstate = iterate(itr.base, basestate)
     valstate === nothing && return nothing
     val, state = valstate
-    return val, (rand(itr.rng, UInt32), state)
+    return val, (seed+1, state)
 end
 
 Base.length(itr::SeedIterator) = length(itr.base)
