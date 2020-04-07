@@ -1,3 +1,4 @@
+
 @testset "Probability" begin
     import NaiveGAflux: apply
     @test_throws AssertionError Probability(-1)
@@ -38,7 +39,7 @@ end
     ct(::SizeAbsorb;cf) = SizeInvariant()
     ct(x...;cf=ct) = clone(x...,cf=cf)
     tn = ct(t)
-    @test base(tn) == SizeInvariant()
+    @test NaiveNASlib.base(tn) == SizeInvariant()
 end
 
 @testset "VertexSelection" begin
@@ -93,7 +94,7 @@ end
     ct(::SizeAbsorb;cf) = SizeInvariant()
     ct(x...;cf=ct) = clone(x...,cf=cf)
     tn = ct(t)
-    @test base(tn) == SizeInvariant()
+    @test NaiveNASlib.base(tn) == SizeInvariant()
 end
 
 @testset "PersistentArray" begin

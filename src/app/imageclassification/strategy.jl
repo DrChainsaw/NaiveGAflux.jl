@@ -364,7 +364,7 @@ nmaxpool(vs) = sum(endswith.(name.(vs), "maxpool"))
 
 maxkernelsize(inshape) = v -> maxkernelsize(v, inshape)
 function maxkernelsize(v::AbstractVertex, inshape)
-    ks = inshape .÷ 2^nmaxpool(flatten(v))
+    ks = inshape .÷ 2^nmaxpool(ancestors(v))
     # Kernel sizes must be odd due to CuArrays issue# 356 (odd kernel size => symmetric padding)
     return @. ks - !isodd(ks)
  end
@@ -385,7 +385,7 @@ function add_vertex_mutation(acts)
 end
 
 is_convtype(v::AbstractVertex) = any(is_globpool.(outputs(v))) || any(is_convtype.(outputs(v)))
-is_globpool(v::AbstractVertex) = is_globpool(base(v))
+is_globpool(v::AbstractVertex) = is_globpool(NaiveNASlib.base(v))
 is_globpool(v::InputVertex) = false
 is_globpool(v::CompVertex) = is_globpool(v.computation)
 is_globpool(l::AbstractMutableComp) = is_globpool(NaiveNASflux.wrapped(l))

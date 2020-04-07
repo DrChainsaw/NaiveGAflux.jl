@@ -2,6 +2,8 @@
 
 @testset "Mutation" begin
 
+    import NaiveNASlib: op
+
     struct NoOpMutation{T} <:AbstractMutation{T} end
     function (m::NoOpMutation)(t) end
     ProbeMutation(T) = RecordMutation(NoOpMutation{T}())
@@ -447,7 +449,7 @@
         end
 
         vert(want::String, graph::CompGraph) = vertices(graph)[name.(vertices(graph)) .== want][]
-        vert(want::String, v::AbstractVertex) = flatten(v)[name.(flatten(v)) .== want][]
+        vert(want::String, v::AbstractVertex) = ancestors(v)[name.(ancestors(v)) .== want][]
 
         for to_rm in ["pa4", "pa2pa2"]
             for vconc_out in [nothing, "pa1", "pa2pa2", "pa3", "pa4"]

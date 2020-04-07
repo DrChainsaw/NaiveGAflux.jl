@@ -3,6 +3,7 @@ module NaiveGAflux
 using Reexport
 @reexport using NaiveNASflux
 import NaiveNASflux: nograd
+import NaiveNASlib: base
 using Random
 using Logging
 using Statistics

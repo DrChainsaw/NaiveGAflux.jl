@@ -313,8 +313,8 @@ LayerVertexConf() = LayerVertexConf(ActivationContribution ∘ LazyMutable, vali
 Shielded(base=LayerVertexConf()) = LayerVertexConf(base.layerfun, MutationShield ∘ base.traitfun)
 
 
-(c::LayerVertexConf)(in::AbstractVertex, l) = mutable(l,in,layerfun=c.layerfun, mutation=IoChange, traitfun=c.traitfun)
-(c::LayerVertexConf)(name::String, in::AbstractVertex, l) = mutable(name, l,in,layerfun=c.layerfun, mutation=IoChange, traitfun=c.traitfun)
+(c::LayerVertexConf)(in::AbstractVertex, l) = mutable(l,in,layerfun=c.layerfun, traitfun=c.traitfun)
+(c::LayerVertexConf)(name::String, in::AbstractVertex, l) = mutable(name, l,in,layerfun=c.layerfun, traitfun=c.traitfun)
 
 Base.Broadcast.broadcastable(c::LayerVertexConf) = Ref(c)
 
@@ -331,10 +331,10 @@ ConcConf() = ConcConf(ActivationContribution, validated() ∘ default_logging())
 
 (c::ConcConf)(in::AbstractVector{<:AbstractVertex}) = c(in...)
 (c::ConcConf)(in::AbstractVertex) = in
-(c::ConcConf)(ins::AbstractVertex...) = concat(ins...,mutation=IoChange, traitfun = c.traitfun, layerfun=c.layerfun)
+(c::ConcConf)(ins::AbstractVertex...) = concat(ins..., traitfun = c.traitfun, layerfun=c.layerfun)
 (c::ConcConf)(name::String, in::AbstractVector{<:AbstractVertex}) = c(name, in...)
 (c::ConcConf)(name::String, in::AbstractVertex) = in
-(c::ConcConf)(name::String, ins::AbstractVertex...) = concat(ins...,mutation=IoChange, traitfun = c.traitfun ∘ named(name), layerfun=c.layerfun)
+(c::ConcConf)(name::String, ins::AbstractVertex...) = concat(ins...,traitfun = c.traitfun ∘ named(name), layerfun=c.layerfun)
 
 
 """
@@ -514,10 +514,10 @@ FunctionSpace(funs...; namesuff::String, conf=funspace_default_conf()) = Functio
 (s::FunctionSpace)(in::AbstractVertex, rng=rng_default; outsize=nothing, wi=nothing) = funvertex(s, in, rng)
 (s::FunctionSpace)(name::String, in::AbstractVertex, rng=rng_default; outsize=nothing, wi=nothing) = funvertex(join([name,s.namesuff]), s, in, rng)
 
-funvertex(s::FunctionSpace, in::AbstractVertex, rng) = invariantvertex(s.conf.layerfun(s.funspace(rng)), in, mutation=IoChange, traitdecoration = s.conf.traitfun)
+funvertex(s::FunctionSpace, in::AbstractVertex, rng) = invariantvertex(s.conf.layerfun(s.funspace(rng)), in, traitdecoration = s.conf.traitfun)
 
 funvertex(name::String, s::FunctionSpace, in::AbstractVertex, rng) =
-invariantvertex(s.conf.layerfun(s.funspace(rng)), in, mutation=IoChange, traitdecoration = s.conf.traitfun ∘ named(name))
+invariantvertex(s.conf.layerfun(s.funspace(rng)), in, traitdecoration = s.conf.traitfun ∘ named(name))
 
 """
     GlobalPoolSpace(Ts...)

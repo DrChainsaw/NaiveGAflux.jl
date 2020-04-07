@@ -286,7 +286,7 @@ default_mergefun(pconc = 0.5; rng=rng_default, traitfun = MutationShield ∘ Rem
     if rand(rng) > pconc
         return invariantvertex(layerfun(+), vin, traitdecoration=traitfun ∘ named(name(vin) * ".add"))
     end
-    return concat(vin ,mutation=IoChange, traitfun = traitfun ∘ named(name(vin) * ".cat"), layerfun=layerfun)
+    return concat(vin; traitfun = traitfun ∘ named(name(vin) * ".cat"), layerfun=layerfun)
 end
 
 function no_shapechange(vi, vc=vi, valid = [])
