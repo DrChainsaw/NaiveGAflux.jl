@@ -68,42 +68,6 @@ end
     @test "biter: $itr" == "biter: BatchIterator(size=(2, 3, 4, 5), batchsize=2)"
 end
 
-@testset "FlipIterator" begin
-    itr = FlipIterator([[1 2 3 4; 5 6 7 8], [1 2; 3 4]], 1.0, 2)
-    for (act, exp) in zip(itr, [[4 3 2 1; 8 7 6 5], [2 1; 4 3]])
-        @test act == exp
-    end
-
-    itr = FlipIterator([[1 2 3 4; 5 6 7 8]], 0.0, 2)
-    @test first(itr) == [1 2 3 4; 5 6 7 8]
-end
-
-@testset "ShiftIterator" begin
-    @testset "Positive shift" begin
-        itr = ShiftIterator([[1 2 3 4; 5 6 7 8], [5 6 7 8; 1 2 3 4]], 0, 2, rng=SeqRng(0))
-
-        for (act, exp) in zip(itr, [[0 1 2 3; 0 5 6 7], [0 5 6 7; 0 1 2 3]])
-            @test act == exp
-        end
-    end
-
-    @testset "Negative shift" begin
-        itr = ShiftIterator([[1 2; 3 4; 5 6; 7 8], [5 6; 7 8; 1 2; 3 4]], -2, 0, rng=SeqRng(0))
-
-        for (act, exp) in zip(itr, [[5 6; 7 8; 0 0; 0 0], [7 8; 1 2; 3 4; 0 0]])
-            @test act == exp
-        end
-    end
-
-    @testset "Mixed shift" begin
-        itr = ShiftIterator((ones(4,4,4,4),), [2, -2], (-3, 3), 1, -2, rng=SeqRng(0))
-
-        act = first(itr)
-        @test sum(act) == 48
-
-    end
-end
-
 @testset "ShuffleIterator ndims $(length(dims))" for dims in ((5), (3,4), (2,3,4), (2,3,4,5), (2,3,4,5,6), (2,3,4,5,6,7))
     sitr = ShuffleIterator(collect(reshape(1:prod(dims),dims...)), 2, MersenneTwister(123))
     bitr = BatchIterator(collect(reshape(1:prod(dims),dims...)), 2)
