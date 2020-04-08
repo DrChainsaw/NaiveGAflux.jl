@@ -44,6 +44,22 @@
         @test wasreset
     end
 
+    @testset "EwmaFitness" begin
+        cnt = 0
+        fvals = [10.0, 20.0, 20.0]
+        function stepfun(f)
+            cnt = cnt+1
+            return fvals[cnt] * f
+        end
+
+        ef = EwmaFitness(MapFitness(stepfun, MockFitness(1)))
+        efc = deepcopy(ef)
+
+        @test fitness(ef, identity) == fitness(efc, identity) == 10
+        @test fitness(ef, identity) == fitness(efc, identity) == 15
+        @test fitness(ef, identity) == fitness(efc, identity) == 17.5
+    end
+
     @testset "TimeFitness" begin
         import NaiveGAflux: Train, Validate
         tf = TimeFitness(Train(), 1)

@@ -21,7 +21,7 @@ const rng_default = Random.GLOBAL_RNG
 const modeldir = "models"
 
 # Fitness
-export fitness, instrument, reset!, AbstractFitness, AccuracyFitness, TrainAccuracyFitness, MapFitness, TimeFitness, SizeFitness, FitnessCache, NanGuard, AggFitness
+export fitness, instrument, reset!, AbstractFitness, AccuracyFitness, TrainAccuracyFitness, MapFitness, EwmaFitness, TimeFitness, SizeFitness, FitnessCache, NanGuard, AggFitness
 
 # Candidate
 export evolvemodel, AbstractCandidate, CandidateModel, HostCandidate, CacheCandidate
