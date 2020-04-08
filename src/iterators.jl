@@ -29,9 +29,12 @@ end
 RepeatPartitionIterator(base, nrep) = RepeatPartitionIterator(Iterators.Stateful(base), nrep)
 RepeatPartitionIterator(base::Iterators.Stateful, nrep) = RepeatPartitionIterator(base, nrep)
 
-function Base.iterate(itr::RepeatPartitionIterator, state=nothing)
+function Base.iterate(itr::RepeatPartitionIterator, reset=true)
+    if reset
+        Iterators.reset!(itr.base, itr.base.itr)
+    end
     length(itr) == 0 && return nothing
-    return Iterators.take(RepeatStatefulIterator(itr.base), itr.ntake), nothing
+    return Iterators.take(RepeatStatefulIterator(itr.base), itr.ntake), false
 end
 
 Base.length(itr::RepeatPartitionIterator) = ceil(Int, length(itr.base) / itr.ntake)
@@ -39,16 +42,9 @@ Base.eltype(itr::RepeatPartitionIterator{T}) where T = T
 Base.size(itr::RepeatPartitionIterator) = size(itr.base.itr)
 
 
-Base.IteratorSize(itr::RepeatPartitionIterator) = Base.IteratorSize(itr.base)
+Base.IteratorSize(itr::RepeatPartitionIterator) = Base.IteratorSize(itr.base.itr)
 Base.IteratorEltype(itr::RepeatPartitionIterator) = Base.HasEltype()
 
-
-"""
-    cycle(itr, nreps)
-
-An iterator that cycles through `itr nreps` times.
-"""
-Base.Iterators.cycle(itr, nreps) = Iterators.take(Iterators.cycle(itr), nreps * length(itr))
 
 struct RepeatStatefulIterator{T, VS}
     base::Iterators.Stateful{T, VS}
@@ -71,9 +67,56 @@ Base.length(itr::RepeatStatefulIterator) = length(itr.base.itr) - itr.taken
 Base.eltype(itr::RepeatStatefulIterator) = eltype(itr.base)
 Base.size(itr::RepeatStatefulIterator) = size(itr.base.itr)
 
-Base.IteratorSize(itr::RepeatStatefulIterator) = Base.IteratorSize(itr.base)
+Base.IteratorSize(itr::RepeatStatefulIterator) = Base.IteratorSize(itr.base.itr)
 Base.IteratorEltype(itr::RepeatStatefulIterator) = Base.HasEltype()
 
+"""
+    cycle(itr, nreps)
+
+An iterator that cycles through `itr nreps` times.
+"""
+Base.Iterators.cycle(itr, nreps) = Iterators.take(Iterators.cycle(itr), nreps * length(itr))
+
+"""
+    SeedIterator
+    SeedIterator(base; rng=rng_default, seed=rand(rng, UInt32))
+
+Iterator which has the random seed of an `AbstractRNG` as state.
+
+Calls `Random.seed!(rng, seed)` every iteration so that wrapped iterators which depend on `rng` will produce the same sequence.
+
+Useful in conjunction with [`RepeatPartitionIterator`](@ref) and random data augmentation so that all candidates in a generation are trained with identical augmentation.
+"""
+struct SeedIterator{R <: AbstractRNG,T}
+    rng::R
+    seed::UInt32
+    base::T
+end
+SeedIterator(base; rng=rng_default, seed=rand(rng, UInt32)) = SeedIterator(rng, UInt32(seed), base)
+
+function Base.iterate(itr::SeedIterator)
+    Random.seed!(itr.rng, itr.seed)
+    valstate = iterate(itr.base)
+    valstate === nothing && return nothing
+    val, state = valstate
+    return val, (itr.seed+1, state)
+end
+
+function Base.iterate(itr::SeedIterator, state)
+    seed,basestate = state
+    Random.seed!(itr.rng, seed)
+    valstate = iterate(itr.base, basestate)
+    valstate === nothing && return nothing
+    val, state = valstate
+    return val, (seed+1, state)
+end
+
+Base.length(itr::SeedIterator) = length(itr.base)
+Base.eltype(itr::SeedIterator) = eltype(itr.base)
+Base.size(itr::SeedIterator) = size(itr.base)
+
+Base.IteratorSize(itr::SeedIterator) = Base.IteratorSize(itr.base)
+Base.IteratorEltype(itr::SeedIterator) = Base.IteratorEltype(itr.base)
 
 """
     MapIterator{F, T}
@@ -166,66 +209,6 @@ end
 Base.print(io::IO, itr::BatchIterator) = print(io, "BatchIterator(size=$(size(itr.base)), batchsize=$(itr.batchsize))")
 
 Flux.onehotbatch(itr::BatchIterator, labels) = MapIterator(x -> Flux.onehotbatch(x, labels), itr)
-
-"""
-    FlipIterator{T}
-    FlipIterator(base, p::Real=0.5, dim::Int=1)
-
-Flips data from `base` along dimension `dim` with probability `p`.
-"""
-struct FlipIterator{T}
-    p::Probability
-    dim::Int
-    base::T
-end
-FlipIterator(base, p::Real=0.5, dim::Int=1) = FlipIterator(Probability(p), dim, base)
-
-Base.length(itr::FlipIterator) = length(itr.base)
-Base.size(itr::FlipIterator) = size(itr.base)
-
-Base.IteratorSize(itr::FlipIterator) = Base.IteratorSize(itr.base)
-Base.IteratorEltype(itr::FlipIterator) = Base.IteratorEltype(itr.base)
-
-Base.iterate(itr::FlipIterator) = flip(itr, iterate(itr.base))
-Base.iterate(itr::FlipIterator, state) = flip(itr, iterate(itr.base, state))
-
-flip(itr::FlipIterator, valstate) = apply(itr.p) ? flip(itr.dim, valstate) : valstate
-flip(dim::Integer, ::Nothing) = nothing
-flip(dim::Integer, (data,state)::Tuple) = reverse(data, dims=dim), state
-
-"""
-    ShiftIterator{T, S<:AbstractParSpace, R<:AbstractRNG}
-    ShiftIterator(base;rng=rng_default)
-    ShiftIterator(base, cs::Integer...;rng=rng_default)
-
-Randomly shifts data from `base` in the interval `0:cs` pixels while keeping the orignal size by cropping and padding.
-"""
-struct ShiftIterator{T, S<:AbstractParSpace, R<:AbstractRNG}
-    shift::S
-    rng::R
-    base::T
-end
-ShiftIterator(base;rng=rng_default) = ShiftIterator(base, 4,4,0,0,rng=rng)
-ShiftIterator(base, cs::Integer...;rng=rng_default) = ShiftIterator(ParSpace(UnitRange.(0, cs)), rng, base)
-
-Base.length(itr::ShiftIterator) = length(itr.base)
-Base.size(itr::ShiftIterator) = size(itr.base)
-
-Base.IteratorSize(itr::ShiftIterator) = Base.IteratorSize(itr.base)
-Base.IteratorEltype(itr::ShiftIterator) = Base.IteratorEltype(itr.base)
-
-Base.iterate(itr::ShiftIterator) = shift(itr, iterate(itr.base))
-Base.iterate(itr::ShiftIterator, state) = shift(itr, iterate(itr.base, state))
-
-shift(itr::ShiftIterator, ::Nothing) = nothing
-function shift(itr::ShiftIterator, (data,state)::Tuple)
-    s = itr.shift(itr.rng)
-    sdata = circshift(data, s)
-    for (dim, sdim) in enumerate(s)
-        selectdim(sdata, dim, 1:sdim) .= 0
-    end
-    return sdata, state
-end
 
 """
     ShuffleIterator{T<:AbstractArray, R<:AbstractRNG}

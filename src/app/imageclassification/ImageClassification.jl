@@ -90,7 +90,7 @@ function AutoFlux.fit(c::ImageClassifier, fit_iter, fitnessgen, evostrategy::Abs
     Random.seed!(NaiveGAflux.rng_default, c.seed)
     @info "Start training with baseseed: $(c.seed)"
 
-    insize, outsize = size(fit_iter)
+    insize, outsize = datasize(fit_iter)
 
     population = initial_models(c.popsize, mdir, c.newpop, fitnessgen, insize, outsize[1])
 
@@ -101,6 +101,10 @@ function AutoFlux.fit(c::ImageClassifier, fit_iter, fitnessgen, evostrategy::Abs
 
     return evolutionloop(population, evostrategy, fit_iter, cb)
 end
+
+datasize(itr) = datasize(first(itr))
+datasize(t::Tuple) = datasize.(t)
+datasize(a::AbstractArray) = size(a)
 
 function evolutionloop(population, evostrategy, trainingiter, cb)
     for (gen, iter) in enumerate(trainingiter)
@@ -131,6 +135,6 @@ function initial_models(nr, mdir, newpop, fitnessgen, insize, outsize)
     as = initial_archspace(insize[1:2], outsize)
     return PersistentArray(mdir, nr, i -> create_model(join(["model", i]), as, iv(i), fitnessgen))
 end
-create_model(name, as, in, fg) = CacheCandidate(HostCandidate(CandidateModel(CompGraph(in, as(name, in)), newopt(newlr(0.01)), Flux.logitcrossentropy, fg())))
+create_model(name, as, in, fg) = CacheCandidate(HostCandidate(CandidateModel(CompGraph(in, as(name, in)), newopt(rand() * 0.099 + 0.01), Flux.logitcrossentropy, fg())))
 
 end

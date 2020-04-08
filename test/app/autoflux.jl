@@ -56,6 +56,7 @@
 
         @test sleepreti(0.01) == 0.01
         @test sleepreti(0.02) == 0.02
+        fitness(ff, x -> [1 0; 0 1]) # Avoid compiler delays?
         @test fitness(ff, x -> [1 0; 0 1]) == 0.501 #SizeFitness gives 0.001 extra
 
         sleepreti(0.4)

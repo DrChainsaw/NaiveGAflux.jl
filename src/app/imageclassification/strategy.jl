@@ -167,8 +167,8 @@ end
 TrainStrategy(;nepochs=200, batchsize=32, nbatches_per_gen=400, seed=123, dataaug=identity) = TrainStrategy(nepochs, batchsize, nbatches_per_gen, seed, dataaug)
 function trainiter(s::TrainStrategy, x, y)
     baseiter = dataiter(x, y, s.batchsize, s.seed, s.dataaug)
-    epochiter = Iterators.cycle(baseiter, s.nepochs)
-    return RepeatPartitionIterator(GpuIterator(epochiter), s.nbatches_per_gen)
+    partiter = RepeatPartitionIterator(GpuIterator(baseiter), s.nbatches_per_gen)
+    return Iterators.cycle(partiter, s.nepochs)
 end
 
 batch(x, batchsize, seed) = ShuffleIterator(x, batchsize, MersenneTwister(seed))

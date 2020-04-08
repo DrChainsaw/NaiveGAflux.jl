@@ -602,27 +602,13 @@ siter = ShuffleIterator(copy(data), 2, MersenneTwister(123))
 @test size(first(siter)) == size(first(biter))
 @test first(siter) != first(biter)
 
-# Flip data along a dimension with a certain probability
-probability = 1.0
-dimension = 1
-fiter = FlipIterator(biter, probability, dimension)
-@test first(fiter) == reverse(first(biter), dims=dimension)
-
-# Randomly shift the data while cropping and padding to keep the same size
-maxshiftdim1 = 2
-maxshiftdim2 = 0
-siter = ShiftIterator(biter, maxshiftdim1,maxshiftdim2; rng = MersenneTwister(12))
-sdata = first(siter)
-@test sdata[1:1,:] == zeros(1,2)
-@test sdata[2:4,:] == first(biter)[1:3,:]
-
 # Apply a function to each batch
 miter = MapIterator(x -> 2 .* x, biter)
 @test first(miter) == 2 .* first(biter)
 
 # Move data to gpu
 giter = GpuIterator(miter)
-@test first(giter) == first(miter)
+@test first(giter) == first(miter) |> gpu
 
 labels = collect(0:5)
 

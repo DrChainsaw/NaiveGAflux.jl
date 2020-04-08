@@ -35,6 +35,16 @@
     end
 end
 
+@testset "SeedIterator" begin
+    rng = MersenneTwister(123)
+    testitr = SeedIterator(MapIterator(x -> x * rand(rng, Int), ones(10)); rng=rng, seed=12)
+    @test collect(testitr) == collect(testitr)
+
+    rng = MersenneTwister(1234)
+    nesteditr = SeedIterator(MapIterator(x -> x * rand(rng, Int), testitr); rng=rng, seed=1)
+    @test collect(nesteditr) == collect(nesteditr)
+end
+
 @testset "MapIterator" begin
     itr = MapIterator(x -> 2x, [1,2,3,4,5])
     @test collect(itr) == [2,4,6,8,10]
@@ -56,24 +66,6 @@ end
     end
 
     @test "biter: $itr" == "biter: BatchIterator(size=(2, 3, 4, 5), batchsize=2)"
-end
-
-@testset "FlipIterator" begin
-    itr = FlipIterator([[1 2 3 4; 5 6 7 8], [1 2; 3 4]], 1.0, 2)
-    for (act, exp) in zip(itr, [[4 3 2 1; 8 7 6 5], [2 1; 4 3]])
-        @test act == exp
-    end
-
-    itr = FlipIterator([[1 2 3 4; 5 6 7 8]], 0.0, 2)
-    @test first(itr) == [1 2 3 4; 5 6 7 8]
-end
-
-@testset "ShiftIterator" begin
-    itr = ShiftIterator([[1 2 3 4; 5 6 7 8], [5 6 7 8; 1 2 3 4]], 0, 2, rng=SeqRng(0))
-
-    for (act, exp) in zip(itr, [[0 1 2 3; 0 5 6 7], [0 5 6 7; 0 1 2 3]])
-        @test act == exp
-    end
 end
 
 @testset "ShuffleIterator ndims $(length(dims))" for dims in ((5), (3,4), (2,3,4), (2,3,4,5), (2,3,4,5,6), (2,3,4,5,6,7))
