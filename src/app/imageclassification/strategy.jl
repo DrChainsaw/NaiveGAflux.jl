@@ -56,23 +56,24 @@ evostrategy(s::T, inshape) where T <: AbstractEvolutionStrategy = error("Not imp
 
 """
     struct TrainSplitAccuracy{T} <: AbstractFitnessStrategy
-    TrainSplitAccuracy(nexamples, batchsize, data2fitfun)
-    TrainSplitAccuracy(;nexamples=2048, batchsize=64, data2fitgen= data -> NanGuard ∘ AccuracyVsSize(data))
+    TrainSplitAccuracy(nexamples, batchsize, data2fitfun, dataaug)
+    TrainSplitAccuracy(;nexamples=2048, batchsize=64, data2fitgen= data -> NanGuard ∘ AccuracyVsSize(data), dataaug=identity)
 
 Strategy to measure fitness on a subset of the training data of size `nexamples`.
 
 Mapping from this subset to a fitness generator is done by `data2fitgen` which takes a data iterator and returns a function (or callable struct) which in turn produces an `AbstractFitness` when called with no arguments.
 """
-struct TrainSplitAccuracy{T} <: AbstractFitnessStrategy
+struct TrainSplitAccuracy{T, V} <: AbstractFitnessStrategy
     nexamples::Int
     batchsize::Int
     data2fitgen::T
+    dataaug::V
 end
-TrainSplitAccuracy(;nexamples=2048, batchsize=64, data2fitgen= data -> NanGuard ∘ AccuracyVsSize(data)) = TrainSplitAccuracy(nexamples, batchsize, data2fitgen)
+TrainSplitAccuracy(;nexamples=2048, batchsize=64, data2fitgen= data -> NanGuard ∘ AccuracyVsSize(data), dataaug=identity) = TrainSplitAccuracy(nexamples, batchsize, data2fitgen, dataaug)
 function fitnessfun(s::TrainSplitAccuracy, x, y)
     rem_x, acc_x = split_examples(x, s.nexamples)
     rem_y, acc_y = split_examples(y, s.nexamples)
-    acc_iter = GpuIterator(dataiter(acc_x, acc_y, s.batchsize, 0, identity))
+    acc_iter = GpuIterator(dataiter(acc_x, acc_y, s.batchsize, 0, s.dataaug))
     return rem_x, rem_y, s.data2fitgen(acc_iter)
 end
 
