@@ -365,7 +365,7 @@ nmaxpool(vs) = sum(endswith.(name.(vs), "maxpool"))
 
 maxkernelsize(inshape) = v -> maxkernelsize(v, inshape)
 function maxkernelsize(v::AbstractVertex, inshape)
-    ks = inshape .÷ 2^nmaxpool(flatten(v))
+    ks = inshape .÷ 2^nmaxpool(NaiveNASlib.flatten(v))
     # Kernel sizes must be odd due to CuArrays issue# 356 (odd kernel size => symmetric padding)
     return @. ks - !isodd(ks)
  end
