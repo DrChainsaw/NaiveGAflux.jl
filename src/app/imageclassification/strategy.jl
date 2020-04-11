@@ -90,13 +90,16 @@ Produces an `AbstractFitness` which measures fitness accuracy on `data` and base
 The two are combined so that a candidate `a` which achieves higher accuracy rounded to the first `accdigits` digits compared to a candidate `b` will always have a better fitness.
 
 Only if the first `accdigits` of accuracy is the same will the number of parameters determine who has higher fitness.
+
+Accuracy part of the fitness is calculated by `accwrap(AccuracyFitness(data))`.
 """
-struct AccuracyVsSize{T}
+struct AccuracyVsSize{T,V}
     data::T
+    accwrap::V
     accdigits::Int
 end
-AccuracyVsSize(data, accdigits=2) = AccuracyVsSize(data, accdigits)
-(f::AccuracyVsSize)() = sizevs(AccuracyFitness(f.data), f.accdigits)
+AccuracyVsSize(data, accdigits=2; accwrap=identity) = AccuracyVsSize(data, accwrap, accdigits)
+(f::AccuracyVsSize)() = sizevs(f.accwrap(AccuracyFitness(f.data)), f.accdigits)
 
 function sizevs(f::AbstractFitness, accdigits)
     truncacc = MapFitness(x -> round(x, digits=accdigits), f)
@@ -109,7 +112,7 @@ end
 
 """
     struct TrainAccuracyVsSize <: AbstractFitnessStrategy
-    TrainAccuracyVsSize(accdigits=3)
+    TrainAccuracyVsSize(;accdigits=3, accwrap=identity)
 
 Produces an `AbstractFitness` which measures fitness accuracy on training data and based on number of parameters.
 
@@ -117,13 +120,16 @@ The two are combined so that a candidate `a` which achieves higher accuracy roun
 
 Only if the first `accdigits` of accuracy is the same will the number of parameters determine who has higher fitness.
 
+Accuracy part of the fitness is calculated by `accwrap(TrainAccuracyFitness())`.
+
 Beware that fitness as accuracy on training data will make evolution favour overfitted candidates.
 """
-struct TrainAccuracyVsSize <: AbstractFitnessStrategy
+struct TrainAccuracyVsSize{T} <: AbstractFitnessStrategy
+    accwrap::T
     accdigits::Int
 end
-TrainAccuracyVsSize() = TrainAccuracyVsSize(3)
-fitnessfun(s::TrainAccuracyVsSize, x, y) = x, y, () -> NanGuard(sizevs(TrainAccuracyFitness(), s.accdigits))
+TrainAccuracyVsSize(;accdigits=3, accwrap=identity) = TrainAccuracyVsSize(accwrap, accdigits)
+fitnessfun(s::TrainAccuracyVsSize, x, y) = x, y, () -> NanGuard(sizevs(s.accwrap(TrainAccuracyFitness()), s.accdigits))
 
 """
     struct PruneLongRunning{T <: AbstractFitnessStrategy, D <: Real} <: AbstractFitnessStrategy
