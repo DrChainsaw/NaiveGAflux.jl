@@ -36,7 +36,7 @@
                 @test p.avg == [2, 3]
 
                 p2 = PlotFitness((args...;kwargs...) -> [args...], testdir)
-                @test p2.plt == [[3 2; 4 3]]
+                @test p2.plt == [[1,2], [3 2; 4 3]]
                 @test p2.best == p.best
                 @test p2.avg == p.avg
             end

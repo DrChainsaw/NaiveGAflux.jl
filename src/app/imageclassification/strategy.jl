@@ -56,23 +56,24 @@ evostrategy(s::T, inshape) where T <: AbstractEvolutionStrategy = error("Not imp
 
 """
     struct TrainSplitAccuracy{T} <: AbstractFitnessStrategy
-    TrainSplitAccuracy(nexamples, batchsize, data2fitfun)
-    TrainSplitAccuracy(;nexamples=2048, batchsize=64, data2fitgen= data -> NanGuard ∘ AccuracyVsSize(data))
+    TrainSplitAccuracy(nexamples, batchsize, data2fitfun, dataaug)
+    TrainSplitAccuracy(;nexamples=2048, batchsize=64, data2fitgen= data -> NanGuard ∘ AccuracyVsSize(data), dataaug=identity)
 
 Strategy to measure fitness on a subset of the training data of size `nexamples`.
 
 Mapping from this subset to a fitness generator is done by `data2fitgen` which takes a data iterator and returns a function (or callable struct) which in turn produces an `AbstractFitness` when called with no arguments.
 """
-struct TrainSplitAccuracy{T} <: AbstractFitnessStrategy
+struct TrainSplitAccuracy{T, V} <: AbstractFitnessStrategy
     nexamples::Int
     batchsize::Int
     data2fitgen::T
+    dataaug::V
 end
-TrainSplitAccuracy(;nexamples=2048, batchsize=64, data2fitgen= data -> NanGuard ∘ AccuracyVsSize(data)) = TrainSplitAccuracy(nexamples, batchsize, data2fitgen)
+TrainSplitAccuracy(;nexamples=2048, batchsize=64, data2fitgen= data -> NanGuard ∘ AccuracyVsSize(data), dataaug=identity) = TrainSplitAccuracy(nexamples, batchsize, data2fitgen, dataaug)
 function fitnessfun(s::TrainSplitAccuracy, x, y)
     rem_x, acc_x = split_examples(x, s.nexamples)
     rem_y, acc_y = split_examples(y, s.nexamples)
-    acc_iter = GpuIterator(dataiter(acc_x, acc_y, s.batchsize, 0, identity))
+    acc_iter = GpuIterator(dataiter(acc_x, acc_y, s.batchsize, 0, s.dataaug))
     return rem_x, rem_y, s.data2fitgen(acc_iter)
 end
 
@@ -89,13 +90,16 @@ Produces an `AbstractFitness` which measures fitness accuracy on `data` and base
 The two are combined so that a candidate `a` which achieves higher accuracy rounded to the first `accdigits` digits compared to a candidate `b` will always have a better fitness.
 
 Only if the first `accdigits` of accuracy is the same will the number of parameters determine who has higher fitness.
+
+Accuracy part of the fitness is calculated by `accwrap(AccuracyFitness(data))`.
 """
-struct AccuracyVsSize{T}
+struct AccuracyVsSize{T,V}
     data::T
+    accwrap::V
     accdigits::Int
 end
-AccuracyVsSize(data, accdigits=2) = AccuracyVsSize(data, accdigits)
-(f::AccuracyVsSize)() = sizevs(AccuracyFitness(f.data), f.accdigits)
+AccuracyVsSize(data, accdigits=2; accwrap=identity) = AccuracyVsSize(data, accwrap, accdigits)
+(f::AccuracyVsSize)() = sizevs(f.accwrap(AccuracyFitness(f.data)), f.accdigits)
 
 function sizevs(f::AbstractFitness, accdigits)
     truncacc = MapFitness(x -> round(x, digits=accdigits), f)
@@ -108,7 +112,7 @@ end
 
 """
     struct TrainAccuracyVsSize <: AbstractFitnessStrategy
-    TrainAccuracyVsSize(accdigits=3)
+    TrainAccuracyVsSize(;accdigits=3, accwrap=identity)
 
 Produces an `AbstractFitness` which measures fitness accuracy on training data and based on number of parameters.
 
@@ -116,13 +120,16 @@ The two are combined so that a candidate `a` which achieves higher accuracy roun
 
 Only if the first `accdigits` of accuracy is the same will the number of parameters determine who has higher fitness.
 
+Accuracy part of the fitness is calculated by `accwrap(TrainAccuracyFitness())`.
+
 Beware that fitness as accuracy on training data will make evolution favour overfitted candidates.
 """
-struct TrainAccuracyVsSize <: AbstractFitnessStrategy
+struct TrainAccuracyVsSize{T} <: AbstractFitnessStrategy
+    accwrap::T
     accdigits::Int
 end
-TrainAccuracyVsSize() = TrainAccuracyVsSize(3)
-fitnessfun(s::TrainAccuracyVsSize, x, y) = x, y, () -> NanGuard(sizevs(TrainAccuracyFitness(), s.accdigits))
+TrainAccuracyVsSize(;accdigits=3, accwrap=identity) = TrainAccuracyVsSize(accwrap, accdigits)
+fitnessfun(s::TrainAccuracyVsSize, x, y) = x, y, () -> NanGuard(sizevs(s.accwrap(TrainAccuracyFitness()), s.accdigits))
 
 """
     struct PruneLongRunning{T <: AbstractFitnessStrategy, D <: Real} <: AbstractFitnessStrategy
@@ -364,7 +371,7 @@ nmaxpool(vs) = sum(endswith.(name.(vs), "maxpool"))
 
 maxkernelsize(inshape) = v -> maxkernelsize(v, inshape)
 function maxkernelsize(v::AbstractVertex, inshape)
-    ks = inshape .÷ 2^nmaxpool(flatten(v))
+    ks = inshape .÷ 2^nmaxpool(NaiveNASlib.flatten(v))
     # Kernel sizes must be odd due to CuArrays issue# 356 (odd kernel size => symmetric padding)
     return @. ks - !isodd(ks)
  end

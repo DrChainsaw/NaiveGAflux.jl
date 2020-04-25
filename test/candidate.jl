@@ -46,6 +46,25 @@
         Flux.train!(newcand, data(newcand))
     end
 
+    @testset "eagermutation" begin
+        invertex = inputvertex("in", 3, FluxDense())
+        hlayer = mutable("hlayer", Dense(3,4), invertex)
+        outlayer = mutable("outlayer", Dense(4, 2), hlayer)
+        graph = CompGraph(invertex, outlayer)
+
+        Δnout(hlayer, 2)
+        Δoutputs(hlayer, v -> ones(nout_org(v)))
+        apply_mutation(graph)
+
+        @test nout(layer(hlayer)) == 4
+        @test nin(layer(outlayer)) == 4
+
+        NaiveGAflux.eagermutation(graph)
+
+        @test nout(layer(hlayer)) == 6
+        @test nin(layer(outlayer)) == 6
+    end
+
     @testset "Save models" begin
         testdir = "test_savemodels"
 

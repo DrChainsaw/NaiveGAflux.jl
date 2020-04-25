@@ -110,6 +110,26 @@ fitness(s::MapFitness, f) = fitness(s.base, f) |> s.mapping
 instrument(l::AbstractFunLabel,s::MapFitness,f) = instrument(l, s.base, f)
 reset!(s::MapFitness) = reset!(s.base)
 
+
+"""
+    EwmaFitness(base)
+    EwmaFitness(α, base)
+
+Computes the exponentially weighted moving average of the fitness of `base`.
+
+Main purpose is to mitigate the effects of fitness noise.
+
+The filter is updated each time `fitness` is called, so practical use requires the fitness to be wrapped in a `CacheFitness`.
+"""
+EwmaFitness(base) = EwmaFitness(0.5, base)
+function EwmaFitness(α, base)
+    avgfitness = missing
+    ewma = Ewma(α)
+    state(x) = avgfitness = NaiveNASflux.agg(ewma, avgfitness, x)
+    return MapFitness(state, base)
+end
+
+
 """
     TimeFitness{T} <: AbstractFitness where T <: AbstractFunLabel
     TimeFitness(t::T, nskip=0) where T <: AbstractFunLabel
@@ -276,9 +296,6 @@ instrument(l::AbstractFunLabel, s::NanGuard, f) = instrument(l, s.base, f)
 dummyvalue(::Type{<:AT}, shape, val) where AT <: AbstractArray = fill!(similar(AT, shape), val)
 dummyvalue(::Type{T}, shape, val) where T <: Number = T(val)
 Flux.Zygote.@nograd dummyvalue
-# Flux.Zygote.@adjoint function dummyvalue(t, shape, val)
-#     return dummyvalue(t, shape, val), _ -> (nothing, 0, 0)
-# end
 
 """
     AggFitness <: AbstractFitness

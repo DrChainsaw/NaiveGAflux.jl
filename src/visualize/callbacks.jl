@@ -30,7 +30,7 @@ function PlotFitness(plotfun, rootdir, subdir="PlotFitness")
     basedir = joinpath(rootdir, subdir)
     best = loadifpresent(joinpath(basedir, "best.jls"))
     avg = loadifpresent(joinpath(basedir, "avg.jls"))
-    plt = plotfun(hcat(best,avg), label=["Best" "Avg"], xlabel="Generation", ylabel="Fitness", m=[:circle, :circle], legend=:bottomright)
+    plt = plotfun(collect(Int, 1:length(best)), hcat(best,avg), label=["Best" "Avg"], xlabel="Generation", ylabel="Fitness", m=[:circle, :circle], legend=:bottomright)
     return PlotFitness(best, avg, plt, basedir)
 end
 
