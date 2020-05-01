@@ -107,6 +107,8 @@ end
     pa[1] = 3
     @test pa == [3,2,3,4,5]
 
+    @test identity.(pa) == pa
+
     try
         persist(pa)
         @test PersistentArray(testdir, 7, x -> 2x) == [3,2,3,4,5,12,14]

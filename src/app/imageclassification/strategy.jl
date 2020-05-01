@@ -311,7 +311,7 @@ function mutation(inshape)
     maddv = mph(LogMutation(v -> "\tAdd vertex after $(name(v))", add_vertex), 0.005)
     maddm = mpn(MutationFilter(canaddmaxpool(inshape), LogMutation(v -> "\tAdd maxpool after $(name(v))", add_maxpool)), 0.01)
     mremv = mpl(LogMutation(v -> "\tRemove vertex $(name(v))", rem_vertex), 0.01)
-    ikern = mpl(LogMutation(v -> "\tMutate kernel size of $(name(v))", increase_kernel), 0.01)
+    ikern = mpl(LogMutation(v -> "\tMutate kernel size of $(name(v))", increase_kernel), 0.005)
     dkern = mpl(LogMutation(v -> "\tDecrease kernel size of $(name(v))", decrease_kernel), 0.005)
     mactf = mpl(LogMutation(v -> "\tMutate activation function of $(name(v))", mutate_act), 0.005)
     madde = mph(LogMutation(v -> "\tAdd edge from $(name(v))", add_edge), 0.02)
@@ -385,8 +385,8 @@ function add_vertex_mutation(acts)
 
     wrapitup(as) = AddVertexMutation(rep_fork_res(as, 1,loglevel=Logging.Info), outselect)
 
-    add_conv = wrapitup(convspace(default_layerconf(), 8:128, 1:2:5, acts,loglevel=Logging.Info))
-    add_dense = wrapitup(LoggingArchSpace(Logging.Info, VertexSpace(default_layerconf(), NamedLayerSpace("dense", DenseSpace(16:512, acts)))))
+    add_conv = wrapitup(convspace(default_layerconf(),2 .^(3:9), 1:2:5, acts,loglevel=Logging.Info))
+    add_dense = wrapitup(LoggingArchSpace(Logging.Info, VertexSpace(default_layerconf(), NamedLayerSpace("dense", DenseSpace(2 .^(4:9), acts)))))
 
     return MutationList(MutationFilter(is_convtype, add_conv), MutationFilter(!is_convtype, add_dense))
 end
