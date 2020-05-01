@@ -309,14 +309,13 @@
         space = ResidualArchSpace(DenseSpace(3, relu))
         inpt = inputvertex("in", 4)
 
-        v = inputs(space(inpt))[1]
+        v = space(inpt)
         @test nin(v) == [4, 4]
         @test nout(v) == 4
         @test layertype(inputs(v)[2]) == FluxDense()
 
         v = space("v", inpt)
-        @test name.(NaiveNASlib.flatten(v)) == ["in", "v.res", "v.add", "v.add.scale"]
-        v = inputs(v)[1]
+        @test name.(NaiveNASlib.flatten(v)) == ["in", "v.res", "v.add"]
         @test nin(v) == [4, 4]
         @test nout(v) == 4
         @test layertype(inputs(v)[2]) == FluxDense()

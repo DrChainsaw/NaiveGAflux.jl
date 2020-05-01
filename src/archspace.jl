@@ -492,16 +492,21 @@ ResidualArchSpace(l::AbstractLayerSpace) = ResidualArchSpace(VertexSpace(l))
 
 function (s::ResidualArchSpace)(in::AbstractVertex, rng=rng_default; outsize=missing, wi=DefaultWeightInit())
     add = s.conf >> in + s.s(in, rng,outsize=nout(in), wi=resinitW(wi))
-    return invariantvertex(s.conf.outwrap(x -> convert(eltype(x), 0.5) .* x), add; traitdecoration=s.conf.traitdecoration)
+    return resscale(wi, s.conf, add)
 end
 function (s::ResidualArchSpace)(name::String, in::AbstractVertex, rng=rng_default; outsize=missing, wi=DefaultWeightInit())
-    nconf = VertexConf(s.conf.mutation, s.conf.traitdecoration ∘ named(name * ".add"), s.conf.outwrap)
+    conf = s.conf
+    nconf = @set conf.traitdecoration = conf.traitdecoration ∘ named(name * ".add")
     add = nconf >> in + s.s(join([name, ".res"]), in, rng,outsize=nout(in), wi=resinitW(wi))
 
-    return invariantvertex(s.conf.outwrap(x -> convert(eltype(x), 0.5) .* x), add; traitdecoration= s.conf.traitdecoration ∘ named(name * ".add.scale"))
+    sconf = @set conf.traitdecoration = conf.traitdecoration ∘ named(name * ".add.scale")
+    return resscale(wi, sconf, add)
  end
 
 resinitW(wi::AbstractWeightInit) = wi
+
+resscale(wi, conf, v) = v
+resscale(::Union{IdentityWeightInit, PartialIdentityWeightInit}, conf, v) = invariantvertex(conf.outwrap(x -> convert(eltype(x), 0.5) .* x), v; traitdecoration= conf.traitdecoration, mutation=conf.mutation)
 
 """
     FunctionSpace <: AbstractArchSpace
