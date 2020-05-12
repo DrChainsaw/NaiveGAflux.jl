@@ -157,7 +157,7 @@ end
 
     # And one more...
     graph2 = CompGraph(inputshape, archspace(inputshape))
-    @test nv(graph2) == 54
+    @test nv(graph2) == 50
 end
 
 @testset "Mutation examples" begin

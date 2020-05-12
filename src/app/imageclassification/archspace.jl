@@ -10,7 +10,7 @@ function initial_archspace(inshape, outsize)
 
     # Only use odd kernel sizes due to CuArrays issue# 356
     # Bias selection towards smaller number of large kernels in the beginning...
-    conv1 = convspace(layerconf, 2 .^(2:6), 1:2:7, acts)
+    conv1 = convspace(layerconf, 2 .^(3:8), 1:2:7, acts)
     # Then larger number of small kernels
     conv2 = convspace(layerconf, 2 .^(5:9), 1:2:5, acts)
 

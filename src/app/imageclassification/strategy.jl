@@ -273,7 +273,8 @@ function evolvecandidate(inshape)
     return evolvemodel(mutation(inshape), mutate_opt)
 end
 
-newlr(o::Flux.Optimise.Optimiser) = newlr(o.os[].eta)
+newlr(o::Flux.Optimise.Optimiser) = newlr(o.os[1].eta)
+newlr(o) = newlr(o.eta)
 function newlr(lr::Number)
     # GA has a strong tendency to get stuck in local minima by lowering the
     # learning rate to the smallest allowed value
@@ -281,9 +282,12 @@ function newlr(lr::Number)
     return clamp(nudge, 1e-6, 1.0)
 end
 
-newopt(lr::Number) = Flux.Optimise.Optimiser([rand([Descent, Momentum, Nesterov, ADAM, NADAM, ADAGrad])(lr)])
-newopt(opt::Flux.Optimise.Optimiser) = NaiveGAflux.apply(Probability(0.05)) ? newopt(newlr(opt)) : sameopt(opt.os[], newlr(opt))
-sameopt(::T, lr) where T = Flux.Optimise.Optimiser([T(lr)])
+newopt(lr::Number) = rand([Descent, Momentum, Nesterov, ADAM, NADAM, ADAGrad])(lr)
+function newopt(opt::Flux.Optimise.Optimiser)
+    firstopt = NaiveGAflux.apply(Probability(0.05)) ? newopt(newlr(opt.os[1])) : sameopt(opt.os[1], newlr(opt))
+    return Flux.Optimise.Optimiser(vcat(firstopt, opt.os[2:end]))
+end
+sameopt(::T, lr) where T = T(lr)
 
 function mutation(inshape)
     acts = [identity, relu, elu, selu]
@@ -385,7 +389,7 @@ function add_vertex_mutation(acts)
 
     wrapitup(as) = AddVertexMutation(rep_fork_res(as, 1,loglevel=Logging.Info), outselect)
 
-    add_conv = wrapitup(convspace(default_layerconf(),2 .^(3:9), 1:2:5, acts,loglevel=Logging.Info))
+    add_conv = wrapitup(convspace(default_layerconf(),2 .^(4:9), 1:2:5, acts,loglevel=Logging.Info))
     add_dense = wrapitup(LoggingArchSpace(Logging.Info, VertexSpace(default_layerconf(), NamedLayerSpace("dense", DenseSpace(2 .^(4:9), acts)))))
 
     return MutationList(MutationFilter(is_convtype, add_conv), MutationFilter(!is_convtype, add_dense))

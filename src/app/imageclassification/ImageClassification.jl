@@ -135,6 +135,6 @@ function initial_models(nr, mdir, newpop, fitnessgen, insize, outsize)
     as = initial_archspace(insize[1:2], outsize)
     return PersistentArray(mdir, nr, i -> create_model(join(["model", i]), as, iv(i), fitnessgen))
 end
-create_model(name, as, in, fg) = CacheCandidate(HostCandidate(CandidateModel(CompGraph(in, as(name, in)), newopt(rand() * 0.099 + 0.01), Flux.logitcrossentropy, fg())))
+create_model(name, as, in, fg) = CacheCandidate(HostCandidate(CandidateModel(CompGraph(in, as(name, in)), Flux.Optimise.Optimiser([newopt(rand() * 0.099 + 0.01)]), Flux.logitcrossentropy, fg())))
 
 end
