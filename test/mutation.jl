@@ -609,4 +609,28 @@
         end
     end
 
+
+    @testset "OptimizerMutation" begin
+        import NaiveGAflux: sameopt, learningrate
+        import NaiveGAflux.Flux.Optimise: Optimiser
+        
+        @testset "Mutate learning rate" begin
+            m = OptimizerMutation(o -> sameopt(o, 10 * learningrate(o)), 100)
+
+            @test learningrate(m(Descent(0.1))) == 1.0
+            @test learningrate(m(ShieldedOpt(Momentum(0.1)))) == 0.1
+            @test learningrate(m(Optimiser(Nesterov(0.1), ShieldedOpt(ADAM(0.1))))) == 0.1
+
+            @test learningrate(LearningRateMutation(MockRng([0.0]))(Descent(0.1))) == 0.085
+        end
+
+        @testset "Mutate optimizer type" begin
+            m = OptimizerMutation((Momentum, ), 100)
+
+            @test typeof(m(Descent())) == Momentum
+            @test typeof(m(ShieldedOpt(Descent()))) == ShieldedOpt{Descent}
+            @test typeof.(m(Optimiser(Nesterov(), ShieldedOpt(ADAM()))).os) == [Momentum, ShieldedOpt{ADAM}]
+        end
+    end
+
 end

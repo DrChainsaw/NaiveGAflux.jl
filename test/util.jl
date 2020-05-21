@@ -16,11 +16,18 @@
     @test cnt == 0
     apply(ff, p)
     @test cnt == 1
+    apply(ff, p, () -> cnt -= 2)
+    @test cnt == -1
+
 
     p = Probability(0.3, MockRng(0:0.1:0.9))
     cnt = 0
     foreach(_ -> apply(ff, p), 1:10)
     @test cnt == 3
+
+    p = Probability(0.5, MockRng([0.1, 0.9]))
+    @test apply(() -> :a, p, () -> :b) == :a
+    @test apply(() -> :a, p, () -> :b) == :b
 end
 
 @testset "MutationShield" begin
@@ -121,4 +128,19 @@ end
     finally
         rm(testdir, force=true, recursive=true)
     end
+end
+
+@testset "Bounded Random Walk" begin
+    import NaiveGAflux: BoundedRandomWalk
+    using Random
+
+    driftup = BoundedRandomWalk(-1.0, 1.0, i -> 0.2i^2)
+    @test cumsum([driftup(i) for i in 1:5]) == [0.2, 0.8, 1.0, 1.0, 1.0]
+
+    driftdown = BoundedRandomWalk(-1.0, 1.0, i -> -0.2i^2)
+    @test cumsum([driftdown(i) for i in 1:5]) == -[0.2, 0.8, 1.0, 1.0, 1.0]
+
+    rng = MersenneTwister(0);
+    brw = BoundedRandomWalk(-2.34, 3.45, () -> randn(rng))
+    @test collect(extrema(cumsum([brw() for i in 1:10000]))) ≈ [-2.34, 3.45] atol = 1e-10
 end

@@ -642,3 +642,58 @@ function remove_all_inputs(v, seen, stop)
     foreach(vrm -> remove_all_inputs(vrm, seen, stop), intersect(inputs(v), seen))
     remove!(v, RemoveStrategy(ConnectNone(), NoSizeChange()))
 end
+
+
+"""
+    struct ShieldedOpt{O}
+    ShieldedOpt(o)
+
+Shields `o` from mutation by `OptimizerMutation`.
+"""
+struct ShieldedOpt{O}
+    opt::O
+end
+Flux.Optimise.apply!(o::ShieldedOpt, args...) = Flux.Optimise.apply!(o.opt, args...)
+
+"""
+    struct OptimizerMutation{F} <: AbstractMutation{Flux.Optimise.Optimiser}
+    OptimizerMutation(of, p::Number, rng=rng_default)
+    OptimizerMutation(optfun, p::Probability) = OptimizerMutation(optfun, p)
+    OptimizerMutation(os::Union{Tuple, <:AbstractArray}, p::Probability)
+
+Mutation of optimizers.
+
+If `m` is an `OptimizerMutation`, `m(o)` returns `optfun(o)` with probability `p` and `o` with probability `1-p`. Invoked recursively for `Flux.Optimise.Optimiser`s.
+"""
+struct OptimizerMutation{F} <: AbstractMutation{Flux.Optimise.Optimiser}
+    optfun::F
+    p::Probability
+end
+OptimizerMutation(of, p::Number, rng=rng_default) = OptimizerMutation(of, Probability(p, rng))
+OptimizerMutation(os::Union{Tuple, <:AbstractArray}, p::Probability, rng=rng_default) = OptimizerMutation(o -> rand(rng, os)(learningrate(o)), p)
+
+"""
+    LearningRateMutation(rng=rng_default)
+    LearningRateMutation(p::Number, rng=rng_default)
+    LearningRateMutation(p::Probability, rng=rng_default)
+
+Return an `OptimizerMutation` which mutates the learning rate of optimizers with a probability of `p`.
+"""
+LearningRateMutation(rng=rng_default) = LearningRateMutation(1.0, rng)
+LearningRateMutation(p::Number, rng=rng_default) = LearningRateMutation(Probability(p, rng), rng)
+LearningRateMutation(p::Probability, rng=rng_default) = OptimizerMutation(o -> nudgelr(o, rng), p)
+
+(m::OptimizerMutation)(opt::Flux.Optimise.Optimiser) = Flux.Optimise.Optimiser(m.(opt.os))
+(m::OptimizerMutation)(o::ShieldedOpt) = o;
+(m::OptimizerMutation)(o) = apply(() -> m.optfun(o), m.p, () -> o)
+
+
+nudgelr(o, rng=rng_default) = sameopt(o, nudgelr(learningrate(o), rng))
+nudgelr(lr::Number, rng=rng_default) = clamp(lr + (rand(rng) - 0.5) * lr * 0.3, 1e-6, 1.0)
+
+learningrate(o::Flux.Optimise.Optimiser) = prod(learningrate.(o.os))
+learningrate(o::ShieldedOpt) = learningrate(o.opt)
+learningrate(o) = o.eta
+
+newlr(o, lrf = nudgelr) = sameopt(o, lrf(learningrate(o)))
+sameopt(::T, lr) where T = T(lr)

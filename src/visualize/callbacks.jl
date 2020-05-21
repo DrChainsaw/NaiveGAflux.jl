@@ -142,7 +142,8 @@ end
 
 opt(c::AbstractCandidate) = opt(c.c)
 opt(c::CandidateModel) = c.opt
-lr(o::Flux.Optimise.Optimiser) = mean(map(oo -> lr(oo), o.os))
+lr(o::Flux.Optimise.Optimiser) = prod(lr.(o.os))
+lr(o::ExpDecay) = 1.0
 lr(o) = o.eta
 ot(o::Flux.Optimise.Optimiser) = ot(o.os[1])
 ot(o) = typeof(o)
