@@ -393,7 +393,7 @@ end
     # Note, it does not move the data. GpuIterator can provide some assistance here...
     dataset_gpu = GpuIterator([dataset])
     fitfun_gpu = NanGuard(AccuracyFitness(dataset_gpu))
-    hostcand = HostCandidate(CandidateModel(graph, Flux.ADAM(0.1), loss, fitfun_gpu))
+    hostcand = HostCandidate(CandidateModel(graph, Flux.Optimise.Optimiser([Flux.ADAM(0.1)]), loss, fitfun_gpu))
 
     Flux.train!(hostcand, dataset_gpu)
     @test fitness(hostcand) > 0
@@ -404,6 +404,28 @@ end
 
     Flux.train!(cachinghostcand, dataset_gpu)
     @test fitness(cachinghostcand) > 0
+
+    # evolvemodel is a convenience utility for mutating AbstractCandidates
+    graphmutation = VertexMutation(NeuronSelectMutation(NoutMutation(-0.5,0.5)))
+    optimizermutation = OptimizerMutation([Descent, Momentum, Nesterov])
+    evofun = evolvemodel(graphmutation, optimizermutation)
+
+    # This should perhaps be of type AbstractMutation{AbstractCandidate} for the sake of consistency.
+    # Until a usecase for an AbstractMutation{AbstractCandidate} materializes it is just an anonymous function though. 
+    @test evofun isa Function
+
+    evolvedcand = evofun(cachinghostcand)
+
+    @test typeof(evolvedcand) == typeof(cachinghostcand)
+
+    @test nout.(vertices(NaiveGAflux.graph(evolvedcand))) == [3, 4, 4]
+    @test nout.(vertices(graph)) == [3, 3, 3]
+
+    optimizer(c::AbstractCandidate) = optimizer(c.c)
+    optimizer(c::CandidateModel) = typeof(c.opt.os[1])
+
+    @test optimizer(cachinghostcand) == ADAM
+    @test optimizer(evolvedcand) == Nesterov
 end
 
 @testset "Evolution strategies" begin

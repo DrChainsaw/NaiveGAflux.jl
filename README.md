@@ -259,8 +259,7 @@ The following basic mutation operations are currently supported:
 5. Add edges between vertices using `AddEdgeMutation`.
 6. Mutation of kernel size for conv layers using `KernelSizeMutation`.
 7. Change of activation function using `ActivationFunctionMutation`.
-
-It is also possible to implement mutation of learning rate and optimizer using `evolve_candidate`, but a convenient way to do this still TBA, see `AutoFlux.ImageClassification.evolvecandidate` in the meantime.
+8. Change the type of optimizer using `OptimizerMutation`.
 
 In addition to the basic mutation operations, there are numerous utilities for adding behaviour and convenience. Here are a few examples:
 
@@ -526,6 +525,35 @@ cachinghostcand = CacheCandidate(hostcand)
 
 Flux.train!(cachinghostcand, dataset_gpu)
 @test fitness(cachinghostcand) > 0
+```
+
+Evolving a candidate is not limited to evolving the model. Basically any aspect of it might be useful to search over and NaiveGAflux tries to not be opinonated here.
+
+The function `evolvemodel` is a convenience method for creating functions which evolve `AbstractCandidate`s. Apart from handling mutation is also ensures that everything is copied so that an evolved candidate does not accidentally share any state with its parent.
+
+One limitation of the current implementation is that it can only mutate the optimizer if it is wrapped in a `Flux.Optimise.Optimiser`, or else the dispatch won't catch it.
+
+```julia
+graphmutation = VertexMutation(NeuronSelectMutation(NoutMutation(-0.5,0.5)))
+optimizermutation = OptimizerMutation([Descent, Momentum, Nesterov])
+evofun = evolvemodel(graphmutation, optimizermutation)
+
+# This should perhaps be of type AbstractMutation{AbstractCandidate} for the sake of consistency.
+# Until a usecase for an AbstractMutation{AbstractCandidate} materializes it is just an anonymous function though.
+@test evofun isa Function
+
+evolvedcand = evofun(cachinghostcand)
+
+@test typeof(evolvedcand) == typeof(cachinghostcand)
+
+@test nout.(vertices(NaiveGAflux.graph(evolvedcand))) == [3, 4, 4]
+@test nout.(vertices(graph)) == [3, 3, 3]
+
+optimizer(c::AbstractCandidate) = optimizer(c.c)
+optimizer(c::CandidateModel) = typeof(c.opt.os[1])
+
+@test optimizer(cachinghostcand) == ADAM
+@test optimizer(evolvedcand) == Nesterov
 ```
 
 ### Evolution Strategies
