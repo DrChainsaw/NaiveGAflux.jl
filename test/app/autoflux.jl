@@ -26,11 +26,23 @@
 
         @test length(pop) == c.popsize
 
+        globallearningrate(c::AbstractCandidate) = globallearningrate(c.c)
+        globallearningrate(c::CandidateModel) = globallearningrate(c.opt)
+        globallearningrate(o::Flux.Optimiser) = prod(globallearningrate.(o.os))
+        globallearningrate(o) = 1
+        globallearningrate(o::ShieldedOpt{Descent}) = o.opt.eta
+
+        @test unique(globallearningrate.(pop)) != [1]
+        @test length(unique(globallearningrate.(pop))) == 1
+
         # Now try TrainAccuracyVsSize and EliteAndTournamentSelection
         @info "\tSmoke test with TrainAccuracyVsSize and EliteAndTournamentSelection"
         pop = @test_logs (:info, "Begin generation 1") (:info, "Begin generation 2") (:info, "Begin generation 3") (:info, r"Mutate model") match_mode=:any fit(c, x, y, fitnesstrategy=TrainAccuracyVsSize(), trainstrategy=t, evolutionstrategy = GlobalOptimizerMutation(EliteAndTournamentSelection(popsize=c.popsize, nelites=1, k=2)), mdir = dummydir)
 
         @test length(pop) == c.popsize
+
+        @test unique(globallearningrate.(pop)) != [1]
+        @test length(unique(globallearningrate.(pop))) == 1
     end
 
     @testset "PruneLongRunning" begin

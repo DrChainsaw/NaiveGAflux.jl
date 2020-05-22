@@ -205,10 +205,12 @@ Defaults to `T(prod(learningrate.(os)))`.
 """
 function mergeopts(t::Type{T}, os...) where T
     merged = mergeopts(filter(o -> isa(o, T), os)...)
-    return [filter(o -> !isa(o, T), os)..., merged]
+    return vcat(filter(o -> !isa(o, T), os)..., merged)
 end
-mergeopts(t::Type{T}, os::T...) where T = mergeopts(os...)
+mergeopts() = []
+mergeopts(t::Type{T}, os::T...) where T = [mergeopts(os...)]
 mergeopts(os::T...) where T = T(prod(learningrate.(os)))
+mergeopts(os::WeightDecay...) = WeightDecay(mapreduce(o -> o.wd, *, os))
 
 """
     struct FluxOptimizer

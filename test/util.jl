@@ -145,6 +145,22 @@ end
     @test collect(extrema(cumsum([brw() for i in 1:10000]))) ≈ [-2.34, 3.45] atol = 1e-10
 end
 
+@testset "Mergeopts" begin
+    import NaiveGAflux: mergeopts, learningrate
+
+    dm = mergeopts(Descent(0.1), Descent(2), Descent(0.4))
+    @test learningrate(dm) ≈ 0.08
+
+    wd = mergeopts(WeightDecay(0.1), WeightDecay(2), WeightDecay(0.4))
+    @test wd.wd ≈ 0.08
+
+    dd = mergeopts(Momentum, Descent(0.1), Descent(2), Descent(0.4))
+    @test typeof.(dd) == [Descent, Descent, Descent]
+
+    mm = mergeopts(Momentum, Descent(0.1), Momentum(0.2), Momentum(0.3), Descent(0.2))
+    @test typeof.(mm) == [Descent, Descent, Momentum]
+end
+
 @testset "Optimizer trait" begin
     import NaiveGAflux: opttype, optmap, FluxOptimizer
 

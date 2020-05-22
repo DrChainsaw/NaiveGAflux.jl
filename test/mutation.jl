@@ -631,6 +631,14 @@
             @test typeof(m(ShieldedOpt(Descent()))) == ShieldedOpt{Descent}
             @test typeof.(m(Optimiser(Nesterov(), ShieldedOpt(ADAM()))).os) == [Momentum, ShieldedOpt{ADAM}]
         end
+
+        @testset "Add optimizer" begin
+            m = AddOptimizerMutation(o -> Descent(0.1))
+
+            @test typeof.(m(Descent(0.2)).os) == [Descent]
+            @test typeof.(m(Momentum(0.2)).os) == [Momentum, Descent]
+            @test typeof.(m(Flux.Optimiser(Nesterov(), Descent(), ShieldedOpt(Descent()))).os) == [Nesterov, ShieldedOpt{Descent}, Descent]
+        end
     end
 
 end

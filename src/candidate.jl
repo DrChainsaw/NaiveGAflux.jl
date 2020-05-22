@@ -197,13 +197,28 @@ cleanopt(c::CandidateModel) = cleanopt(c.opt)
 cleanopt(c::HostCandidate) = cleanopt(c.c)
 cleanopt(c::CacheCandidate) = cleanopt(c.c)
 
-function randomlrscale(rfun = BoundedRandomWalk(-1.0, 1.0))
-    function(x...)
-        newopt = ShieldedOpt(Descent(10^rfun(x...)))
-        ofun(o) = Flux.Optimiser(mergeopts(typeof(newopt), newopt, o))
-        ofun(o::Flux.Optimiser) = Flux.Optimiser(mergeopts(typeof(newopt), newopt, o.os...))
-        return ofun
-    end
+"""
+    randomlrscale(rfun = BoundedRandomWalk(-1.0, 1.0))
+
+Return a function which scales the learning rate based on the output of `rfun`.
+
+Intended use is to apply the same learning rate scaling for a whole population of models, e.g to have a global learning rate schedule.
+"""
+randomlrscale(rfun = BoundedRandomWalk(-1.0, 1.0)) = function(x...)
+    newopt = ShieldedOpt(Descent(10^rfun(x...)))
+    return AddOptimizerMutation(o -> newopt)
 end
 
-global_optimizer_mutation(pop, optfun) = map(c -> newcand(c, optmap(optfun(pop))), pop)
+"""
+    global_optimizer_mutation(pop, optfun)
+
+Changes the optimizer of all candidates in `pop`.
+
+The optimizer of each candidate in pop will be changed to `om(optc)` where `optc` is the current optimizer and `om = optfun(pop)`.
+
+Intended to be used with `AfterEvolution` to create things like global learning rate schedules.
+"""
+function global_optimizer_mutation(pop, optfun)
+    om = optfun(pop)
+    map(c -> newcand(c, optmap(om)), pop)
+end
