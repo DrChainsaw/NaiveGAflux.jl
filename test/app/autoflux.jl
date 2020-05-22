@@ -39,7 +39,7 @@
         x = ones(Float32, 5,5,3,4)
         y = [1 1 1 1; 0 0 0 0]
 
-        fs = PruneLongRunning(TrainSplitAccuracy(nexamples=2, batchsize=2), 0.01, 0.03)
+        fs = PruneLongRunning(TrainSplitAccuracy(nexamples=2, batchsize=2), 0.1, 0.3)
 
         xx, yy, fg = fitnessfun(fs, x, y)
 
@@ -60,21 +60,21 @@
         instrument(NaiveGAflux.Validate(), ff, Dense(1,1))
 
         # a little warmup to hopefully remove any compiler delays
-        @test sleepreti(0.01) == 0.01
-        @test sleepreti(0.07) == 0.07
+        @test sleepreti(0.1) == 0.1
+        @test sleepreti(0.7) == 0.7
         @test fitness(ff, x -> [1 0; 0 1]) == 0
 
         reset!(ff)
 
-        @test sleepreti(0.001) == 0.001
-        @test sleepreti(0.002) == 0.002
+        @test sleepreti(0.01) == 0.01
+        @test sleepreti(0.02) == 0.02
         fitness(ff, x -> [1 0; 0 1]) # Avoid compiler delays?
         @test fitness(ff, x -> [1 0; 0 1]) == 0.501 #SizeFitness gives 0.001 extra
 
-        sleepreti(0.04)
+        sleepreti(0.4)
         @test fitness(ff, x -> [1 0; 0 1]) < 0.501  #SizeFitness gives 0.001 extra
 
-        sleepreti(0.07)
+        sleepreti(0.7)
         @test fitness(ff, x -> [1 0; 0 1]) == 0
     end
 
