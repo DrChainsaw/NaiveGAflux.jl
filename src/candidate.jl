@@ -159,9 +159,9 @@ nparams(g::CompGraph) = mapreduce(prod ∘ size, +, params(g).order)
 
 """
     evolvemodel(m::AbstractMutation{CompGraph}, newfields::Function=deepcopy)
-    evolvemodel(m::AbstractMutation{CompGraph}, om::AbstractMutation{Flux.Optimise.Optimiser}, mapothers=deepcopy)
+    evolvemodel(m::AbstractMutation{CompGraph}, om::AbstractMutation{FluxOptimizer}, mapothers=deepcopy)
 
-Return a function which maps a `AbstractCandidate c1` to a new `AbstractCandidate c2` where any `CompGraph`s `g` in `c1` will be m(copy(g))` in `c2`. Same principle is applied to any `Flux.Optimise.Optimiser` if `om` is present.
+Return a function which maps a `AbstractCandidate c1` to a new `AbstractCandidate c2` where any `CompGraph`s `g` in `c1` will be m(copy(g))` in `c2`. Same principle is applied to any optimisers if `om` is present.
 
 
 All other fields are mapped through the function `newfields`.
@@ -176,11 +176,7 @@ function evolvemodel(m::AbstractMutation{CompGraph}, mapothers=deepcopy)
     end
     mapcandidate(copymutate, mapothers)
 end
-function evolvemodel(m::AbstractMutation{CompGraph}, om::AbstractMutation{Flux.Optimise.Optimiser}, mapothers=deepcopy)
-    mutate_opt(o::Flux.Optimise.Optimiser) = om(o)
-    mutate_opt(x) = mapothers(x)
-    return evolvemodel(m, mutate_opt)
-end
+evolvemodel(m::AbstractMutation{CompGraph}, om::AbstractMutation{FluxOptimizer}, mapothers=deepcopy) = evolvemodel(m, optmap(om, mapothers))
 
 function mapcandidate(mapgraph, mapothers=deepcopy)
     mapfield(g::CompGraph) = mapgraph(g)
@@ -196,7 +192,7 @@ function clearstate(s) end
 clearstate(s::AbstractDict) = foreach(k -> delete!(s, k), keys(s))
 
 cleanopt(o::T) where T = foreach(fn -> clearstate(getfield(o, fn)), fieldnames(T))
-cleanopt(o::Flux.Optimise.Optimiser) = foreach(cleanopt, o.os)
+cleanopt(o::Flux.Optimiser) = foreach(cleanopt, o.os)
 cleanopt(c::CandidateModel) = cleanopt(c.opt)
 cleanopt(c::HostCandidate) = cleanopt(c.c)
 cleanopt(c::CacheCandidate) = cleanopt(c.c)
@@ -204,15 +200,10 @@ cleanopt(c::CacheCandidate) = cleanopt(c.c)
 function randomlrscale(rfun = BoundedRandomWalk(-1.0, 1.0))
     function(x...)
         newopt = ShieldedOpt(Descent(10^rfun(x...)))
-        ofun(o) = Flux.Optimise.Optimiser(mergeopts(typeof(newopt), newopt, o))
-        ofun(o::Flux.Optimise.Optimiser) = Flux.Optimise.Optimiser(mergeopts(typeof(newopt), newopt, o.os...))
+        ofun(o) = Flux.Optimiser(mergeopts(typeof(newopt), newopt, o))
+        ofun(o::Flux.Optimiser) = Flux.Optimiser(mergeopts(typeof(newopt), newopt, o.os...))
         return ofun
     end
 end
 
-function global_optimizer_mutation(pop, lrfun)
-    lrmap = lrfun(pop)
-    mutate_opt(o::Flux.Optimise.Optimiser) = lrmap(o)
-    mutate_opt(x) = x
-    return map(c -> newcand(c, mutate_opt), pop)
-end
+global_optimizer_mutation(pop, optfun) = map(c -> newcand(c, optmap(optfun(pop))), pop)

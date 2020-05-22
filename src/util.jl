@@ -208,5 +208,31 @@ function mergeopts(t::Type{T}, os...) where T
     return [filter(o -> !isa(o, T), os)..., merged]
 end
 mergeopts(t::Type{T}, os::T...) where T = mergeopts(os...)
-#mergeopts(os::T...) where T <: ShieldedOpt = ShieldedOpt(mergeopts(map(o -> o.opt, os)...))
 mergeopts(os::T...) where T = T(prod(learningrate.(os)))
+
+"""
+    struct FluxOptimizer
+
+Trait to indicate something is a Flux optimizer.
+"""
+struct FluxOptimizer end
+
+"""
+    opttype(o::T)
+
+Return `FluxOptimizer()` if `T` is a Flux optimizer, nothing otherwise.
+"""
+opttype(o::T) where T = hasmethod(Flux.Optimise.apply!, (T, Any, Any)) ? FluxOptimizer() : nothing
+
+"""
+    optmap(fopt, x, felse=identity)
+    optmap(fopt, felse=identity)
+
+Return `fopt(x)` if `x` is an optimizer, else return `felse(x)`.
+
+Call without x to return `x -> optmap(fopt, x, felse)`
+"""
+optmap(fopt, felse=identity) = x -> optmap(fopt, x, felse)
+optmap(fopt, x, felse) = optmap(opttype(x), fopt, x, felse)
+optmap(n, fopt, x, felse) = felse(x)
+optmap(::FluxOptimizer, fopt, o, felse) = fopt(o)

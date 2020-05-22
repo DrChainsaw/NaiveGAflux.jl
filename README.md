@@ -531,8 +531,6 @@ Evolving a candidate is not limited to evolving the model. Basically any aspect 
 
 The function `evolvemodel` is a convenience method for creating functions which evolve `AbstractCandidate`s. Apart from handling mutation is also ensures that everything is copied so that an evolved candidate does not accidentally share any state with its parent.
 
-One limitation of the current implementation is that it can only mutate the optimizer if it is wrapped in a `Flux.Optimise.Optimiser`, or else the dispatch won't catch it.
-
 ```julia
 graphmutation = VertexMutation(NeuronSelectMutation(NoutMutation(-0.5,0.5)))
 optimizermutation = OptimizerMutation([Descent, Momentum, Nesterov])
@@ -550,7 +548,7 @@ evolvedcand = evofun(cachinghostcand)
 @test nout.(vertices(graph)) == [3, 3, 3]
 
 optimizer(c::AbstractCandidate) = optimizer(c.c)
-optimizer(c::CandidateModel) = typeof(c.opt.os[1])
+optimizer(c::CandidateModel) = typeof(c.opt)
 
 @test optimizer(cachinghostcand) == ADAM
 @test optimizer(evolvedcand) == Nesterov

@@ -137,7 +137,7 @@ function initial_models(nr, mdir, newpop, fitnessgen, insize, outsize)
 end
 function create_model(name, as, in, fg)
     optselect = optmutation(1.0)
-    opt = optselect(Flux.Optimise.Optimiser([Descent(rand() * 0.099 + 0.01)]))
+    opt = optselect(Descent(rand() * 0.099 + 0.01))
     CacheCandidate(HostCandidate(CandidateModel(CompGraph(in, as(name, in)), opt, Flux.logitcrossentropy, fg())))
 end
 

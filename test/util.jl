@@ -144,3 +144,20 @@ end
     brw = BoundedRandomWalk(-2.34, 3.45, () -> randn(rng))
     @test collect(extrema(cumsum([brw() for i in 1:10000]))) ≈ [-2.34, 3.45] atol = 1e-10
 end
+
+@testset "Optimizer trait" begin
+    import NaiveGAflux: opttype, optmap, FluxOptimizer
+
+    @test opttype("Not an optimizer") == nothing
+    @test opttype(Descent()) == FluxOptimizer()
+    @test opttype(Flux.Optimiser(Descent(), ADAM())) == FluxOptimizer()
+
+    isopt = "Is an optimizer!"
+    noopt = "Is not an optimizer!"
+    om = optmap(o -> isopt, o -> noopt)
+
+    @test om(1234) == noopt
+    @test om(Momentum()) == isopt
+    @test om(NaiveGAflux.ShieldedOpt(Momentum())) == isopt
+    @test om(Flux.Optimiser(Momentum(), Nesterov())) == isopt
+end

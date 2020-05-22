@@ -19,7 +19,7 @@ struct MutationProbability{T} <:AbstractMutation{T}
     p::Probability
 end
 MutationProbability(m::AbstractMutation{T}, p::Number) where T = MutationProbability(m, Probability(p))
-(m::MutationProbability{T})(e::T) where T = apply(() -> m.m(e), m.p, () -> e)
+(m::MutationProbability)(e) = apply(() -> m.m(e), m.p, () -> e)
 
 """
     WeightedMutationProbability{T,F} <: AbstractMutation{T}
@@ -31,7 +31,7 @@ struct WeightedMutationProbability{T,F} <: AbstractMutation{T}
     m::AbstractMutation{T}
     pfun::F
 end
-(m::WeightedMutationProbability{T})(e::T) where T = apply(() -> m.m(e), m.pfun(e), () -> e)
+(m::WeightedMutationProbability)(e) = apply(() -> m.m(e), m.pfun(e), () -> e)
 
 """
     HighValueMutationProbability(m::AbstractMutation{T}, pbase::Real, rng=rng_default; spread=0.5)
@@ -87,7 +87,7 @@ struct MutationList{T} <: AbstractMutation{T}
     m::AbstractVector{<:AbstractMutation{T}}
 end
 MutationList(m::AbstractMutation{T}...) where T = MutationList(collect(m))
-(m::MutationList)(e::T) where T = foldl((ei, mi) -> mi(ei), m.m; init=e)
+(m::MutationList)(e) = foldl((ei, mi) -> mi(ei), m.m; init=e)
 
 """
     RecordMutation{T} <:AbstractMutation{T}
@@ -102,7 +102,7 @@ struct RecordMutation{T} <:AbstractMutation{T}
     mutated::AbstractVector{T}
 end
 RecordMutation(m::AbstractMutation{T}) where T = RecordMutation(m, T[])
-function (m::RecordMutation{T})(e::T) where T
+function (m::RecordMutation)(e)
     push!(m.mutated, e)
     m.m(e)
 end
@@ -122,7 +122,7 @@ struct LogMutation{T} <:AbstractMutation{T}
     m::AbstractMutation{T}
 end
 LogMutation(strfun, m::AbstractMutation{T}) where T = LogMutation(strfun, Logging.Info, m)
-function (m::LogMutation{T})(e::T) where T
+function (m::LogMutation)(e)
     @logmsg m.level m.strfun(e)
     m.m(e)
 end
@@ -137,7 +137,7 @@ struct MutationFilter{T} <: AbstractMutation{T}
     predicate
     m::AbstractMutation{T}
 end
-function (m::MutationFilter{T})(e::T) where T
+function (m::MutationFilter)(e)
     m.predicate(e) && return m.m(e)
     return e
 end
@@ -560,7 +560,7 @@ struct PostMutation{T} <: AbstractMutation{T}
 end
 PostMutation(m::AbstractMutation{T}, actions...) where T = PostMutation(actions, m)
 PostMutation(action::Function, m::AbstractMutation{T}) where T = PostMutation(m, action)
-function (m::PostMutation{T})(e::T) where T
+function (m::PostMutation)(e)
     eout = m.m(e)
     foreach(a -> a(m, eout), m.actions)
     return eout
@@ -649,15 +649,15 @@ end
 
 
 """
-    struct OptimizerMutation{F} <: AbstractMutation{Flux.Optimise.Optimiser}
+    struct OptimizerMutation{F} <: AbstractMutation{FluxOptimizer}
     OptimizerMutation(optfun)
     OptimizerMutation(os::Union{Tuple, <:AbstractArray})
 
 Mutatates optimizers not wrapped in `ShieldedOpt` through `optfun`.
 
-Invoked recursively for `Flux.Optimise.Optimiser`s.
+Invoked recursively for `Flux.Optimiser`s.
 """
-struct OptimizerMutation{F} <: AbstractMutation{Flux.Optimise.Optimiser}
+struct OptimizerMutation{F} <: AbstractMutation{FluxOptimizer}
     optfun::F
 end
 OptimizerMutation(os::Union{Tuple, <:AbstractArray}, rng=rng_default) = OptimizerMutation(o -> rand(rng, os)(learningrate(o)))
@@ -669,7 +669,7 @@ Return an `OptimizerMutation` which mutates the learning rate of optimizers.
 """
 LearningRateMutation(rng=rng_default) = OptimizerMutation(o -> nudgelr(o, rng))
 
-(m::OptimizerMutation)(opt::Flux.Optimise.Optimiser) = Flux.Optimise.Optimiser(m.(opt.os))
+(m::OptimizerMutation)(opt::Flux.Optimiser) = Flux.Optimiser(m.(opt.os))
 (m::OptimizerMutation)(o::ShieldedOpt) = o;
 (m::OptimizerMutation)(o) = m.optfun(o)
 
@@ -677,7 +677,7 @@ LearningRateMutation(rng=rng_default) = OptimizerMutation(o -> nudgelr(o, rng))
 nudgelr(o, rng=rng_default) = sameopt(o, nudgelr(learningrate(o), rng))
 nudgelr(lr::Number, rng=rng_default) = clamp(lr + (rand(rng) - 0.5) * lr * 0.3, 1e-6, 1.0)
 
-learningrate(o::Flux.Optimise.Optimiser) = prod(learningrate.(o.os))
+learningrate(o::Flux.Optimiser) = prod(learningrate.(o.os))
 learningrate(o::ShieldedOpt) = learningrate(o.opt)
 learningrate(o) = o.eta
 

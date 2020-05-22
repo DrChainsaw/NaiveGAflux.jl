@@ -10,7 +10,7 @@
         outlayer = mutable("outlayer", Dense(4, 2), hlayer)
         graph = CompGraph(invertex, outlayer)
 
-        cand = wrp(CandidateModel(graph, Flux.Optimise.Optimiser([Descent(0.01)]), (x,y) -> sum(x .- y), DummyFitness()))
+        cand = wrp(CandidateModel(graph, Descent(0.01), (x,y) -> sum(x .- y), DummyFitness()))
 
         labs = []
         function NaiveGAflux.instrument(l::AbstractFunLabel, s::DummyFitness, f)
@@ -45,10 +45,10 @@
         @test nv(NaiveGAflux.graph(newcand)) == 2
         @test nv(NaiveGAflux.graph(cand)) == 3
 
-        getopt(c::AbstractCandidate) = getopt(c.c)
-        getopt(c::CandidateModel) = c.opt.os[1]
+        optimizer(c::AbstractCandidate) = optimizer(c.c)
+        optimizer(c::CandidateModel) = typeof(c.opt)
 
-        @test typeof(getopt(newcand)) != typeof(getopt(cand))
+        @test optimizer(newcand) != optimizer(cand)
 
         Flux.train!(cand, data(cand))
         Flux.train!(newcand, data(newcand))
@@ -142,9 +142,9 @@
 
         @testset "Global learning rate scaling" begin
             v1 = inputvertex("in", 3, FluxDense())
-            pop = CandidateModel.(Ref(CompGraph(v1, v1)), map(opt -> Optimiser([opt]), Descent.(0.1:0.1:1.0)), Flux.mse, Ref(DummyFitness()))
+            pop = CandidateModel.(Ref(CompGraph(v1, v1)), Descent.(0.1:0.1:1.0), Flux.mse, Ref(DummyFitness()))
 
-            lr(c) = c.opt.os[1].eta
+            lr(c) = c.opt.eta
             @test lr.(pop) == 0.1:0.1:1.0
 
             popscal = global_optimizer_mutation(pop, pp -> OptimizerMutation(o -> sameopt(o, 10learningrate(o))))
