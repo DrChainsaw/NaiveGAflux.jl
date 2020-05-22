@@ -411,7 +411,7 @@ end
     evofun = evolvemodel(graphmutation, optimizermutation)
 
     # This should perhaps be of type AbstractMutation{AbstractCandidate} for the sake of consistency.
-    # Until a usecase for an AbstractMutation{AbstractCandidate} materializes it is just an anonymous function though.
+    # Until a usecase for it materializes it is just an anonymous function though.
     @test evofun isa Function
 
     evolvedcand = evofun(cachinghostcand)

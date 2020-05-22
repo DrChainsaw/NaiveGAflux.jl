@@ -527,7 +527,7 @@ Flux.train!(cachinghostcand, dataset_gpu)
 @test fitness(cachinghostcand) > 0
 ```
 
-Evolving a candidate is not limited to evolving the model. Basically any aspect of it might be useful to search over and NaiveGAflux tries to not be opinonated here.
+Evolving a candidate is not limited to evolving the model. In general any aspect might be useful to search over and NaiveGAflux tries to not be opinionated here.
 
 The function `evolvemodel` is a convenience method for creating functions which evolve `AbstractCandidate`s. Apart from handling mutation is also ensures that everything is copied so that an evolved candidate does not accidentally share any state with its parent.
 
@@ -537,7 +537,7 @@ optimizermutation = OptimizerMutation([Descent, Momentum, Nesterov])
 evofun = evolvemodel(graphmutation, optimizermutation)
 
 # This should perhaps be of type AbstractMutation{AbstractCandidate} for the sake of consistency.
-# Until a usecase for an AbstractMutation{AbstractCandidate} materializes it is just an anonymous function though.
+# Until a usecase for it materializes it is just an anonymous function though.
 @test evofun isa Function
 
 evolvedcand = evofun(cachinghostcand)
