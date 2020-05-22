@@ -14,18 +14,20 @@
         x = randn(rng, Float64, 32,32,2,4)
         y = onehot(rand(rng, 0:5,4))
 
-        c = ImageClassifier(popsize = 5, seed=12345)
+        c = ImageClassifier(popsize = 5, seed=1)
         f = TrainSplitAccuracy(nexamples=1, batchsize=1)
         t = TrainStrategy(nepochs=1, batchsize=1, nbatches_per_gen=1)
 
-
         dummydir = joinpath(NaiveGAflux.modeldir, "ImageClassifier_smoketest")
 
+        # Logs are mainly to prevent CI timeouts
+        @info "\tSmoke test with TrainSplitAccuracy and EliteAndSusSelection"
         pop = @test_logs (:info, "Begin generation 1") (:info, "Begin generation 2") (:info, "Begin generation 3") (:info, r"Mutate model") match_mode=:any fit(c, x, y, fitnesstrategy=f, trainstrategy=t, evolutionstrategy = GlobalOptimizerMutation(EliteAndSusSelection(popsize=c.popsize, nelites=1)), mdir = dummydir)
 
         @test length(pop) == c.popsize
 
         # Now try TrainAccuracyVsSize and EliteAndTournamentSelection
+        @info "\tSmoke test with TrainAccuracyVsSize and EliteAndTournamentSelection"
         pop = @test_logs (:info, "Begin generation 1") (:info, "Begin generation 2") (:info, "Begin generation 3") (:info, r"Mutate model") match_mode=:any fit(c, x, y, fitnesstrategy=TrainAccuracyVsSize(), trainstrategy=t, evolutionstrategy = GlobalOptimizerMutation(EliteAndTournamentSelection(popsize=c.popsize, nelites=1, k=2)), mdir = dummydir)
 
         @test length(pop) == c.popsize
@@ -54,9 +56,15 @@
         end
 
         ff = fg()
-
         sleepreti = instrument(NaiveGAflux.Train(), ff, sleepret)
         instrument(NaiveGAflux.Validate(), ff, Dense(1,1))
+
+        # a little warmup to hopefully remove any compiler delays
+        @test sleepreti(0.01) == 0.01
+        @test sleepreti(0.07) == 0.07
+        @test fitness(ff, x -> [1 0; 0 1]) == 0
+
+        reset!(ff)
 
         @test sleepreti(0.001) == 0.001
         @test sleepreti(0.002) == 0.002
