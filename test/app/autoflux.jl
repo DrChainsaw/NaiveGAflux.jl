@@ -2,7 +2,7 @@
 
     @testset "ImageClassifier smoketest" begin
         using NaiveGAflux.AutoFlux
-        import NaiveGAflux.AutoFlux.ImageClassification: TrainSplitAccuracy, TrainStrategy, TrainAccuracyVsSize, EliteAndTournamentSelection, EliteAndSusSelection
+        import NaiveGAflux.AutoFlux.ImageClassification: TrainSplitAccuracy, TrainStrategy, TrainAccuracyVsSize, EliteAndTournamentSelection, EliteAndSusSelection, GlobalOptimizerMutation
         using Random
 
         # Use Float64 instead of Float32 due to https://github.com/FluxML/Flux.jl/issues/979
@@ -18,17 +18,17 @@
         f = TrainSplitAccuracy(nexamples=1, batchsize=1)
         t = TrainStrategy(nepochs=1, batchsize=1, nbatches_per_gen=1)
 
+
         dummydir = joinpath(NaiveGAflux.modeldir, "ImageClassifier_smoketest")
 
-        pop = @test_logs (:info, "Begin generation 1") (:info, "Begin generation 2") (:info, "Begin generation 3") (:info, r"Mutate model") match_mode=:any fit(c, x, y, fitnesstrategy=f, trainstrategy=t, evolutionstrategy = EliteAndSusSelection(popsize=c.popsize, nelites=1), mdir = dummydir)
+        pop = @test_logs (:info, "Begin generation 1") (:info, "Begin generation 2") (:info, "Begin generation 3") (:info, r"Mutate model") match_mode=:any fit(c, x, y, fitnesstrategy=f, trainstrategy=t, evolutionstrategy = GlobalOptimizerMutation(EliteAndSusSelection(popsize=c.popsize, nelites=1)), mdir = dummydir)
 
         @test length(pop) == c.popsize
 
         # Now try TrainAccuracyVsSize and EliteAndTournamentSelection
-        pop = @test_logs (:info, "Begin generation 1") (:info, "Begin generation 2") (:info, "Begin generation 3") (:info, r"Mutate model") match_mode=:any fit(c, x, y, fitnesstrategy=TrainAccuracyVsSize(), trainstrategy=t, evolutionstrategy = EliteAndTournamentSelection(popsize=c.popsize, nelites=1, k=2), mdir = dummydir)
+        pop = @test_logs (:info, "Begin generation 1") (:info, "Begin generation 2") (:info, "Begin generation 3") (:info, r"Mutate model") match_mode=:any fit(c, x, y, fitnesstrategy=TrainAccuracyVsSize(), trainstrategy=t, evolutionstrategy = GlobalOptimizerMutation(EliteAndTournamentSelection(popsize=c.popsize, nelites=1, k=2)), mdir = dummydir)
 
         @test length(pop) == c.popsize
-
     end
 
     @testset "PruneLongRunning" begin
@@ -37,7 +37,7 @@
         x = ones(Float32, 5,5,3,4)
         y = [1 1 1 1; 0 0 0 0]
 
-        fs = PruneLongRunning(TrainSplitAccuracy(nexamples=2, batchsize=2), 0.1, 0.3)
+        fs = PruneLongRunning(TrainSplitAccuracy(nexamples=2, batchsize=2), 0.01, 0.03)
 
         xx, yy, fg = fitnessfun(fs, x, y)
 
@@ -45,7 +45,11 @@
         @test size(yy) == (2, 2)
 
         function sleepret(t)
-            sleep(t)
+            t0 = time()
+            # Busy wait to avoid yielding since this causes sporadic failures in CI
+            while time() - t0 < t
+                1+1
+            end
             return t
         end
 
@@ -54,15 +58,15 @@
         sleepreti = instrument(NaiveGAflux.Train(), ff, sleepret)
         instrument(NaiveGAflux.Validate(), ff, Dense(1,1))
 
-        @test sleepreti(0.01) == 0.01
-        @test sleepreti(0.02) == 0.02
+        @test sleepreti(0.001) == 0.001
+        @test sleepreti(0.002) == 0.002
         fitness(ff, x -> [1 0; 0 1]) # Avoid compiler delays?
         @test fitness(ff, x -> [1 0; 0 1]) == 0.501 #SizeFitness gives 0.001 extra
 
-        sleepreti(0.4)
+        sleepreti(0.04)
         @test fitness(ff, x -> [1 0; 0 1]) < 0.501  #SizeFitness gives 0.001 extra
 
-        sleepreti(0.7)
+        sleepreti(0.07)
         @test fitness(ff, x -> [1 0; 0 1]) == 0
     end
 

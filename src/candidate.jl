@@ -130,7 +130,7 @@ function (::NaiveNASflux.MutableLayer)(x::NoComp) end
 
 Caches fitness values produced by `c` until `reset!` is called.
 
-Useful with `HostCandidate` to pervent models from being pushed to/from GPU just to fetch fitness values.
+Useful with `HostCandidate` to prevent models from being pushed to/from GPU just to fetch fitness values.
 """
 mutable struct CacheCandidate <: AbstractCandidate
     fitnesscache
@@ -159,25 +159,32 @@ nparams(g::CompGraph) = mapreduce(prod ∘ size, +, params(g).order)
 
 """
     evolvemodel(m::AbstractMutation{CompGraph}, newfields::Function=deepcopy)
+    evolvemodel(m::AbstractMutation{CompGraph}, om::AbstractMutation{Flux.Optimise.Optimiser}, mapothers=deepcopy)
 
-Return a function which maps a `AbstractCandidate c1` to a new `AbstractCandidate c2` where `c2.graph = m(copy(c1.graph))`.
+Return a function which maps a `AbstractCandidate c1` to a new `AbstractCandidate c2` where any `CompGraph`s `g` in `c1` will be m(copy(g))` in `c2`. Same principle is applied to any `Flux.Optimise.Optimiser` if `om` is present.
+
 
 All other fields are mapped through the function `newfields`.
 
 Intended use is together with [`EvolveCandidates`](@ref).
 """
-function evolvemodel(m::AbstractMutation{CompGraph}, newfields::Function=deepcopy)
+function evolvemodel(m::AbstractMutation{CompGraph}, mapothers=deepcopy)
     function copymutate(g::CompGraph)
         ng = copy(g)
         m(ng)
         return ng
     end
-    mapcandidate(copymutate, newfields)
+    mapcandidate(copymutate, mapothers)
+end
+function evolvemodel(m::AbstractMutation{CompGraph}, om::AbstractMutation{Flux.Optimise.Optimiser}, mapothers=deepcopy)
+    mutate_opt(o::Flux.Optimise.Optimiser) = om(o)
+    mutate_opt(x) = mapothers(x)
+    return evolvemodel(m, mutate_opt)
 end
 
-function mapcandidate(newgraph::Function, newfields::Function=deepcopy)
-    mapfield(g::CompGraph) = newgraph(g)
-    mapfield(f) = newfields(f)
+function mapcandidate(mapgraph, mapothers=deepcopy)
+    mapfield(g::CompGraph) = mapgraph(g)
+    mapfield(f) = mapothers(f)
     return c -> newcand(c, mapfield)
 end
 
@@ -193,3 +200,19 @@ cleanopt(o::Flux.Optimise.Optimiser) = foreach(cleanopt, o.os)
 cleanopt(c::CandidateModel) = cleanopt(c.opt)
 cleanopt(c::HostCandidate) = cleanopt(c.c)
 cleanopt(c::CacheCandidate) = cleanopt(c.c)
+
+function randomlrscale(rfun = BoundedRandomWalk(-1.0, 1.0))
+    function(x...)
+        newopt = ShieldedOpt(Descent(10^rfun(x...)))
+        ofun(o) = Flux.Optimise.Optimiser(mergeopts(typeof(newopt), newopt, o))
+        ofun(o::Flux.Optimise.Optimiser) = Flux.Optimise.Optimiser(mergeopts(typeof(newopt), newopt, o.os...))
+        return ofun
+    end
+end
+
+function global_optimizer_mutation(pop, lrfun)
+    lrmap = lrfun(pop)
+    mutate_opt(o::Flux.Optimise.Optimiser) = lrmap(o)
+    mutate_opt(x) = x
+    return map(c -> newcand(c, mutate_opt), pop)
+end

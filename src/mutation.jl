@@ -19,12 +19,7 @@ struct MutationProbability{T} <:AbstractMutation{T}
     p::Probability
 end
 MutationProbability(m::AbstractMutation{T}, p::Number) where T = MutationProbability(m, Probability(p))
-
-function (m::MutationProbability{T})(e::T) where T
-    apply(m.p) do
-        m.m(e)
-    end
-end
+(m::MutationProbability{T})(e::T) where T = apply(() -> m.m(e), m.p, () -> e)
 
 """
     WeightedMutationProbability{T,F} <: AbstractMutation{T}
@@ -36,12 +31,7 @@ struct WeightedMutationProbability{T,F} <: AbstractMutation{T}
     m::AbstractMutation{T}
     pfun::F
 end
-
-function (m::WeightedMutationProbability{T})(e::T) where T
-    apply(m.pfun(e)) do
-        m.m(e)
-    end
-end
+(m::WeightedMutationProbability{T})(e::T) where T = apply(() -> m.m(e), m.pfun(e), () -> e)
 
 """
     HighValueMutationProbability(m::AbstractMutation{T}, pbase::Real, rng=rng_default; spread=0.5)
@@ -97,7 +87,7 @@ struct MutationList{T} <: AbstractMutation{T}
     m::AbstractVector{<:AbstractMutation{T}}
 end
 MutationList(m::AbstractMutation{T}...) where T = MutationList(collect(m))
-(m::MutationList)(e::T) where T = foreach(mm -> mm(e), m.m)
+(m::MutationList)(e::T) where T = foldl((ei, mi) -> mi(ei), m.m; init=e)
 
 """
     RecordMutation{T} <:AbstractMutation{T}
@@ -148,9 +138,8 @@ struct MutationFilter{T} <: AbstractMutation{T}
     m::AbstractMutation{T}
 end
 function (m::MutationFilter{T})(e::T) where T
-    if m.predicate(e)
-        m.m(e)
-    end
+    m.predicate(e) && return m.m(e)
+    return e
 end
 
 
@@ -172,6 +161,7 @@ function (m::VertexMutation)(g::CompGraph)
     for v in select(m.s, g)
         m.m(v)
     end
+    return g
 end
 
 """
@@ -195,7 +185,7 @@ NoutMutation(l1,l2) = NoutMutation(l1,l2, rng_default)
 function (m::NoutMutation)(v::AbstractVertex)
     Δfactor = minΔnoutfactor(v)
     # Missing Δfactor means vertex can't be mutated, for example if it touches an immutable vertex such as an input vertex
-    ismissing(Δfactor) && return
+    ismissing(Δfactor) && return v
 
     shift = m.minrel
     scale = m.maxrel - m.minrel
@@ -205,12 +195,13 @@ function (m::NoutMutation)(v::AbstractVertex)
     Δ = Int(sign(x) * max(Δfactor, abs(xq) * Δfactor))
 
     minsize = min(nout(v), minimum(nout.(findterminating(v, inputs))))
-    minsize + Δ <= Δfactor && return
+    minsize + Δ <= Δfactor && return v
 
     fallback = ΔNout{Relaxed}(v, Δ, LogΔSizeExec(Logging.Warn, "Could not change nout of $v by $(Δ) after relaxation! Vertex not changed!", ΔSizeFailNoOp()))
     strategy = ΔNout{Exact}(v, Δ, LogΔSizeExec(Logging.Warn, "Could not change nout of $v by $(Δ)! Relaxing constraints...", fallback))
 
     Δsize(strategy , all_in_Δsize_graph(v, Output()))
+    return v
 end
 
 """
@@ -234,7 +225,10 @@ AddVertexMutation(s, outselect::Function=identity) = AddVertexMutation(s, outsel
 AddVertexMutation(s, rng::AbstractRNG) = AddVertexMutation(s, identity, IdentityWeightInit(), rng)
 AddVertexMutation(s, wi::AbstractWeightInit) = AddVertexMutation(s, identity, wi, rng_default)
 
-(m::AddVertexMutation)(v::AbstractVertex) = insert!(v, vi -> m.s(name(vi), vi, m.rng, outsize=nout(vi), wi=m.weightinit), m.outselect)
+function (m::AddVertexMutation)(v::AbstractVertex)
+    insert!(v, vi -> m.s(name(vi), vi, m.rng, outsize=nout(vi), wi=m.weightinit), m.outselect)
+    return v
+end
 
 """
     RemoveVertexMutation <:AbstractMutation{AbstractVertex}
@@ -253,9 +247,12 @@ struct RemoveVertexMutation <:AbstractMutation{AbstractVertex}
     s::RemoveStrategy
 end
 RemoveVertexMutation() = RemoveVertexMutation(RemoveStrategy(CheckAligned(CheckNoSizeCycle(ApplyMutation(SelectOutputs(select = SelectDirection(OutSelect{NaiveNASlib.Exact}(LogSelectionFallback("Reverting...", NoutRevert()))),
- valuefun = default_neuronselect, align=IncreaseSmaller(DecreaseBigger(AlignSizeBoth(FailAlignSizeWarn()))))), FailAlignSizeWarn(msgfun = (vin,vout) -> "Can not remove vertex $(name(vin))! Size cycle detected!")))))
+valuefun = default_neuronselect, align=IncreaseSmaller(DecreaseBigger(AlignSizeBoth(FailAlignSizeWarn()))))), FailAlignSizeWarn(msgfun = (vin,vout) -> "Can not remove vertex $(name(vin))! Size cycle detected!")))))
 
-(m::RemoveVertexMutation)(v::AbstractVertex) = remove!(v, m.s)
+function (m::RemoveVertexMutation)(v::AbstractVertex)
+    remove!(v, m.s)
+    return v
+end
 
 """
     AddEdgeMutation <: AbstractMutation{AbstractVertex}
@@ -307,7 +304,7 @@ end
 function (m::AddEdgeMutation)(vi::AbstractVertex)
     # All vertices for which it is allowed to add vi as an input
     allverts = filter(allow_mutation, m.filtfun(vi))
-    isempty(allverts) && return
+    isempty(allverts) && return vi
 
     # Higher probability to select a vertex close to v is desired behaviour
     # One line less than a for loop => FP wins!!
@@ -317,6 +314,7 @@ function (m::AddEdgeMutation)(vi::AbstractVertex)
     vo = vo == nothing ? rand(m.rng, allverts) : vo
 
     try_add_edge(vi, vo, m.mergefun, m.valuefun)
+    return vi
 end
 
 function try_add_edge(vi, vo, mergefun, valuefun=default_neuronselect)
@@ -396,17 +394,18 @@ end
 RemoveEdgeMutation(;valuefun=default_neuronselect, rng=rng_default) = RemoveEdgeMutation(valuefun, rng)
 
 function (m::RemoveEdgeMutation)(vi::AbstractVertex)
-    length(outputs(vi)) < 2 && return
+    length(outputs(vi)) < 2 && return vi
 
     allverts = filter(vo -> length(inputs(vo)) > 1, outputs(vi))
 
-    isempty(allverts) && return
+    isempty(allverts) && return vi
 
     vo = rand(m.rng, allverts)
-    sum(inputs(vo) .== vi) > 1 && return # Not implemented in NaiveNASlib
+    sum(inputs(vo) .== vi) > 1 && return vi# Not implemented in NaiveNASlib
 
     @debug "Remove edge between $(name(vi)) and $(name(vo))"
     remove_edge!(vi, vo, strategy=remove_edge_strat(vo, m.valuefun))
+    return vi
 end
 
 remove_edge_strat(v::AbstractVertex, valuefun) = remove_edge_strat(trait(v), valuefun)
@@ -442,6 +441,7 @@ function (m::KernelSizeMutation{N})(v::AbstractVertex) where N
     Δsize = Int.(clamp.(m.Δsizespace(m.rng), 1 .- currsize, m.maxsize(v) .- currsize)) # ensure new size is > 0 and < maxsize
     pad = m.padspace(currsize .+ Δsize, dilation(l))
     mutate_weights(v, KernelSizeAligned(Δsize, pad))
+    return v
 end
 dilation(l) = l.dilation
 
@@ -462,7 +462,10 @@ end
 ActivationFunctionMutation(acts...;rng=rng_default) = ActivationFunctionMutation(collect(acts), rng=rng)
 ActivationFunctionMutation(acts::AbstractVector;rng=rng_default) = ActivationFunctionMutation(ParSpace(acts), rng)
 
-(m::ActivationFunctionMutation)(v::AbstractVertex) = m(layertype(v), v)
+function (m::ActivationFunctionMutation)(v::AbstractVertex)
+    m(layertype(v), v)
+    return v
+end
 function (m::ActivationFunctionMutation)(t, v) end
 (m::ActivationFunctionMutation)(::Union{FluxDense, FluxConvolutional}, v) = setlayer(v, (σ = m.actspace(m.rng),))
 (m::ActivationFunctionMutation)(::FluxParNorm, v) = setlayer(v, (λ = m.actspace(m.rng),))
@@ -558,8 +561,9 @@ end
 PostMutation(m::AbstractMutation{T}, actions...) where T = PostMutation(actions, m)
 PostMutation(action::Function, m::AbstractMutation{T}) where T = PostMutation(m, action)
 function (m::PostMutation{T})(e::T) where T
-    m.m(e)
-    foreach(a -> a(m, e), m.actions)
+    eout = m.m(e)
+    foreach(a -> a(m, eout), m.actions)
+    return eout
 end
 
 
@@ -645,47 +649,29 @@ end
 
 
 """
-    struct ShieldedOpt{O}
-    ShieldedOpt(o)
-
-Shields `o` from mutation by `OptimizerMutation`.
-"""
-struct ShieldedOpt{O}
-    opt::O
-end
-Flux.Optimise.apply!(o::ShieldedOpt, args...) = Flux.Optimise.apply!(o.opt, args...)
-
-"""
     struct OptimizerMutation{F} <: AbstractMutation{Flux.Optimise.Optimiser}
-    OptimizerMutation(of, p::Number, rng=rng_default)
-    OptimizerMutation(optfun, p::Probability) = OptimizerMutation(optfun, p)
-    OptimizerMutation(os::Union{Tuple, <:AbstractArray}, p::Probability)
+    OptimizerMutation(optfun)
+    OptimizerMutation(os::Union{Tuple, <:AbstractArray})
 
-Mutation of optimizers.
+Mutatates optimizers not wrapped in `ShieldedOpt` through `optfun`.
 
-If `m` is an `OptimizerMutation`, `m(o)` returns `optfun(o)` with probability `p` and `o` with probability `1-p`. Invoked recursively for `Flux.Optimise.Optimiser`s.
+Invoked recursively for `Flux.Optimise.Optimiser`s.
 """
 struct OptimizerMutation{F} <: AbstractMutation{Flux.Optimise.Optimiser}
     optfun::F
-    p::Probability
 end
-OptimizerMutation(of, p::Number, rng=rng_default) = OptimizerMutation(of, Probability(p, rng))
-OptimizerMutation(os::Union{Tuple, <:AbstractArray}, p::Probability, rng=rng_default) = OptimizerMutation(o -> rand(rng, os)(learningrate(o)), p)
+OptimizerMutation(os::Union{Tuple, <:AbstractArray}, rng=rng_default) = OptimizerMutation(o -> rand(rng, os)(learningrate(o)))
 
 """
     LearningRateMutation(rng=rng_default)
-    LearningRateMutation(p::Number, rng=rng_default)
-    LearningRateMutation(p::Probability, rng=rng_default)
 
-Return an `OptimizerMutation` which mutates the learning rate of optimizers with a probability of `p`.
+Return an `OptimizerMutation` which mutates the learning rate of optimizers.
 """
-LearningRateMutation(rng=rng_default) = LearningRateMutation(1.0, rng)
-LearningRateMutation(p::Number, rng=rng_default) = LearningRateMutation(Probability(p, rng), rng)
-LearningRateMutation(p::Probability, rng=rng_default) = OptimizerMutation(o -> nudgelr(o, rng), p)
+LearningRateMutation(rng=rng_default) = OptimizerMutation(o -> nudgelr(o, rng))
 
 (m::OptimizerMutation)(opt::Flux.Optimise.Optimiser) = Flux.Optimise.Optimiser(m.(opt.os))
 (m::OptimizerMutation)(o::ShieldedOpt) = o;
-(m::OptimizerMutation)(o) = apply(() -> m.optfun(o), m.p, () -> o)
+(m::OptimizerMutation)(o) = m.optfun(o)
 
 
 nudgelr(o, rng=rng_default) = sameopt(o, nudgelr(learningrate(o), rng))

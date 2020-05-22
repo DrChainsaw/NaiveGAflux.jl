@@ -182,6 +182,28 @@ batch(x, batchsize, seed) = ShuffleIterator(x, batchsize, MersenneTwister(seed))
 dataiter(x,y::AbstractArray{T, 1}, bs, s, wrap) where T = zip(wrap(batch(x, bs, s)), Flux.onehotbatch(batch(y, bs, s), sort(unique(y))))
 dataiter(x,y::AbstractArray{T, 2}, bs, s, wrap) where T = zip(wrap(batch(x, bs, s)), batch(y, bs, s))
 
+
+"""
+    struct GlobalOptimizerMutation{S<:AbstractEvolutionStrategy, F} <: AbstractEvolutionStrategy
+    GlobalOptimizerMutation(base::AbstractEvolutionStrategy)
+    GlobalOptimizerMutation(base::AbstractEvolutionStrategy, optfun)
+
+Maps the optimizer of each candidate in a population through `optfun` (default `randomlrscale`).
+
+Useful for applying the same mutation to every candidate, e.g. boosting the learning rate so that new models have a chance to catch up.
+"""
+struct GlobalOptimizerMutation{S<:AbstractEvolutionStrategy, F} <: AbstractEvolutionStrategy
+    base::S
+    optfun::F
+end
+GlobalOptimizerMutation(base::AbstractEvolutionStrategy) = GlobalOptimizerMutation(base, NaiveGAflux.randomlrscale())
+
+function evostrategy(s::GlobalOptimizerMutation, inshape)
+    base = evostrategy(s.base, inshape)
+    return AfterEvolution(base, pop -> NaiveGAflux.global_optimizer_mutation(pop, s.optfun))
+end
+
+
 """
     struct EliteAndSusSelection <: AbstractEvolutionStrategy
     EliteAndSusSelection(popsize, nelites)
@@ -248,6 +270,8 @@ function evostrategy(s::EliteAndTournamentSelection, inshape)
     return AfterEvolution(reset, rename_models ∘ clear_redundant_vertices)
 end
 
+evolvecandidate(inshape) = evolvemodel(graphmutation(inshape), optmutation())
+
 function clear_redundant_vertices(pop)
     foreach(cand -> check_apply(NaiveGAflux.graph(cand)), pop)
     return pop
@@ -267,29 +291,14 @@ function rename_model(i, cand)
     return NaiveGAflux.mapcandidate(g -> copy(g, rename_model))(cand)
 end
 
-function evolvecandidate(inshape)
-    mutate_opt(opt::Flux.Optimise.Optimiser) = newopt(opt)
-    mutate_opt(x) = deepcopy(x)
-    return evolvemodel(mutation(inshape), mutate_opt)
+function optmutation(p=0.05)
+    lrm = LearningRateMutation()
+    om = MutationProbability(OptimizerMutation([Descent, Momentum, Nesterov, ADAM, NADAM, ADAGrad]), p)
+    return MutationList(lrm, om)
 end
 
-newlr(o::Flux.Optimise.Optimiser) = newlr(o.os[1].eta)
-newlr(o) = newlr(o.eta)
-function newlr(lr::Number)
-    # GA has a strong tendency to get stuck in local minima by lowering the
-    # learning rate to the smallest allowed value
-    nudge =lr + (rand() - 0.5) * lr * 0.3
-    return clamp(nudge, 1e-6, 1.0)
-end
 
-newopt(lr::Number) = rand([Descent, Momentum, Nesterov, ADAM, NADAM, ADAGrad])(lr)
-function newopt(opt::Flux.Optimise.Optimiser)
-    firstopt = NaiveGAflux.apply(Probability(0.05)) ? newopt(newlr(opt.os[1])) : sameopt(opt.os[1], newlr(opt))
-    return Flux.Optimise.Optimiser(vcat(firstopt, opt.os[2:end]))
-end
-sameopt(::T, lr) where T = T(lr)
-
-function mutation(inshape)
+function graphmutation(inshape)
     acts = [identity, relu, elu, selu]
 
     increase_nout = NeuronSelectMutation(NoutMutation(0, 0.1)) # Max 10% change in output size

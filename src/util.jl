@@ -178,3 +178,35 @@ function(r::BoundedRandomWalk)(x...)
     r.state[] += y
     return y
  end
+
+
+"""
+    struct ShieldedOpt{O}
+    ShieldedOpt(o)
+
+Shields `o` from mutation by `OptimizerMutation`.
+"""
+struct ShieldedOpt{O}
+    opt::O
+
+    ShieldedOpt(o::O) where O = new{O}(o)
+    ShieldedOpt{O}(args...) where O = new{O}(O(args...))
+end
+Flux.Optimise.apply!(o::ShieldedOpt, args...) = Flux.Optimise.apply!(o.opt, args...)
+
+
+"""
+    mergeopts(t::Type{T}, os...) where T
+    mergeopts(os::T...)
+
+Merge all optimizers of type `T` in `os` into one optimizer of type `T`.
+
+Defaults to `T(prod(learningrate.(os)))`.
+"""
+function mergeopts(t::Type{T}, os...) where T
+    merged = mergeopts(filter(o -> isa(o, T), os)...)
+    return [filter(o -> !isa(o, T), os)..., merged]
+end
+mergeopts(t::Type{T}, os::T...) where T = mergeopts(os...)
+#mergeopts(os::T...) where T <: ShieldedOpt = ShieldedOpt(mergeopts(map(o -> o.opt, os)...))
+mergeopts(os::T...) where T = T(prod(learningrate.(os)))
