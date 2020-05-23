@@ -13,10 +13,6 @@ using Setfield
 # For temporary storage of program state for pause/resume type of operations
 using Serialization
 
-# For longer term storage of models
-using FileIO
-using JLD2
-
 const rng_default = Random.GLOBAL_RNG
 const modeldir = "models"
 
@@ -33,7 +29,7 @@ export evolve!, AbstractEvolution, NoOpEvolution, AfterEvolution, ResetAfterEvol
 export Probability, MutationShield, ApplyIf, RemoveIfSingleInput, RepeatPartitionIterator, SeedIterator, MapIterator, GpuIterator, BatchIterator, FlipIterator, ShiftIterator, ShuffleIterator, PersistentArray, ShieldedOpt
 
 # Persistence
-export persist, savemodels
+export persist
 
 # Vertex selection types
 export AbstractVertexSelection, AllVertices, FilterMutationAllowed

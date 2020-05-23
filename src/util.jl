@@ -131,7 +131,7 @@ function persist(a::PersistentArray)
         serialize(filename(a, i), v)
     end
 end
-FileIO.filename(a::PersistentArray, i::Int) = joinpath(a.savedir, "$i$(a.suffix)")
+filename(a::PersistentArray, i::Int) = joinpath(a.savedir, "$i$(a.suffix)")
 Base.rm(a::PersistentArray; force=true, recursive=true) = rm(a.savedir, force=force, recursive=recursive)
 Base.rm(a::PersistentArray, i::Int, force=false, recursive=true) = rm(filename(a,i), force=force, recursive=recursive)
 

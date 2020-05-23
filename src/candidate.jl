@@ -14,33 +14,6 @@ function reset!(c::AbstractCandidate) end
 Base.Broadcast.broadcastable(c::AbstractCandidate) = Ref(c)
 
 """
-    savemodels(pop::AbstractArray{<:AbstractCandidate}, dir)
-    savemodels(pop::PersistentArray{<:AbstractCandidate})
-
-Save models (i.e. `CompGraph`s) of the given array of `AbstractCandidate`s in JLD2 format in directory `dir` (will be created if not existing).
-
-If `pop` is a `PersistentArray` and no directory is given models will be saved in `pop.savedir/models`.
-
-More suitable for long term storage compared to persisting the candidates themselves.
-"""
-function savemodels(pop::AbstractArray{<:AbstractCandidate}, dir)
-    mkpath(dir)
-    for (i, cand) in enumerate(pop)
-        model = graph(cand)
-        FileIO.save(joinpath(dir, "$i.jld2"), "model$i", cand |> cpu)
-    end
-end
-savemodels(pop::PersistentArray{<:AbstractCandidate}) = savemodels(pop, joinpath(pop.savedir, "models"))
-"""
-    savemodels(dir::AbstractString)
-
-Return a function which accepts an argument `pop` and calls `savemodels(pop, dir)`.
-
-Useful for callbacks to `AutoFlux.fit`.
-"""
-savemodels(dir::AbstractString) = pop -> savemodels(pop,dir)
-
-"""
     CandidateModel <: Candidate
     CandidateModel(model::CompGraph, optimizer, lossfunction, fitness::AbstractFitness)
 
