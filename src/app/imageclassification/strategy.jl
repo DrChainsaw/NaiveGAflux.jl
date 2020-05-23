@@ -46,13 +46,16 @@ See [`evostrategy`](@ref)
 abstract type AbstractEvolutionStrategy end
 
 """
-    evostrategy(s::T, inshape) where T <: AbstractEvolutionStrategy
+    evostrategy(s::AbstractEvolutionStrategy, inshape)
 
 Returns an `AbstractEvolution`.
 
 Argument `inshape` is the size of the input feature maps (i.e. how many pixels images are) and may be used to determine which mutation operations are allowed for example to avoid that feature maps accidentally become 0 sized.
 """
-evostrategy(s::T, inshape) where T <: AbstractEvolutionStrategy = error("Not implemented for $(T)!")
+function evostrategy(s::AbstractEvolutionStrategy, inshape)
+    evostrat = evostrategy_internal(s, inshape)
+    return ResetAfterEvolution(evostrat)
+end
 
 """
     struct TrainSplitAccuracy{T} <: AbstractFitnessStrategy
@@ -181,17 +184,6 @@ end
 batch(x, batchsize, seed) = ShuffleIterator(x, batchsize, MersenneTwister(seed))
 dataiter(x,y::AbstractArray{T, 1}, bs, s, wrap) where T = zip(wrap(batch(x, bs, s)), Flux.onehotbatch(batch(y, bs, s), sort(unique(y))))
 dataiter(x,y::AbstractArray{T, 2}, bs, s, wrap) where T = zip(wrap(batch(x, bs, s)), batch(y, bs, s))
-
-
-"""
-    evostrategy(s::AbstractEvolutionStrategy, inshape)
-
-Return an `AbstractEvolution` according to `s`.
-"""
-function evostrategy(s::AbstractEvolutionStrategy, inshape)
-    evostrat = evostrategy_internal(s, inshape)
-    return ResetAfterEvolution(evostrat)
-end
 
 """
     struct GlobalOptimizerMutation{S<:AbstractEvolutionStrategy, F} <: AbstractEvolutionStrategy

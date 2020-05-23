@@ -260,6 +260,7 @@ The following basic mutation operations are currently supported:
 6. Mutation of kernel size for conv layers using `KernelSizeMutation`.
 7. Change of activation function using `ActivationFunctionMutation`.
 8. Change the type of optimizer using `OptimizerMutation`.
+9. Add an optimizer using `AddOptimizerMutation`.
 
 In addition to the basic mutation operations, there are numerous utilities for adding behaviour and convenience. Here are a few examples:
 
