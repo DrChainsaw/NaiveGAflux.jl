@@ -130,7 +130,7 @@ function (::NaiveNASflux.MutableLayer)(x::NoComp) end
 
 Caches fitness values produced by `c` until `reset!` is called.
 
-Useful with `HostCandidate` to pervent models from being pushed to/from GPU just to fetch fitness values.
+Useful with `HostCandidate` to prevent models from being pushed to/from GPU just to fetch fitness values.
 """
 mutable struct CacheCandidate <: AbstractCandidate
     fitnesscache
@@ -159,25 +159,28 @@ nparams(g::CompGraph) = mapreduce(prod ∘ size, +, params(g).order)
 
 """
     evolvemodel(m::AbstractMutation{CompGraph}, newfields::Function=deepcopy)
+    evolvemodel(m::AbstractMutation{CompGraph}, om::AbstractMutation{FluxOptimizer}, mapothers=deepcopy)
 
-Return a function which maps a `AbstractCandidate c1` to a new `AbstractCandidate c2` where `c2.graph = m(copy(c1.graph))`.
+Return a function which maps a `AbstractCandidate c1` to a new `AbstractCandidate c2` where any `CompGraph`s `g` in `c1` will be m(copy(g))` in `c2`. Same principle is applied to any optimisers if `om` is present.
+
 
 All other fields are mapped through the function `newfields`.
 
 Intended use is together with [`EvolveCandidates`](@ref).
 """
-function evolvemodel(m::AbstractMutation{CompGraph}, newfields::Function=deepcopy)
+function evolvemodel(m::AbstractMutation{CompGraph}, mapothers=deepcopy)
     function copymutate(g::CompGraph)
         ng = copy(g)
         m(ng)
         return ng
     end
-    mapcandidate(copymutate, newfields)
+    mapcandidate(copymutate, mapothers)
 end
+evolvemodel(m::AbstractMutation{CompGraph}, om::AbstractMutation{FluxOptimizer}, mapothers=deepcopy) = evolvemodel(m, optmap(om, mapothers))
 
-function mapcandidate(newgraph::Function, newfields::Function=deepcopy)
-    mapfield(g::CompGraph) = newgraph(g)
-    mapfield(f) = newfields(f)
+function mapcandidate(mapgraph, mapothers=deepcopy)
+    mapfield(g::CompGraph) = mapgraph(g)
+    mapfield(f) = mapothers(f)
     return c -> newcand(c, mapfield)
 end
 
@@ -189,7 +192,35 @@ function clearstate(s) end
 clearstate(s::AbstractDict) = foreach(k -> delete!(s, k), keys(s))
 
 cleanopt(o::T) where T = foreach(fn -> clearstate(getfield(o, fn)), fieldnames(T))
-cleanopt(o::Flux.Optimise.Optimiser) = foreach(cleanopt, o.os)
+cleanopt(o::Flux.Optimiser) = foreach(cleanopt, o.os)
 cleanopt(c::CandidateModel) = cleanopt(c.opt)
 cleanopt(c::HostCandidate) = cleanopt(c.c)
 cleanopt(c::CacheCandidate) = cleanopt(c.c)
+
+"""
+    randomlrscale(rfun = BoundedRandomWalk(-1.0, 1.0))
+
+Return a function which scales the learning rate based on the output of `rfun`.
+
+Intended use is to apply the same learning rate scaling for a whole population of models, e.g to have a global learning rate schedule.
+"""
+randomlrscale(rfun = BoundedRandomWalk(-1.0, 1.0)) = function(x...)
+    newopt = ShieldedOpt(Descent(10^rfun(x...)))
+    return AddOptimizerMutation(o -> newopt)
+end
+
+"""
+    global_optimizer_mutation(pop, optfun)
+
+Changes the optimizer of all candidates in `pop`.
+
+The optimizer of each candidate in pop will be changed to `om(optc)` where `optc` is the current optimizer and `om = optfun(pop)`.
+
+Intended to be used with `AfterEvolution` to create things like global learning rate schedules.
+
+See `https://github.com/DrChainsaw/NaiveGAExperiments/blob/master/lamarckism/experiments.ipynb` for some hints as to why this might be needed.
+"""
+function global_optimizer_mutation(pop, optfun)
+    om = optfun(pop)
+    map(c -> newcand(c, optmap(om)), pop)
+end

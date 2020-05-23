@@ -60,7 +60,7 @@
             end
 
             @testset "ScatterOpt" begin
-                NaiveGAflux.opt(c::PlotTestCand) = fitness(c) > 2 ? ADAM(nparams(c) - fitness(c)) : Flux.Optimise.Optimiser([Descent(nparams(c) - fitness(c))])
+                NaiveGAflux.opt(c::PlotTestCand) = fitness(c) > 2 ? ADAM(nparams(c) - fitness(c)) : Flux.Optimiser([ShieldedOpt(Descent(nparams(c) - fitness(c)))])
 
                 p = ScatterOpt((args...;kwargs...) -> true, testdir)
                 @test !isdir(p.basedir)

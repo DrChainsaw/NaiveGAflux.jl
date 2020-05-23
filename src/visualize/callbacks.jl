@@ -142,9 +142,9 @@ end
 
 opt(c::AbstractCandidate) = opt(c.c)
 opt(c::CandidateModel) = c.opt
-lr(o::Flux.Optimise.Optimiser) = mean(map(oo -> lr(oo), o.os))
-lr(o) = o.eta
-ot(o::Flux.Optimise.Optimiser) = ot(o.os[1])
+lr(o) = learningrate(o)
+ot(o::Flux.Optimiser) = ot(o.os[1])
+ot(o::ShieldedOpt{T}) where T = T
 ot(o) = typeof(o)
 
 

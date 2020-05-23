@@ -26,9 +26,6 @@ using Test
         return vec[rng.ind]
     end
 
-    NaiveNASflux.agg(m::NaiveNASflux.Ewma, x, y) = m.α .* cpu(x) .+ (1 - m.α) .* cpu(y)
-    NaiveNASflux.agg(m::NaiveNASflux.Ewma, ::Missing, y) = cpu(y)
-
     @info "Testing util"
     include("util.jl")
 

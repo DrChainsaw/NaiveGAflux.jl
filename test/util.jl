@@ -16,11 +16,18 @@
     @test cnt == 0
     apply(ff, p)
     @test cnt == 1
+    apply(ff, p, () -> cnt -= 2)
+    @test cnt == -1
+
 
     p = Probability(0.3, MockRng(0:0.1:0.9))
     cnt = 0
     foreach(_ -> apply(ff, p), 1:10)
     @test cnt == 3
+
+    p = Probability(0.5, MockRng([0.1, 0.9]))
+    @test apply(() -> :a, p, () -> :b) == :a
+    @test apply(() -> :a, p, () -> :b) == :b
 end
 
 @testset "MutationShield" begin
@@ -107,6 +114,8 @@ end
     pa[1] = 3
     @test pa == [3,2,3,4,5]
 
+    @test identity.(pa) == pa
+
     try
         persist(pa)
         @test PersistentArray(testdir, 7, x -> 2x) == [3,2,3,4,5,12,14]
@@ -119,4 +128,52 @@ end
     finally
         rm(testdir, force=true, recursive=true)
     end
+end
+
+@testset "Bounded Random Walk" begin
+    import NaiveGAflux: BoundedRandomWalk
+    using Random
+
+    driftup = BoundedRandomWalk(-1.0, 1.0, i -> 0.2i^2)
+    @test cumsum([driftup(i) for i in 1:5]) == [0.2, 0.8, 1.0, 1.0, 1.0]
+
+    driftdown = BoundedRandomWalk(-1.0, 1.0, i -> -0.2i^2)
+    @test cumsum([driftdown(i) for i in 1:5]) == -[0.2, 0.8, 1.0, 1.0, 1.0]
+
+    rng = MersenneTwister(0);
+    brw = BoundedRandomWalk(-2.34, 3.45, () -> randn(rng))
+    @test collect(extrema(cumsum([brw() for i in 1:10000]))) ≈ [-2.34, 3.45] atol = 1e-10
+end
+
+@testset "Mergeopts" begin
+    import NaiveGAflux: mergeopts, learningrate
+
+    dm = mergeopts(Descent(0.1), Descent(2), Descent(0.4))
+    @test learningrate(dm) ≈ 0.08
+
+    wd = mergeopts(WeightDecay(0.1), WeightDecay(2), WeightDecay(0.4))
+    @test wd.wd ≈ 0.08
+
+    dd = mergeopts(Momentum, Descent(0.1), Descent(2), Descent(0.4))
+    @test typeof.(dd) == [Descent, Descent, Descent]
+
+    mm = mergeopts(Momentum, Descent(0.1), Momentum(0.2), Momentum(0.3), Descent(0.2))
+    @test typeof.(mm) == [Descent, Descent, Momentum]
+end
+
+@testset "Optimizer trait" begin
+    import NaiveGAflux: opttype, optmap, FluxOptimizer
+
+    @test opttype("Not an optimizer") == nothing
+    @test opttype(Descent()) == FluxOptimizer()
+    @test opttype(Flux.Optimiser(Descent(), ADAM())) == FluxOptimizer()
+
+    isopt = "Is an optimizer!"
+    noopt = "Is not an optimizer!"
+    om = optmap(o -> isopt, o -> noopt)
+
+    @test om(1234) == noopt
+    @test om(Momentum()) == isopt
+    @test om(NaiveGAflux.ShieldedOpt(Momentum())) == isopt
+    @test om(Flux.Optimiser(Momentum(), Nesterov())) == isopt
 end

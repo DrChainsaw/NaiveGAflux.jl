@@ -2,7 +2,7 @@
     Probability
 Represents a probability that something (typically mutation) will happen.
 
-Possible to specify RNG implementation. If not specified, `GLOBAL_RNG` will be used
+Possible to specify RNG implementation. If not specified, `rng_default` will be used.
 """
 struct Probability
     p::Real
@@ -14,7 +14,7 @@ struct Probability
 end
 Probability(p::Real) = Probability(p, rng_default)
 Probability(p::Integer) = Probability(p, rng_default)
-Probability(p::Integer, rng) = Probability(p / 100.0, rng)
+Probability(p::Integer, rng) = p == 1 ? Probability(1.0, rng) : Probability(p / 100.0, rng)
 
 """
     apply(p::Probability)
@@ -26,13 +26,13 @@ apply(p::Probability) = rand(p.rng) < p.p
 apply(p::Real) = apply(Probability(p))
 
 """
-    apply(f, p::Probability)
-    apply(f, p::Real)
+    apply(f, p::Probability, or = () -> nothing)
+    apply(f, p::Real, or = () -> nothing)
 
-Call `f` with probability `p.p` (subject to `p.rng` behaviour).
+Call `f` with probability `p.p` (subject to `p.rng` behaviour). If `f` is not called then call `or`.
 """
-apply(f, p::Probability) =  apply(p) && f()
-apply(f, p::Real) = apply(p) && f()
+apply(f, p::Probability, or = () -> nothing) =  apply(p) ? f() : or()
+apply(f, p::Real, or = () -> nothing) = apply(p) ? f() : or()
 
 """
     MutationShield <: DecoratingTrait
@@ -141,3 +141,100 @@ Base.getindex(a::PersistentArray, I::Vararg{Int, N}) where N = getindex(a.data, 
 Base.setindex!(a::PersistentArray, v, i::Int) = setindex!(a.data, v, i)
 Base.setindex!(a::PersistentArray, v, I::Vararg{Int, N}) where N = setindex!(a.data, v, I...)
 Base.similar(a::PersistentArray, t::Type{S}, dims::Dims) where S = PersistentArray(a.savedir, a.suffix, similar(a.data,t, dims))
+
+
+"""
+    BoundedRandomWalk{T <: Real, R <: Function}
+    BoundedRandomWalk(lb, ub, rfun =  (x...) -> 0.2randn(rng_default))
+
+Generates steps for a random walk with bounds `[lb, ub]`.
+
+Main use case is with learning rate mutation to prevent it from accidentally drifting to some catastropically high value.
+
+# Examples
+```julia-repl
+julia> import NaiveGAflux: BoundedRandomWalk
+
+julia> using Random
+
+julia> rng = MersenneTwister(0);
+
+julia> brw = BoundedRandomWalk(-2.34, 3.45, () -> 10randn(rng));
+
+julia> extrema(cumsum([brw() for i in 1:10000]))
+(-2.3400000000000007, 3.4500000000000153)
+```
+"""
+struct BoundedRandomWalk{T <: Real, R <: Function}
+    lb::T
+    ub::T
+    state::Ref{T}
+    rfun::R
+end
+BoundedRandomWalk(lb::T,ub::T, rfun = (x...) -> 0.2randn(rng_default)) where T = BoundedRandomWalk(lb,ub, Ref(zero(ub)), rfun)
+
+function(r::BoundedRandomWalk)(x...)
+    y =  ((r.ub - r.lb) * clamp(r.rfun(x...), -1, 1) + (r.ub + r.lb)) / 2 - r.state[]
+    r.state[] += y
+    return y
+ end
+
+
+"""
+    struct ShieldedOpt{O}
+    ShieldedOpt(o)
+
+Shields `o` from mutation by `OptimizerMutation`.
+"""
+struct ShieldedOpt{O}
+    opt::O
+
+    ShieldedOpt(o::O) where O = new{O}(o)
+    ShieldedOpt{O}(args...) where O = new{O}(O(args...))
+end
+Flux.Optimise.apply!(o::ShieldedOpt, args...) = Flux.Optimise.apply!(o.opt, args...)
+
+
+"""
+    mergeopts(t::Type{T}, os...) where T
+    mergeopts(os::T...)
+
+Merge all optimizers of type `T` in `os` into one optimizer of type `T`.
+
+Defaults to `T(prod(learningrate.(os)))`.
+"""
+function mergeopts(t::Type{T}, os...) where T
+    merged = mergeopts(filter(o -> isa(o, T), os)...)
+    return vcat(filter(o -> !isa(o, T), os)..., merged)
+end
+mergeopts() = []
+mergeopts(t::Type{T}, os::T...) where T = [mergeopts(os...)]
+mergeopts(os::T...) where T = T(prod(learningrate.(os)))
+mergeopts(os::WeightDecay...) = WeightDecay(mapreduce(o -> o.wd, *, os))
+
+"""
+    struct FluxOptimizer
+
+Trait to indicate something is a Flux optimizer.
+"""
+struct FluxOptimizer end
+
+"""
+    opttype(o::T)
+
+Return `FluxOptimizer()` if `T` is a Flux optimizer, nothing otherwise.
+"""
+opttype(o::T) where T = hasmethod(Flux.Optimise.apply!, (T, Any, Any)) ? FluxOptimizer() : nothing
+
+"""
+    optmap(fopt, x, felse=identity)
+    optmap(fopt, felse=identity)
+
+Return `fopt(x)` if `x` is an optimizer, else return `felse(x)`.
+
+Call without x to return `x -> optmap(fopt, x, felse)`
+"""
+optmap(fopt, felse=identity) = x -> optmap(fopt, x, felse)
+optmap(fopt, x, felse) = optmap(opttype(x), fopt, x, felse)
+optmap(n, fopt, x, felse) = felse(x)
+optmap(::FluxOptimizer, fopt, o, felse) = fopt(o)

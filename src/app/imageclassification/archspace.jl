@@ -10,9 +10,9 @@ function initial_archspace(inshape, outsize)
 
     # Only use odd kernel sizes due to CuArrays issue# 356
     # Bias selection towards smaller number of large kernels in the beginning...
-    conv1 = convspace(layerconf, 4:64, 3:2:9, acts)
+    conv1 = convspace(layerconf, 2 .^(3:8), 1:2:7, acts)
     # Then larger number of small kernels
-    conv2 = convspace(layerconf, 32:512, 1:2:5, acts)
+    conv2 = convspace(layerconf, 2 .^(5:9), 1:2:5, acts)
 
     # Convblocks are repeated, forked or put in residual connections...
     # ...and the procedure is repeated for the output space.
@@ -41,7 +41,7 @@ function initial_archspace(inshape, outsize)
     blockcout = ListArchSpace(convout, GlobalPoolSpace())
 
     # Option 2: 1-3 Dense layers after the global pool
-    dense = VertexSpace(layerconf, NamedLayerSpace("dense", DenseSpace(16:512, acts)))
+    dense = VertexSpace(layerconf, NamedLayerSpace("dense", DenseSpace(2 .^(4:9), acts)))
     drep = RepeatArchSpace(dense, 0:2)
     dout=VertexSpace(outconf, NamedLayerSpace("dense", DenseSpace(outsize, identity)))
     blockdout = ListArchSpace(GlobalPoolSpace(), drep, dout)

@@ -2,7 +2,7 @@
 
     @testset "ImageClassifier smoketest" begin
         using NaiveGAflux.AutoFlux
-        import NaiveGAflux.AutoFlux.ImageClassification: TrainSplitAccuracy, TrainStrategy, TrainAccuracyVsSize, EliteAndTournamentSelection, EliteAndSusSelection
+        import NaiveGAflux.AutoFlux.ImageClassification: TrainSplitAccuracy, TrainStrategy, TrainAccuracyVsSize, EliteAndTournamentSelection, EliteAndSusSelection, GlobalOptimizerMutation
         using Random
 
         # Use Float64 instead of Float32 due to https://github.com/FluxML/Flux.jl/issues/979
@@ -14,21 +14,35 @@
         x = randn(rng, Float64, 32,32,2,4)
         y = onehot(rand(rng, 0:5,4))
 
-        c = ImageClassifier(popsize = 5, seed=12345)
+        c = ImageClassifier(popsize = 5, seed=1)
         f = TrainSplitAccuracy(nexamples=1, batchsize=1)
         t = TrainStrategy(nepochs=1, batchsize=1, nbatches_per_gen=1)
 
         dummydir = joinpath(NaiveGAflux.modeldir, "ImageClassifier_smoketest")
 
-        pop = @test_logs (:info, "Begin generation 1") (:info, "Begin generation 2") (:info, "Begin generation 3") (:info, r"Mutate model") match_mode=:any fit(c, x, y, fitnesstrategy=f, trainstrategy=t, evolutionstrategy = EliteAndSusSelection(popsize=c.popsize, nelites=1), mdir = dummydir)
+        # Logs are mainly to prevent CI timeouts
+        @info "\tSmoke test with TrainSplitAccuracy and EliteAndSusSelection"
+        pop = @test_logs (:info, "Begin generation 1") (:info, "Begin generation 2") (:info, "Begin generation 3") (:info, r"Mutate model") match_mode=:any fit(c, x, y, fitnesstrategy=f, trainstrategy=t, evolutionstrategy = GlobalOptimizerMutation(EliteAndSusSelection(popsize=c.popsize, nelites=1)), mdir = dummydir)
 
         @test length(pop) == c.popsize
+
+        globallearningrate(c::AbstractCandidate) = globallearningrate(c.c)
+        globallearningrate(c::CandidateModel) = globallearningrate(c.opt)
+        globallearningrate(o::Flux.Optimiser) = prod(globallearningrate.(o.os))
+        globallearningrate(o) = 1
+        globallearningrate(o::ShieldedOpt{Descent}) = o.opt.eta
+
+        @test unique(globallearningrate.(pop)) != [1]
+        @test length(unique(globallearningrate.(pop))) == 1
 
         # Now try TrainAccuracyVsSize and EliteAndTournamentSelection
-        pop = @test_logs (:info, "Begin generation 1") (:info, "Begin generation 2") (:info, "Begin generation 3") (:info, r"Mutate model") match_mode=:any fit(c, x, y, fitnesstrategy=TrainAccuracyVsSize(), trainstrategy=t, evolutionstrategy = EliteAndTournamentSelection(popsize=c.popsize, nelites=1, k=2), mdir = dummydir)
+        @info "\tSmoke test with TrainAccuracyVsSize and EliteAndTournamentSelection"
+        pop = @test_logs (:info, "Begin generation 1") (:info, "Begin generation 2") (:info, "Begin generation 3") (:info, r"Mutate model") match_mode=:any fit(c, x, y, fitnesstrategy=TrainAccuracyVsSize(), trainstrategy=t, evolutionstrategy = GlobalOptimizerMutation(EliteAndTournamentSelection(popsize=c.popsize, nelites=1, k=2)), mdir = dummydir)
 
         @test length(pop) == c.popsize
 
+        @test unique(globallearningrate.(pop)) != [1]
+        @test length(unique(globallearningrate.(pop))) == 1
     end
 
     @testset "PruneLongRunning" begin
@@ -45,14 +59,24 @@
         @test size(yy) == (2, 2)
 
         function sleepret(t)
-            sleep(t)
+            t0 = time()
+            # Busy wait to avoid yielding since this causes sporadic failures in CI
+            while time() - t0 < t
+                1+1
+            end
             return t
         end
 
         ff = fg()
-
         sleepreti = instrument(NaiveGAflux.Train(), ff, sleepret)
         instrument(NaiveGAflux.Validate(), ff, Dense(1,1))
+
+        # a little warmup to hopefully remove any compiler delays
+        @test sleepreti(0.1) == 0.1
+        @test sleepreti(0.7) == 0.7
+        @test fitness(ff, x -> [1 0; 0 1]) == 0
+
+        reset!(ff)
 
         @test sleepreti(0.01) == 0.01
         @test sleepreti(0.02) == 0.02

@@ -3,17 +3,17 @@
 @testset "Mutation" begin
 
     struct NoOpMutation{T} <:AbstractMutation{T} end
-    function (m::NoOpMutation)(t) end
+    (m::NoOpMutation)(t) = t
     ProbeMutation(T) = RecordMutation(NoOpMutation{T}())
 
     @testset "MutationProbability" begin
         probe = ProbeMutation(Int)
         m = MutationProbability(probe, Probability(0.3, MockRng([0.2,0.5,0.1])))
 
-        m(1)
-        m(2)
-        m(3)
-        m(4)
+        @test m(1) == 1
+        @test m(2) == 2
+        @test m(3) == 3
+        @test m(4) == 4
         @test probe.mutated == [1,3,4]
     end
 
@@ -22,10 +22,10 @@
         rng = MockRng([0.5])
         m = WeightedMutationProbability(probe, p -> Probability(p, rng))
 
-        m(0.1)
-        m(0.6)
-        m(0.4)
-        m(0.9)
+        @test m(0.1) == 0.1
+        @test m(0.6) == 0.6
+        @test m(0.4) == 0.4
+        @test m(0.9) == 0.9
         @test probe.mutated == [0.6,0.9]
     end
 
@@ -84,7 +84,7 @@
     @testset "MutationList" begin
         probes = ProbeMutation.(repeat([Int], 3))
         m = MutationList(probes...)
-        m(1)
+        @test m(1) == 1
         @test getfield.(probes, :mutated) == [[1],[1],[1]]
     end
 
@@ -92,7 +92,7 @@
         probe = ProbeMutation(Int)
         m = LogMutation(i -> "Mutate $i", probe)
 
-        @test_logs (:info, "Mutate 17") m(17)
+        @test @test_logs (:info, "Mutate 17") m(17) == 17
         @test probe.mutated == [17]
     end
 
@@ -100,10 +100,10 @@
         probe = ProbeMutation(Int)
         m = MutationFilter(i -> i > 3, probe)
 
-        m(1)
+        @test m(1) == 1
         @test probe.mutated == []
 
-        m(4)
+        @test m(4) == 4
         @test probe.mutated == [4]
     end
 
@@ -118,7 +118,7 @@
         end
 
         m = PostMutation(action, probe)
-        m(11)
+        @test m(11) == 11
 
         @test probe.mutated == [11]
         @test expect_m == m
@@ -135,7 +135,7 @@
 
         probe = ProbeMutation(AbstractVertex)
         m = VertexMutation(probe)
-        m(graph)
+        @test m(graph) == graph
         # Vertex 1 (inpt) is immutable, all others are selected
         @test probe.mutated == vertices(graph)[2:end]
     end
@@ -144,18 +144,18 @@
         inpt = inputvertex("in", 3, FluxDense())
 
         # Can't mutate, don't do anything
-        NoutMutation(0.4)(inpt)
+        @test NoutMutation(0.4)(inpt) == inpt
         @test nout(inpt) == 3
 
         # Can't mutate due to too small size
         v = dense(inpt, 1)
-        NoutMutation(-0.8, -1.0)(v)
+        @test NoutMutation(-0.8, -1.0)(v) == v
         @test nout(v) == 1
 
         rng = MockRng([0.5])
         v = dense(inpt, 11)
 
-        NoutMutation(0.4, rng)(v)
+        @test NoutMutation(0.4, rng)(v) == v
         @test nout(v) == 13
 
         NoutMutation(-0.4, rng)(v)
@@ -188,7 +188,7 @@
 
         space = ArchSpace(DenseSpace(4, relu))
 
-        AddVertexMutation(space)(inpt)
+        @test AddVertexMutation(space)(inpt) == inpt
 
         @test inputs(v1) != [inpt]
         @test nin(v1) == [3]
@@ -197,7 +197,7 @@
         v2 = dense(v1, 2)
         v3 = dense(v1, 1)
 
-        AddVertexMutation(space, outs -> [outs[2]])(v1)
+        @test AddVertexMutation(space, outs -> [outs[2]])(v1) == v1
 
         @test inputs(v2) == [v1]
         @test inputs(v3) != [v1]
@@ -208,7 +208,7 @@
         v1 = dense(inpt, 5)
         v2 = dense(v1, 3)
 
-        RemoveVertexMutation()(v1)
+        @test RemoveVertexMutation()(v1) == v1
 
         @test inputs(v2) == [inpt]
     end
@@ -219,39 +219,39 @@
         @test size(v(indata)) == size(indata)
 
         rng = SeqRng()
-        KernelSizeMutation2D(4,rng=rng)(v)
+        @test KernelSizeMutation2D(4,rng=rng)(v) == v
 
         @test size(v(indata)) == size(indata)
         @test size(NaiveNASflux.weights(layer(v)))[1:2] == (1, 2)
 
         # Test with maxvalue
-        KernelSizeMutation(Singleton2DParSpace(4), maxsize=v->(4, 10))(v)
+        @test KernelSizeMutation(Singleton2DParSpace(4), maxsize=v->(4, 10))(v) == v
         @test size(v(indata)) == size(indata)
         @test size(NaiveNASflux.weights(layer(v)))[1:2] == (4, 6)
     end
 
     @testset "ActivationFunctionMutation Dense" begin
         v = mutable(Dense(2,3), inputvertex("in", 2))
-        ActivationFunctionMutation(elu)(v)
+        @test ActivationFunctionMutation(elu)(v) == v
         @test layer(v).σ == elu
     end
 
     @testset "ActivationFunctionMutation RNN" begin
         v = mutable(RNN(2,3), inputvertex("in", 2))
-        ActivationFunctionMutation(elu)(v)
+        @test ActivationFunctionMutation(elu)(v) == v
         @test layer(v).cell.σ == elu
     end
 
     @testset "ActivationFunctionMutation $convtype" for convtype in (Conv, ConvTranspose, DepthwiseConv)
         v = mutable(convtype((3,5), 2=>2), inputvertex("in", 2))
-        ActivationFunctionMutation(elu)(v)
+        @test ActivationFunctionMutation(elu)(v) == v
         @test layer(v).σ == elu
     end
 
     Flux.GroupNorm(n) = GroupNorm(n,n)
     @testset "ActivationFunctionMutation $normtype" for normtype in (BatchNorm, InstanceNorm, GroupNorm)
         v = mutable(normtype(2), inputvertex("in", 2))
-        ActivationFunctionMutation(elu)(v)
+        @test ActivationFunctionMutation(elu)(v) == v
         @test layer(v).λ == elu
     end
 
@@ -276,7 +276,7 @@
             v3 = dense(v2, 6)
 
             m = NeuronSelectMutation(oddfirst, noutselect, NoutMutation(-0.5, MockRng([0])))
-            m(v2)
+            @test m(v2) == v2
             select(m)
 
             @test out_inds(op(v2)) == [1,3,5]
@@ -294,7 +294,7 @@
             v3 = dense(inpt, 3,5,7)
             g = CompGraph(inpt, v3)
 
-            m(g)
+            @test m(g) == g
             NeuronSelect()(m, g)
             vs = vertices(g)[2:end]
 
@@ -506,7 +506,7 @@
             m = AddEdgeMutation(1.0, mergefun = default_mergefun(pconc), valuefun = v -> 1:nout_org(v))
 
             # edge to v2 not possible as v1 is input to it already
-            m(v1)
+            @test m(v1) == v1
 
             vm1 = outputs(v1)[end]
             @test outputs(v1) == [v2, vm1]
@@ -515,13 +515,13 @@
             @test size(g(indata)) == (2,2,2,2)
 
             # Will select vm1 again which already has v1 as input
-            m(v1)
+            @test m(v1) == v1
             @test outputs(v1) == [v2, vm1]
             @test outputs(vm1) == [v3]
             @test inputs(vm1) == [v2, v1]
             @test size(g(indata)) == (2,2,2,2)
 
-            m(v4)
+            @test m(v4) == v4
             vm4 = outputs(v4)[end]
             @test outputs(v4) == [v5, vm4]
             @test outputs(vm4) == [v6]
@@ -536,14 +536,14 @@
             v1 = cl("v1", v0, 4)
 
             # No suitable vertx as v0 is already output to v1
-            m(v0)
+            @test m(v0) == v0
             @test all_in_graph(v0) == [v0, v1]
             @test outputs(v0) == [v1]
 
             v2 = cl("v2", v1, 3)
 
             # No suitable vertx as v1 is already output to v2
-            m(v1)
+            @test m(v1) == v1
             @test all_in_graph(v0) == [v0, v1, v2]
             @test outputs(v1) == [v2]
 
@@ -567,7 +567,7 @@
             v2 = dl("v2", v1, 5)
 
             # No action
-            m(v1)
+            @test m(v1) == v1
             @test outputs(v1) == [v2]
 
             v3 = dl("v3", v0, 6)
@@ -576,7 +576,7 @@
             @test outputs(v1) == [v2, v4]
             @test inputs(v4) == [v1, v3]
             # v4 fulfils the criteria for removal
-            m(v1)
+            @test m(v1) == v1
             @test outputs(v1) == [v2]
             @test inputs(v4) == [v3]
 
@@ -598,7 +598,7 @@
             @test outputs(v1) == [v2, v4]
             @test inputs(v4) == [v1, v3]
             # v4 fulfils the criteria for removal
-            m(v1)
+            @test m(v1) == v1
             @test outputs(v1) == [v2]
             @test inputs(v4) == [v3]
 
@@ -606,6 +606,38 @@
             indata = ones(Float32, nout(v0), 3)
 
             @test size(g(indata)) == (nout(v4), 3)
+        end
+    end
+
+
+    @testset "OptimizerMutation" begin
+        import NaiveGAflux: sameopt, learningrate
+        import NaiveGAflux.Flux.Optimise: Optimiser
+
+        @testset "Mutate learning rate" begin
+            m = OptimizerMutation(o -> sameopt(o, 10 * learningrate(o)))
+
+            @test learningrate(m(Descent(0.1))) == 1.0
+            @test learningrate(m(ShieldedOpt(Momentum(0.1)))) == 0.1
+            @test learningrate(m(Optimiser(Nesterov(0.1), ShieldedOpt(ADAM(0.1))))) == 0.1
+
+            @test learningrate(LearningRateMutation(MockRng([0.0]))(Descent(0.1))) == 0.085
+        end
+
+        @testset "Mutate optimizer type" begin
+            m = OptimizerMutation((Momentum, ))
+
+            @test typeof(m(Descent())) == Momentum
+            @test typeof(m(ShieldedOpt(Descent()))) == ShieldedOpt{Descent}
+            @test typeof.(m(Optimiser(Nesterov(), ShieldedOpt(ADAM()))).os) == [Momentum, ShieldedOpt{ADAM}]
+        end
+
+        @testset "Add optimizer" begin
+            m = AddOptimizerMutation(o -> Descent(0.1))
+
+            @test typeof.(m(Descent(0.2)).os) == [Descent]
+            @test typeof.(m(Momentum(0.2)).os) == [Momentum, Descent]
+            @test typeof.(m(Flux.Optimiser(Nesterov(), Descent(), ShieldedOpt(Descent()))).os) == [Nesterov, ShieldedOpt{Descent}, Descent]
         end
     end
 

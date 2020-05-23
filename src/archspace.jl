@@ -490,11 +490,23 @@ end
 ResidualArchSpace(s::AbstractArchSpace) = ResidualArchSpace(s, VertexConf(traitdecoration = validated() ∘ default_logging(), outwrap = ActivationContribution))
 ResidualArchSpace(l::AbstractLayerSpace) = ResidualArchSpace(VertexSpace(l))
 
-(s::ResidualArchSpace)(in::AbstractVertex, rng=rng_default; outsize=missing, wi=DefaultWeightInit()) = s.conf >> in + s.s(in, rng,outsize=nout(in), wi=resinitW(wi))
-(s::ResidualArchSpace)(name::String, in::AbstractVertex, rng=rng_default; outsize=missing, wi=DefaultWeightInit()) = VertexConf(s.conf.mutation, s.conf.traitdecoration ∘ named(name * ".add"), s.conf.outwrap) >> in + s.s(join([name, ".res"]), in, rng,outsize=nout(in), wi=resinitW(wi))
+function (s::ResidualArchSpace)(in::AbstractVertex, rng=rng_default; outsize=missing, wi=DefaultWeightInit())
+    add = s.conf >> in + s.s(in, rng,outsize=nout(in), wi=resinitW(wi))
+    return resscale(wi, s.conf, add)
+end
+function (s::ResidualArchSpace)(name::String, in::AbstractVertex, rng=rng_default; outsize=missing, wi=DefaultWeightInit())
+    conf = s.conf
+    nconf = @set conf.traitdecoration = conf.traitdecoration ∘ named(name * ".add")
+    add = nconf >> in + s.s(join([name, ".res"]), in, rng,outsize=nout(in), wi=resinitW(wi))
+
+    sconf = @set conf.traitdecoration = conf.traitdecoration ∘ named(name * ".add.scale")
+    return resscale(wi, sconf, add)
+ end
 
 resinitW(wi::AbstractWeightInit) = wi
-resinitW(::Union{IdentityWeightInit, PartialIdentityWeightInit}) = ZeroWeightInit()
+
+resscale(wi, conf, v) = v
+resscale(::Union{IdentityWeightInit, PartialIdentityWeightInit}, conf, v) = invariantvertex(conf.outwrap(x -> convert(eltype(x), 0.5) .* x), v; traitdecoration= conf.traitdecoration, mutation=conf.mutation)
 
 """
     FunctionSpace <: AbstractArchSpace

@@ -319,7 +319,6 @@
         @test nin(v) == [4, 4]
         @test nout(v) == 4
         @test layertype(inputs(v)[2]) == FluxDense()
-
     end
 
     @testset "FunctionSpace" begin

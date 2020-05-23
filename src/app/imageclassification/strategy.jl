@@ -46,13 +46,16 @@ See [`evostrategy`](@ref)
 abstract type AbstractEvolutionStrategy end
 
 """
-    evostrategy(s::T, inshape) where T <: AbstractEvolutionStrategy
+    evostrategy(s::AbstractEvolutionStrategy, inshape)
 
 Returns an `AbstractEvolution`.
 
 Argument `inshape` is the size of the input feature maps (i.e. how many pixels images are) and may be used to determine which mutation operations are allowed for example to avoid that feature maps accidentally become 0 sized.
 """
-evostrategy(s::T, inshape) where T <: AbstractEvolutionStrategy = error("Not implemented for $(T)!")
+function evostrategy(s::AbstractEvolutionStrategy, inshape)
+    evostrat = evostrategy_internal(s, inshape)
+    return ResetAfterEvolution(evostrat)
+end
 
 """
     struct TrainSplitAccuracy{T} <: AbstractFitnessStrategy
@@ -183,6 +186,29 @@ dataiter(x,y::AbstractArray{T, 1}, bs, s, wrap) where T = zip(wrap(batch(x, bs, 
 dataiter(x,y::AbstractArray{T, 2}, bs, s, wrap) where T = zip(wrap(batch(x, bs, s)), batch(y, bs, s))
 
 """
+    struct GlobalOptimizerMutation{S<:AbstractEvolutionStrategy, F} <: AbstractEvolutionStrategy
+    GlobalOptimizerMutation(base::AbstractEvolutionStrategy)
+    GlobalOptimizerMutation(base::AbstractEvolutionStrategy, optfun)
+
+Maps the optimizer of each candidate in a population through `optfun` (default `randomlrscale()`).
+
+Basically a thin wrapper for [`NaiveGAflux.global_optimizer_mutation`](@ref).
+
+Useful for applying the same mutation to every candidate, e.g. global learning rate schedules which all models follow.
+"""
+struct GlobalOptimizerMutation{S<:AbstractEvolutionStrategy, F} <: AbstractEvolutionStrategy
+    base::S
+    optfun::F
+end
+GlobalOptimizerMutation(base::AbstractEvolutionStrategy) = GlobalOptimizerMutation(base, NaiveGAflux.randomlrscale())
+
+function evostrategy_internal(s::GlobalOptimizerMutation, inshape)
+    base = evostrategy_internal(s.base, inshape)
+    return AfterEvolution(base, pop -> NaiveGAflux.global_optimizer_mutation(pop, s.optfun))
+end
+
+
+"""
     struct EliteAndSusSelection <: AbstractEvolutionStrategy
     EliteAndSusSelection(popsize, nelites)
     EliteAndSusSelection(;popsize=50, nelites=2)
@@ -203,15 +229,14 @@ struct EliteAndSusSelection <: AbstractEvolutionStrategy
 end
 EliteAndSusSelection(;popsize=50, nelites=2) = EliteAndSusSelection(popsize, nelites)
 
-function evostrategy(s::EliteAndSusSelection, inshape)
+function evostrategy_internal(s::EliteAndSusSelection, inshape)
     elite = EliteSelection(s.nelites)
 
     mutate = EvolveCandidates(evolvecandidate(inshape))
     evolve = SusSelection(s.popsize - s.nelites, mutate)
 
     combine = CombinedEvolution(elite, evolve)
-    reset = ResetAfterEvolution(combine)
-    return AfterEvolution(reset, rename_models ∘ clear_redundant_vertices)
+    return AfterEvolution(combine, rename_models ∘ clear_redundant_vertices)
 end
 
 """
@@ -237,16 +262,17 @@ struct EliteAndTournamentSelection <: AbstractEvolutionStrategy
 end
 EliteAndTournamentSelection(;popsize=50, nelites=2, k=2, p=1.0) = EliteAndTournamentSelection(popsize, nelites, k, p)
 
-function evostrategy(s::EliteAndTournamentSelection, inshape)
+function evostrategy_internal(s::EliteAndTournamentSelection, inshape)
     elite = EliteSelection(s.nelites)
 
     mutate = EvolveCandidates(evolvecandidate(inshape))
     evolve = TournamentSelection(s.popsize - s.nelites, s.k, s.p, mutate)
 
     combine = CombinedEvolution(elite, evolve)
-    reset = ResetAfterEvolution(combine)
-    return AfterEvolution(reset, rename_models ∘ clear_redundant_vertices)
+    return AfterEvolution(combine, rename_models ∘ clear_redundant_vertices)
 end
+
+evolvecandidate(inshape) = evolvemodel(graphmutation(inshape), optmutation())
 
 function clear_redundant_vertices(pop)
     foreach(cand -> check_apply(NaiveGAflux.graph(cand)), pop)
@@ -267,25 +293,14 @@ function rename_model(i, cand)
     return NaiveGAflux.mapcandidate(g -> copy(g, rename_model))(cand)
 end
 
-function evolvecandidate(inshape)
-    mutate_opt(opt::Flux.Optimise.Optimiser) = newopt(opt)
-    mutate_opt(x) = deepcopy(x)
-    return evolvemodel(mutation(inshape), mutate_opt)
+function optmutation(p=0.05)
+    lrm = LearningRateMutation()
+    om = MutationProbability(OptimizerMutation([Descent, Momentum, Nesterov, ADAM, NADAM, ADAGrad]), p)
+    return MutationList(lrm, om)
 end
 
-newlr(o::Flux.Optimise.Optimiser) = newlr(o.os[].eta)
-function newlr(lr::Number)
-    # GA has a strong tendency to get stuck in local minima by lowering the
-    # learning rate to the smallest allowed value
-    nudge =lr + (rand() - 0.5) * lr * 0.3
-    return clamp(nudge, 1e-6, 1.0)
-end
 
-newopt(lr::Number) = Flux.Optimise.Optimiser([rand([Descent, Momentum, Nesterov, ADAM, NADAM, ADAGrad])(lr)])
-newopt(opt::Flux.Optimise.Optimiser) = NaiveGAflux.apply(Probability(0.05)) ? newopt(newlr(opt)) : sameopt(opt.os[], newlr(opt))
-sameopt(::T, lr) where T = Flux.Optimise.Optimiser([T(lr)])
-
-function mutation(inshape)
+function graphmutation(inshape)
     acts = [identity, relu, elu, selu]
 
     increase_nout = NeuronSelectMutation(NoutMutation(0, 0.1)) # Max 10% change in output size
@@ -311,7 +326,7 @@ function mutation(inshape)
     maddv = mph(LogMutation(v -> "\tAdd vertex after $(name(v))", add_vertex), 0.005)
     maddm = mpn(MutationFilter(canaddmaxpool(inshape), LogMutation(v -> "\tAdd maxpool after $(name(v))", add_maxpool)), 0.01)
     mremv = mpl(LogMutation(v -> "\tRemove vertex $(name(v))", rem_vertex), 0.01)
-    ikern = mpl(LogMutation(v -> "\tMutate kernel size of $(name(v))", increase_kernel), 0.01)
+    ikern = mpl(LogMutation(v -> "\tMutate kernel size of $(name(v))", increase_kernel), 0.005)
     dkern = mpl(LogMutation(v -> "\tDecrease kernel size of $(name(v))", decrease_kernel), 0.005)
     mactf = mpl(LogMutation(v -> "\tMutate activation function of $(name(v))", mutate_act), 0.005)
     madde = mph(LogMutation(v -> "\tAdd edge from $(name(v))", add_edge), 0.02)
@@ -385,8 +400,8 @@ function add_vertex_mutation(acts)
 
     wrapitup(as) = AddVertexMutation(rep_fork_res(as, 1,loglevel=Logging.Info), outselect)
 
-    add_conv = wrapitup(convspace(default_layerconf(), 8:128, 1:2:5, acts,loglevel=Logging.Info))
-    add_dense = wrapitup(LoggingArchSpace(Logging.Info, VertexSpace(default_layerconf(), NamedLayerSpace("dense", DenseSpace(16:512, acts)))))
+    add_conv = wrapitup(convspace(default_layerconf(),2 .^(4:9), 1:2:5, acts,loglevel=Logging.Info))
+    add_dense = wrapitup(LoggingArchSpace(Logging.Info, VertexSpace(default_layerconf(), NamedLayerSpace("dense", DenseSpace(2 .^(4:9), acts)))))
 
     return MutationList(MutationFilter(is_convtype, add_conv), MutationFilter(!is_convtype, add_dense))
 end

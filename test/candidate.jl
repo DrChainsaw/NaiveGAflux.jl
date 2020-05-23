@@ -1,15 +1,16 @@
 @testset "Candidate" begin
 
+    struct DummyFitness <: AbstractFitness end
+
     @testset "CandidateModel $wrp" for wrp in (identity, HostCandidate, CacheCandidate)
         import NaiveGAflux: AbstractFunLabel, Train, TrainLoss, Validate
-        struct DummyFitness <: AbstractFitness end
 
         invertex = inputvertex("in", 3, FluxDense())
         hlayer = mutable("hlayer", Dense(3,4), invertex)
         outlayer = mutable("outlayer", Dense(4, 2), hlayer)
         graph = CompGraph(invertex, outlayer)
 
-        cand = wrp(CandidateModel(graph, Flux.Descent(0.01), (x,y) -> sum(x .- y), DummyFitness()))
+        cand = wrp(CandidateModel(graph, Descent(0.01), (x,y) -> sum(x .- y), DummyFitness()))
 
         labs = []
         function NaiveGAflux.instrument(l::AbstractFunLabel, s::DummyFitness, f)
@@ -36,11 +37,18 @@
 
         @test wasreset
 
-        evofun = evolvemodel(VertexMutation(MutationFilter(v -> name(v)=="hlayer", RemoveVertexMutation())))
+        graphmutation = VertexMutation(MutationFilter(v -> name(v)=="hlayer", RemoveVertexMutation()))
+        optmutation = OptimizerMutation((Momentum, Nesterov, ADAM))
+        evofun = evolvemodel(graphmutation, optmutation)
         newcand = evofun(cand)
 
         @test nv(NaiveGAflux.graph(newcand)) == 2
         @test nv(NaiveGAflux.graph(cand)) == 3
+
+        optimizer(c::AbstractCandidate) = optimizer(c.c)
+        optimizer(c::CandidateModel) = typeof(c.opt)
+
+        @test optimizer(newcand) != optimizer(cand)
 
         Flux.train!(cand, data(cand))
         Flux.train!(newcand, data(newcand))
@@ -100,7 +108,48 @@
         finally
             rm(testdir, force=true, recursive=true)
         end
-
     end
 
+
+    @testset "Global optimizer mutation" begin
+        import NaiveGAflux.Flux.Optimise: Optimiser
+        import NaiveGAflux: sameopt, learningrate, BoundedRandomWalk, global_optimizer_mutation, randomlrscale
+
+        @testset "Random learning rate scale" begin
+            using Random
+            so = ShieldedOpt
+
+            omf = randomlrscale();
+
+            om1 = omf()
+            @test learningrate(om1(Descent(0.1))) ≈ learningrate(om1(Momentum(0.1)))
+
+            opt = Optimiser(so(Descent(0.1)), Momentum(0.1), so(Descent(1.0)), ADAM(1.0), Descent(1.0))
+            @test length(om1(opt).os) == 4
+            @test learningrate(om1(opt)) ≈ learningrate(om1(Descent(0.01)))
+
+            om2 = omf()
+            @test learningrate(om2(Descent(0.1))) ≈ learningrate(om2(Momentum(0.1)))
+
+            # Differnt iterations shall yield different results ofc
+            @test learningrate(om1(Descent(0.1))) != learningrate(om2(Momentum(0.1)))
+
+            # Make sure learning rate stays within bounds when using BoundedRandomWalk
+            rng = MersenneTwister(0);
+            brw = BoundedRandomWalk(-1.0, 1.0, () -> randn(rng))
+            @test collect(extrema(cumprod([10^brw() for i in 1:10000]))) ≈ [0.1, 10] atol = 1e-10
+        end
+
+        @testset "Global learning rate scaling" begin
+            v1 = inputvertex("in", 3, FluxDense())
+            pop = CandidateModel.(Ref(CompGraph(v1, v1)), Descent.(0.1:0.1:1.0), Flux.mse, Ref(DummyFitness()))
+
+            lr(c) = c.opt.eta
+            @test lr.(pop) == 0.1:0.1:1.0
+
+            popscal = global_optimizer_mutation(pop, pp -> OptimizerMutation(o -> sameopt(o, 10learningrate(o))))
+
+            @test lr.(popscal) == 1:10
+        end
+    end
 end
