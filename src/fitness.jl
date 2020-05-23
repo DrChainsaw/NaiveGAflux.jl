@@ -120,6 +120,8 @@ Computes the exponentially weighted moving average of the fitness of `base`.
 Main purpose is to mitigate the effects of fitness noise.
 
 The filter is updated each time `fitness` is called, so practical use requires the fitness to be wrapped in a `CacheFitness`.
+
+See `https://github.com/DrChainsaw/NaiveGAExperiments/blob/master/fitnessnoise/experiments.ipynb` for some hints as to why this might be needed.
 """
 EwmaFitness(base) = EwmaFitness(0.5, base)
 function EwmaFitness(α, base)

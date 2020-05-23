@@ -184,13 +184,25 @@ dataiter(x,y::AbstractArray{T, 2}, bs, s, wrap) where T = zip(wrap(batch(x, bs, 
 
 
 """
+    evostrategy(s::AbstractEvolutionStrategy, inshape)
+
+Return an `AbstractEvolution` according to `s`.
+"""
+function evostrategy(s::AbstractEvolutionStrategy, inshape)
+    evostrat = evostrategy_internal(s, inshape)
+    return ResetAfterEvolution(evostrat)
+end
+
+"""
     struct GlobalOptimizerMutation{S<:AbstractEvolutionStrategy, F} <: AbstractEvolutionStrategy
     GlobalOptimizerMutation(base::AbstractEvolutionStrategy)
     GlobalOptimizerMutation(base::AbstractEvolutionStrategy, optfun)
 
-Maps the optimizer of each candidate in a population through `optfun` (default `randomlrscale`).
+Maps the optimizer of each candidate in a population through `optfun` (default `randomlrscale()`).
 
-Useful for applying the same mutation to every candidate, e.g. boosting the learning rate so that new models have a chance to catch up.
+Basically a thin wrapper for [`NaiveGAflux.global_optimizer_mutation`](@ref).
+
+Useful for applying the same mutation to every candidate, e.g. global learning rate schedules which all models follow.
 """
 struct GlobalOptimizerMutation{S<:AbstractEvolutionStrategy, F} <: AbstractEvolutionStrategy
     base::S
@@ -198,8 +210,8 @@ struct GlobalOptimizerMutation{S<:AbstractEvolutionStrategy, F} <: AbstractEvolu
 end
 GlobalOptimizerMutation(base::AbstractEvolutionStrategy) = GlobalOptimizerMutation(base, NaiveGAflux.randomlrscale())
 
-function evostrategy(s::GlobalOptimizerMutation, inshape)
-    base = evostrategy(s.base, inshape)
+function evostrategy_internal(s::GlobalOptimizerMutation, inshape)
+    base = evostrategy_internal(s.base, inshape)
     return AfterEvolution(base, pop -> NaiveGAflux.global_optimizer_mutation(pop, s.optfun))
 end
 
@@ -225,15 +237,14 @@ struct EliteAndSusSelection <: AbstractEvolutionStrategy
 end
 EliteAndSusSelection(;popsize=50, nelites=2) = EliteAndSusSelection(popsize, nelites)
 
-function evostrategy(s::EliteAndSusSelection, inshape)
+function evostrategy_internal(s::EliteAndSusSelection, inshape)
     elite = EliteSelection(s.nelites)
 
     mutate = EvolveCandidates(evolvecandidate(inshape))
     evolve = SusSelection(s.popsize - s.nelites, mutate)
 
     combine = CombinedEvolution(elite, evolve)
-    reset = ResetAfterEvolution(combine)
-    return AfterEvolution(reset, rename_models ∘ clear_redundant_vertices)
+    return AfterEvolution(combine, rename_models ∘ clear_redundant_vertices)
 end
 
 """
@@ -259,15 +270,14 @@ struct EliteAndTournamentSelection <: AbstractEvolutionStrategy
 end
 EliteAndTournamentSelection(;popsize=50, nelites=2, k=2, p=1.0) = EliteAndTournamentSelection(popsize, nelites, k, p)
 
-function evostrategy(s::EliteAndTournamentSelection, inshape)
+function evostrategy_internal(s::EliteAndTournamentSelection, inshape)
     elite = EliteSelection(s.nelites)
 
     mutate = EvolveCandidates(evolvecandidate(inshape))
     evolve = TournamentSelection(s.popsize - s.nelites, s.k, s.p, mutate)
 
     combine = CombinedEvolution(elite, evolve)
-    reset = ResetAfterEvolution(combine)
-    return AfterEvolution(reset, rename_models ∘ clear_redundant_vertices)
+    return AfterEvolution(combine, rename_models ∘ clear_redundant_vertices)
 end
 
 evolvecandidate(inshape) = evolvemodel(graphmutation(inshape), optmutation())

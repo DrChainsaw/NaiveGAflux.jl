@@ -217,6 +217,8 @@ Changes the optimizer of all candidates in `pop`.
 The optimizer of each candidate in pop will be changed to `om(optc)` where `optc` is the current optimizer and `om = optfun(pop)`.
 
 Intended to be used with `AfterEvolution` to create things like global learning rate schedules.
+
+See `https://github.com/DrChainsaw/NaiveGAExperiments/blob/master/lamarckism/experiments.ipynb` for some hints as to why this might be needed.
 """
 function global_optimizer_mutation(pop, optfun)
     om = optfun(pop)
