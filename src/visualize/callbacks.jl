@@ -142,10 +142,9 @@ end
 
 opt(c::AbstractCandidate) = opt(c.c)
 opt(c::CandidateModel) = c.opt
-lr(o::Flux.Optimiser) = prod(lr.(o.os))
-lr(o::ExpDecay) = 1.0
-lr(o) = o.eta
+lr(o) = learningrate(o)
 ot(o::Flux.Optimiser) = ot(o.os[1])
+ot(o::ShieldedOpt{T}) where T = T
 ot(o) = typeof(o)
 
 
