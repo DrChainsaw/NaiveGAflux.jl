@@ -1,11 +1,12 @@
 name = "NaiveGAflux"
 uuid = "81ede08e-ab29-11e9-16d3-79edd30a1d76"
 authors = ["DrChainsaw"]
-version = "0.3.0"
+version = "0.4.0"
 
 [deps]
 CuArrays = "3a865a2d-5b23-5a0f-bc46-62713ec82fae"
 Logging = "56ddb016-857b-54e1-b83d-db4d58db5568"
+MemPool = "f9f48841-c794-520a-933b-121f7ba6ed94"
 NaiveNASflux = "85610aed-7d32-5e57-bb50-4c2e1c9e7997"
 Pkg = "44cfe95a-1eb2-52ea-b672-e2afdf69b78f"
 Random = "9a3f8284-a2c9-5f02-9a11-845980a1fd5c"
@@ -17,6 +18,7 @@ Test = "8dfed614-e22c-5e08-85e1-65c5234f0b40"
 
 [compat]
 CuArrays = "1, 2"
+MemPool = "0.2"
 NaiveNASflux = "1"
 Reexport = "0.2.0, 1"
 Setfield = "0.3.4, 0.5, 0.6"

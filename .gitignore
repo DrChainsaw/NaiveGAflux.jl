@@ -6,3 +6,4 @@
 /dev/
 *.bson
 models
+.mempool

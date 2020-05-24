@@ -7,6 +7,7 @@ using Random
 using Logging
 using Statistics
 using CuArrays
+import MemPool
 
 using Setfield
 

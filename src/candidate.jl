@@ -15,15 +15,15 @@ Base.Broadcast.broadcastable(c::AbstractCandidate) = Ref(c)
 
 """
     CandidateModel <: Candidate
-    CandidateModel(model::CompGraph, optimizer, lossfunction, fitness::AbstractFitness)
+    CandidateModel(model, optimizer, lossfunction, fitness)
 
 A candidate model consisting of a `CompGraph`, an optimizer a lossfunction and a fitness method.
 """
-struct CandidateModel <: AbstractCandidate
-    graph::CompGraph
-    opt
-    lossfun
-    fitness::AbstractFitness
+struct CandidateModel{G,O,L,F} <: AbstractCandidate
+    graph::G
+    opt::O
+    lossfun::L
+    fitness::F
 end
 
 Flux.functor(c::CandidateModel) = (c.graph, c.opt, c.lossfun), gcl -> CandidateModel(gcl..., c.fitness)
@@ -95,7 +95,42 @@ eagermutation(m::LazyMutable) = m(NoComp())
 struct NoComp end
 function (::NaiveNASflux.MutableLayer)(x::NoComp) end
 
+"""
+    FileCandidate
 
+Keeps `c` on disk when not in use and just maintains its [`DRef`](@ref).
+
+Experimental feature. May not work as intended!
+"""
+struct FileCandidate
+    c::Ref{MemPool.DRef}
+    function FileCandidate(c::MemPool.DRef)
+        # Wrap the DRef in a Ref to enable finalizer to do delete file
+        ref = Ref(c)
+        finalizer(r -> MemPool.pooldelete(r[]), ref)
+        new(ref)
+     end
+end
+
+function FileCandidate(c, tasklistener = identity)
+    cref = MemPool.poolset(c)
+    tasklistener(@async MemPool.movetodisk(cref))
+    return FileCandidate(cref)
+end
+
+function callcand(f, c::FileCandidate, args...)
+    ret = f(MemPool.poolget(c.c[]), args...)
+    @async MemPool.movetodisk(c.c[])
+    return ret
+end
+
+Flux.functor(c::FileCandidate) = callcand(Flux.functor, c)
+
+Flux.train!(c::FileCandidate, data) = callcand(Flux.train!, c, data)
+fitness(c::FileCandidate) = callcand(fitness, c)
+
+reset!(c::FileCandidate) = callcand(reset!, c)
+graph(c::FileCandidate) = callcand(graph, c)
 
 """
     CacheCandidate <: AbstractCandidate
@@ -160,6 +195,7 @@ end
 newcand(c::CandidateModel, mapfield) = CandidateModel(map(mapfield, getproperty.(c, fieldnames(CandidateModel)))...)
 newcand(c::HostCandidate, mapfield) = HostCandidate(newcand(c.c, mapfield))
 newcand(c::CacheCandidate, mapfield) = CacheCandidate(newcand(c.c, mapfield))
+newcand(c::FileCandidate, mapfield) = FileCandidate(callcand(newcand, c, mapfield))
 
 function clearstate(s) end
 clearstate(s::AbstractDict) = foreach(k -> delete!(s, k), keys(s))
@@ -169,6 +205,7 @@ cleanopt(o::Flux.Optimiser) = foreach(cleanopt, o.os)
 cleanopt(c::CandidateModel) = cleanopt(c.opt)
 cleanopt(c::HostCandidate) = cleanopt(c.c)
 cleanopt(c::CacheCandidate) = cleanopt(c.c)
+cleanopt(c::FileCandidate) = callcand(cleanopt, c.c)
 
 """
     randomlrscale(rfun = BoundedRandomWalk(-1.0, 1.0))

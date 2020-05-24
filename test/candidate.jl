@@ -1,8 +1,9 @@
 @testset "Candidate" begin
 
     struct DummyFitness <: AbstractFitness end
-
-    @testset "CandidateModel $wrp" for wrp in (identity, HostCandidate, CacheCandidate)
+    import NaiveGAflux: FileCandidate
+    import MemPool
+    @testset "CandidateModel $wrp" for wrp in (identity, HostCandidate, CacheCandidate, FileCandidate)
         import NaiveGAflux: AbstractFunLabel, Train, TrainLoss, Validate
 
         invertex = inputvertex("in", 3, FluxDense())
@@ -10,48 +11,70 @@
         outlayer = mutable("outlayer", Dense(4, 2), hlayer)
         graph = CompGraph(invertex, outlayer)
 
-        cand = wrp(CandidateModel(graph, Descent(0.01), (x,y) -> sum(x .- y), DummyFitness()))
+        try
 
-        labs = []
-        function NaiveGAflux.instrument(l::AbstractFunLabel, s::DummyFitness, f)
-            push!(labs, l)
-            return f
+            cand = wrp(CandidateModel(graph, Descent(0.01), (x,y) -> sum(x .- y), DummyFitness()))
+
+            labs = []
+            function NaiveGAflux.instrument(l::AbstractFunLabel, s::DummyFitness, f)
+                push!(labs, l)
+                return f
+            end
+
+            data(wrp) = (ones(Float32, 3, 2), ones(Float32, 2,2))
+            data(c::HostCandidate) = gpu.(data(c.c))
+
+            Flux.train!(cand, data(cand))
+
+            @test labs == [Train(), TrainLoss()]
+
+            NaiveGAflux.fitness(::DummyFitness, f) = 17
+            @test fitness(cand) == 17
+
+            @test labs == [Train(), TrainLoss(), Validate()]
+
+            wasreset = false
+            NaiveGAflux.reset!(::DummyFitness) = wasreset = true
+
+            reset!(cand)
+
+            @test wasreset
+
+            graphmutation = VertexMutation(MutationFilter(v -> name(v)=="hlayer", RemoveVertexMutation()))
+            optmutation = OptimizerMutation((Momentum, Nesterov, ADAM))
+            evofun = evolvemodel(graphmutation, optmutation)
+            newcand = evofun(cand)
+
+            @test nv(NaiveGAflux.graph(newcand)) == 2
+            @test nv(NaiveGAflux.graph(cand)) == 3
+
+            optimizer(c::AbstractCandidate) = optimizer(c.c)
+            optimizer(c::CandidateModel) = typeof(c.opt)
+            optimizer(c::FileCandidate) = NaiveGAflux.callcand(optimizer, c)
+
+            @test optimizer(newcand) != optimizer(cand)
+
+            Flux.train!(cand, data(cand))
+            Flux.train!(newcand, data(newcand))
+
+        finally
+            MemPool.cleanup()
         end
+    end
 
-        data(wrp) = (ones(Float32, 3, 2), ones(Float32, 2,2))
-        data(c::HostCandidate) = gpu.(data(c.c))
+    @testset "FileCandidate cleanup" begin
+        try
+            fc = FileCandidate([1,2,3], t -> wait(t))
 
-        Flux.train!(cand, data(cand))
+            fname = MemPool.default_path(fc.c[])
 
-        @test labs == [Train(), TrainLoss()]
+            @test isfile(fname)
+            finalize(fc.c)
 
-        NaiveGAflux.fitness(::DummyFitness, f) = 17
-        @test fitness(cand) == 17
-
-        @test labs == [Train(), TrainLoss(), Validate()]
-
-        wasreset = false
-        NaiveGAflux.reset!(::DummyFitness) = wasreset = true
-
-        reset!(cand)
-
-        @test wasreset
-
-        graphmutation = VertexMutation(MutationFilter(v -> name(v)=="hlayer", RemoveVertexMutation()))
-        optmutation = OptimizerMutation((Momentum, Nesterov, ADAM))
-        evofun = evolvemodel(graphmutation, optmutation)
-        newcand = evofun(cand)
-
-        @test nv(NaiveGAflux.graph(newcand)) == 2
-        @test nv(NaiveGAflux.graph(cand)) == 3
-
-        optimizer(c::AbstractCandidate) = optimizer(c.c)
-        optimizer(c::CandidateModel) = typeof(c.opt)
-
-        @test optimizer(newcand) != optimizer(cand)
-
-        Flux.train!(cand, data(cand))
-        Flux.train!(newcand, data(newcand))
+            @test !isfile(fname)
+        finally
+            MemPool.cleanup()
+        end
     end
 
     @testset "eagermutation" begin
