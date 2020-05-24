@@ -6,11 +6,11 @@ Abstract base type for strategies for how to evolve a population into a new popu
 abstract type AbstractEvolution end
 
 """
-    evolve!(e::AbstractEvolution, population::AbstractArray{<:AbstractCandidate})
+    evolve!(e::AbstractEvolution, population)
 
 Evolve `population` into a new population. New population may or may not contain same individuals as before.
 """
-function evolve! end
+evolve!(e::AbstractEvolution, population) = _evolve!(e, population)
 
 """
     NoOpEvolution <: AbstractEvolution
@@ -19,7 +19,7 @@ function evolve! end
 Does not evolve the given population.
 """
 struct NoOpEvolution <: AbstractEvolution end
-evolve!(::NoOpEvolution, pop) = pop
+_evolve!(::NoOpEvolution, pop) = pop
 
 """
     AfterEvolution <: AbstractEvolution
@@ -32,7 +32,7 @@ struct AfterEvolution{F, E} <: AbstractEvolution
     fun::F
 end
 
-function evolve!(e::AfterEvolution, pop)
+function _evolve!(e::AfterEvolution, pop)
     newpop = evolve!(e.evo, pop)
     return e.fun(newpop)
 end
@@ -59,7 +59,7 @@ struct EliteSelection{N, E} <: AbstractEvolution
     evo::E
 end
 EliteSelection(n::Integer) = EliteSelection(n, NoOpEvolution())
-evolve!(e::EliteSelection, pop::AbstractArray{<:AbstractCandidate}) = evolve!(e.evo, partialsort(pop, 1:e.nselect, by=fitness, rev=true))
+_evolve!(e::EliteSelection, pop::AbstractArray{<:AbstractCandidate}) = evolve!(e.evo, partialsort(pop, 1:e.nselect, by=fitness, rev=true))
 
 """
     SusSelection <: AbstractEvolution
@@ -74,7 +74,7 @@ struct SusSelection{N, R, E} <: AbstractEvolution
 end
 SusSelection(nselect, evo) = SusSelection(nselect, evo, rng_default)
 
-function evolve!(e::SusSelection, pop::AbstractArray{<:AbstractCandidate})
+function _evolve!(e::SusSelection, pop::AbstractArray{<:AbstractCandidate})
     csfitness = cumsum(fitness.(pop))
 
     gridspace = csfitness[end] / e.nselect
@@ -113,7 +113,7 @@ struct TournamentSelection{N,P,E,R} <: AbstractEvolution
     end
 end
 
-function evolve!(e::TournamentSelection, pop::AbstractArray{<:AbstractCandidate})
+function _evolve!(e::TournamentSelection, pop::AbstractArray{<:AbstractCandidate})
     # Step 1: Create a random tournament order with as little repetition as possible so that we can select
     # e.nselect candidates out of e.nselect tournaments with e.k random candidates in each tournament
     n = e.nselect * e.k
@@ -140,7 +140,7 @@ struct CombinedEvolution{E<:AbstractArray} <: AbstractEvolution
     evos::E
 end
 CombinedEvolution(evos...) = CombinedEvolution(collect(evos))
-evolve!(e::CombinedEvolution, pop) = mapfoldl(evo -> evolve!(evo, pop), vcat, e.evos)
+_evolve!(e::CombinedEvolution, pop) = mapfoldl(evo -> evolve!(evo, pop), vcat, e.evos)
 
 """
     EvolveCandidates <: AbstractEvolution
@@ -153,4 +153,4 @@ Useful with [`evolvemodel`](@ref).
 struct EvolveCandidates{F} <: AbstractEvolution
     fun::F
 end
-evolve!(e::EvolveCandidates, pop) = map(e.fun, pop)
+_evolve!(e::EvolveCandidates, pop) = map(e.fun, pop)

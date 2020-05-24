@@ -25,6 +25,9 @@ export evolvemodel, AbstractCandidate, CandidateModel, HostCandidate, CacheCandi
 # Evolution
 export evolve!, AbstractEvolution, NoOpEvolution, AfterEvolution, ResetAfterEvolution, EliteSelection, SusSelection, TournamentSelection, CombinedEvolution, EvolveCandidates
 
+# Population
+export Population, generation
+
 # misc types
 export Probability, MutationShield, ApplyIf, RemoveIfSingleInput, RepeatPartitionIterator, SeedIterator, MapIterator, GpuIterator, BatchIterator, FlipIterator, ShiftIterator, ShuffleIterator, PersistentArray, ShieldedOpt
 
@@ -64,6 +67,7 @@ include("mutation.jl")
 include("fitness.jl")
 include("candidate.jl")
 include("evolve.jl")
+include("population.jl")
 include("iterators.jl")
 include("app/AutoFlux.jl")
 include("visualize/callbacks.jl")
