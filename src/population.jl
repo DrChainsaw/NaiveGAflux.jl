@@ -18,6 +18,7 @@ Base.size(p::AbstractPopulation) = size(wrappedpop(p))
 Base.IteratorSize(p::AbstractPopulation) = Base.IteratorSize(wrappedpop(p))
 Base.IteratorEltype(p::AbstractPopulation) = Base.IteratorEltype(wrappedpop(p))
 
+generation_filename(dir) = joinpath(dir, "generation.txt")
 
 """
     struct Population{N, P}
@@ -28,13 +29,25 @@ Basic population type which just adds generation counting to its members.
 
 Evolving the population returns a new `Population` with the generation counter incremented.
 """
-struct Population{N, P} <: AbstractPopulation
+struct Population{N<:Integer, P} <: AbstractPopulation
     gen::N
     members::P
 end
 Population(members) = Population(1, members)
+Population(members::PersistentArray) = Population(members.savedir, members)
+function Population(savedir::AbstractString, members)
+    gfile = generation_filename(savedir)
+    gen = !isfile(gfile) ? 1 : parse(Int, readline(gfile))
+    return Population(gen, members)
+end
+
 wrappedpop(p::Population) = p.members
 
 generation(p::Population) = p.gen
 
 evolve!(e::AbstractEvolution, p::Population) = Population(p.gen + 1, evolve!(e, wrappedpop(p)))
+
+function persist(p::Population{N, <:PersistentArray}) where N
+    persist(wrappedpop(p))
+    open(io -> write(io, string(p.gen)), generation_filename(wrappedpop(p).savedir); write=true)
+end

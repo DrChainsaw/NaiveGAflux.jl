@@ -132,8 +132,13 @@ function persist(a::PersistentArray)
     end
 end
 filename(a::PersistentArray, i::Int) = joinpath(a.savedir, "$i$(a.suffix)")
-Base.rm(a::PersistentArray; force=true, recursive=true) = rm(a.savedir, force=force, recursive=recursive)
-Base.rm(a::PersistentArray, i::Int, force=false, recursive=true) = rm(filename(a,i), force=force, recursive=recursive)
+function Base.rm(a::PersistentArray; force=true, recursive=true)
+    foreach(i -> rm(a, i; force=force, recursive=recursive), 1:length(a))
+    if readdir(a.savedir) |> isempty
+        rm(a.savedir; force=force, recursive=recursive)
+    end
+end
+Base.rm(a::PersistentArray, i::Int; force=false, recursive=true) = rm(filename(a,i), force=force, recursive=recursive)
 
 Base.size(a::PersistentArray) = size(a.data)
 Base.getindex(a::PersistentArray, i::Int) = getindex(a.data, i)
