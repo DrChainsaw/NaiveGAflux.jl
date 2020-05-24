@@ -98,9 +98,7 @@ function AutoFlux.fit(c::ImageClassifier, fit_iter, fitnessgen, evostrategy::Abs
     population = c.popinit(mdir, fitnessgen, insize, outsize[1])
 
     # If experiment was resumed we should start by evolving as population is persisted right before evolution
-    if all(i -> isfile(NaiveGAflux.filename(population, i)), 1:length(population))
-        population = evolve!(evostrategy, population)
-    end
+    population = generation(population) > 1 ? evolve!(evostrategy, population) : population
 
     return evolutionloop(population, evostrategy, fit_iter, cb)
 end
@@ -110,8 +108,8 @@ datasize(t::Tuple) = datasize.(t)
 datasize(a::AbstractArray) = size(a)
 
 function evolutionloop(population, evostrategy, trainingiter, cb)
-    for (gen, iter) in enumerate(trainingiter)
-        @info "Begin generation $gen"
+    for iter in trainingiter
+        @info "Begin generation $(generation(population))"
 
         for (i, cand) in enumerate(population)
             @info "\tTrain candidate $i with $(nv(NaiveGAflux.graph(cand))) vertices"
@@ -135,7 +133,7 @@ function generate_persistent(nr, newpop, mdir, fitnessgen, insize, outsize, cwra
     end
 
     iv(i) = inputvertex(join(["model", i, ".input"]), insize[3], FluxConv{2}())
-    return PersistentArray(mdir, nr, i -> create_model(join(["model", i]), archspace, iv(i), fitnessgen, cwrap))
+    return Population(PersistentArray(mdir, nr, i -> create_model(join(["model", i]), archspace, iv(i), fitnessgen, cwrap)))
 end
 function create_model(name, as, in, fg, cwrap)
     optselect = optmutation(1.0)
