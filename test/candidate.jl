@@ -86,10 +86,10 @@
                 @test !isfile(fname)
             end
 
-            @testset "FileCandidate functor" begin
+            @testset "Functor" begin
                 v1 = mutable("v1", Dense(3,3;initW=idmapping), inputvertex("in", 3, FluxDense()))
                 cand1 = FileCandidate(CandidateModel(CompGraph(inputs(v1)[], v1), Descent(0.01), (x,y) -> sum(x .- y), DummyFitness()))
-                
+
                 mul(x::AbstractArray) = 2 .* x
                 mul(x) = x
                 cand2 = Flux.fmap(mul, cand1)
@@ -98,6 +98,29 @@
                 @test NaiveGAflux.graph(cand2)(indata) == 2 .* indata
             end
 
+            @testset "Serialization" begin
+                using Serialization
+
+
+                v = mutable("v1", Dense(3,3), inputvertex("in", 3, FluxDense()))
+                secand = CacheCandidate(FileCandidate(CandidateModel(CompGraph(inputs(v)[], v), Descent(0.01), (x,y) -> sum(x .- y), DummyFitness())))
+
+                indata = randn(3, 2)
+                expected = v(indata)
+
+                io = PipeBuffer()
+                serialize(io, secand)
+
+                MemPool.cleanup()
+
+                # Make sure the data is gone
+                @test_throws KeyError NaiveGAflux.graph(secand)
+
+                decand = deserialize(io)
+
+                @test NaiveGAflux.graph(decand)(indata) == expected
+
+            end
         finally
             MemPool.cleanup()
         end

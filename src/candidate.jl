@@ -10,8 +10,11 @@ abstract type AbstractCandidate end
 
 Reset state of `c`. Typically needs to be called after evolution to clear old fitness computations.
 """
-function reset!(c::AbstractCandidate) end
+reset!(c::AbstractCandidate) = reset!(wrappedcand(c))
 Base.Broadcast.broadcastable(c::AbstractCandidate) = Ref(c)
+
+wrappedcand(c::AbstractCandidate) = c.c
+graph(c::AbstractCandidate) = graph(wrappedcand(c))
 
 """
     CandidateModel <: Candidate
@@ -43,6 +46,8 @@ reset!(model::CandidateModel) = reset!(model.fitness)
 
 graph(model::CandidateModel) = model.graph
 
+wrappedcand(c::CandidateModel) = error("CandidateModel does not wrap any candidate! Check your base case!")
+
 
 """
     HostCandidate <: AbstractCandidate
@@ -70,9 +75,6 @@ function fitness(c::HostCandidate)
     gpu_gc()
     return fitval
 end
-
-reset!(c::HostCandidate) = reset!(c.c)
-graph(c::HostCandidate) = graph(c.c)
 
 const gpu_gc = if CuArrays.functional()
     function()
@@ -124,6 +126,17 @@ function callcand(f, c::FileCandidate, args...)
     return ret
 end
 
+function Serialization.serialize(s::AbstractSerializer, c::FileCandidate)
+    Serialization.writetag(s.io, Serialization.OBJECT_TAG)
+    serialize(s, FileCandidate)
+    serialize(s, NaiveGAflux.wrappedcand(c))
+end
+
+function Serialization.deserialize(s::AbstractSerializer, ::Type{FileCandidate})
+    wrapped = deserialize(s)
+    return FileCandidate(wrapped)
+end
+
 # Mutation needs to be enabled here?
 Flux.functor(c::FileCandidate) = callcand(Flux.functor, c)
 
@@ -131,7 +144,7 @@ Flux.train!(c::FileCandidate, data) = callcand(Flux.train!, c, data)
 fitness(c::FileCandidate) = callcand(fitness, c)
 
 reset!(c::FileCandidate) = callcand(reset!, c)
-graph(c::FileCandidate) = graph(MemPool.poolget(c.c[])) # Don't want to movetodisk to allow for mutation to happen...
+wrappedcand(c::FileCandidate) = MemPool.poolget(c.c[])
 
 """
     CacheCandidate <: AbstractCandidate
@@ -160,8 +173,6 @@ function reset!(c::CacheCandidate)
     c.fitnesscache = nothing
     reset!(c.c)
 end
-graph(c::CacheCandidate) = graph(c.c)
-
 
 nparams(c::AbstractCandidate) = nparams(graph(c))
 nparams(g::CompGraph) = mapreduce(prod ∘ size, +, params(g).order)
@@ -204,9 +215,8 @@ clearstate(s::AbstractDict) = foreach(k -> delete!(s, k), keys(s))
 cleanopt(o::T) where T = foreach(fn -> clearstate(getfield(o, fn)), fieldnames(T))
 cleanopt(o::Flux.Optimiser) = foreach(cleanopt, o.os)
 cleanopt(c::CandidateModel) = cleanopt(c.opt)
-cleanopt(c::HostCandidate) = cleanopt(c.c)
-cleanopt(c::CacheCandidate) = cleanopt(c.c)
 cleanopt(c::FileCandidate) = callcand(cleanopt, c.c)
+cleanopt(c::AbstractCandidate) = cleanopt(wrappedcand(c))
 
 """
     randomlrscale(rfun = BoundedRandomWalk(-1.0, 1.0))
