@@ -141,6 +141,7 @@ function plotfitness(p::ScatterOpt, population)
 end
 
 opt(c::AbstractCandidate) = opt(c.c)
+opt(c::FileCandidate) = callcand(opt, c)
 opt(c::CandidateModel) = c.opt
 lr(o) = learningrate(o)
 ot(o::Flux.Optimiser) = ot(o.os[1])
