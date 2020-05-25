@@ -124,8 +124,8 @@ function callcand(f, c::FileCandidate, args...)
     return ret
 end
 
-# Mutation must be enabled here, so don't want to call movetodisk
-Flux.functor(c::FileCandidate) = Flux.functor(MemPools.poolget(c.c[]))
+# Mutation needs to be enabled here?
+Flux.functor(c::FileCandidate) = callcand(Flux.functor, c)
 
 Flux.train!(c::FileCandidate, data) = callcand(Flux.train!, c, data)
 fitness(c::FileCandidate) = callcand(fitness, c)

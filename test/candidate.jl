@@ -72,16 +72,32 @@
         end
     end
 
-    @testset "FileCandidate cleanup" begin
+    @testset "FileCandidate" begin
         try
-            fc = FileCandidate([1,2,3], t -> wait(t))
+            @testset "FileCandidate cleanup" begin
 
-            fname = MemPool.default_path(fc.c[])
+                fc = FileCandidate([1,2,3], t -> wait(t))
 
-            @test isfile(fname)
-            finalize(fc.c)
+                fname = MemPool.default_path(fc.c[])
 
-            @test !isfile(fname)
+                @test isfile(fname)
+                finalize(fc.c)
+
+                @test !isfile(fname)
+            end
+
+            @testset "FileCandidate functor" begin
+                v1 = mutable("v1", Dense(3,3;initW=idmapping), inputvertex("in", 3, FluxDense()))
+                cand1 = FileCandidate(CandidateModel(CompGraph(inputs(v1)[], v1), Descent(0.01), (x,y) -> sum(x .- y), DummyFitness()))
+                
+                mul(x::AbstractArray) = 2 .* x
+                mul(x) = x
+                cand2 = Flux.fmap(mul, cand1)
+
+                indata = collect(Float32, reshape(1:6,3,2))
+                @test NaiveGAflux.graph(cand2)(indata) == 2 .* indata
+            end
+
         finally
             MemPool.cleanup()
         end
