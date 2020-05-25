@@ -3,7 +3,15 @@
     struct DummyFitness <: AbstractFitness end
     import NaiveGAflux: FileCandidate
     import MemPool
-    @testset "CandidateModel $wrp" for wrp in (identity, HostCandidate, CacheCandidate, FileCandidate)
+    @testset "CandidateModel $wrp" for wrp in (
+        identity,
+        HostCandidate,
+        CacheCandidate,
+        FileCandidate,
+        CacheCandidate ∘ HostCandidate,
+        CacheCandidate ∘ FileCandidate ∘ HostCandidate)
+
+
         import NaiveGAflux: AbstractFunLabel, Train, TrainLoss, Validate
 
         invertex = inputvertex("in", 3, FluxDense())
@@ -21,8 +29,10 @@
                 return f
             end
 
-            data(wrp) = (ones(Float32, 3, 2), ones(Float32, 2,2))
+            data(c::CandidateModel) = (ones(Float32, 3, 2), ones(Float32, 2,2))
             data(c::HostCandidate) = gpu.(data(c.c))
+            data(c::FileCandidate) = NaiveGAflux.callcand(data, c)
+            data(c::AbstractCandidate) = data(c.c)
 
             Flux.train!(cand, data(cand))
 

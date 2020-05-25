@@ -50,8 +50,8 @@ graph(model::CandidateModel) = model.graph
 
 Keeps `c` in host memory and transfers to GPU when training or calculating fitness.
 """
-struct HostCandidate <: AbstractCandidate
-    c::AbstractCandidate
+struct HostCandidate{C} <: AbstractCandidate
+    c::C
 end
 
 Flux.@functor HostCandidate
@@ -102,20 +102,20 @@ Keeps `c` on disk when not in use and just maintains its [`DRef`](@ref).
 
 Experimental feature. May not work as intended!
 """
-struct FileCandidate
+struct FileCandidate{C} <: AbstractCandidate
     c::Ref{MemPool.DRef}
-    function FileCandidate(c::MemPool.DRef)
+    function FileCandidate{C}(c::MemPool.DRef) where C
         # Wrap the DRef in a Ref to enable finalizer to do delete file
         ref = Ref(c)
         finalizer(r -> MemPool.pooldelete(r[]), ref)
-        new(ref)
+        new{C}(ref)
      end
 end
 
-function FileCandidate(c, tasklistener = identity)
+function FileCandidate(c::C, tasklistener = identity) where C
     cref = MemPool.poolset(c)
     tasklistener(@async MemPool.movetodisk(cref))
-    return FileCandidate(cref)
+    return FileCandidate{C}(cref)
 end
 
 function callcand(f, c::FileCandidate, args...)
@@ -124,13 +124,14 @@ function callcand(f, c::FileCandidate, args...)
     return ret
 end
 
-Flux.functor(c::FileCandidate) = callcand(Flux.functor, c)
+# Mutation must be enabled here, so don't want to call movetodisk
+Flux.functor(c::FileCandidate) = Flux.functor(MemPools.poolget(c.c[]))
 
 Flux.train!(c::FileCandidate, data) = callcand(Flux.train!, c, data)
 fitness(c::FileCandidate) = callcand(fitness, c)
 
 reset!(c::FileCandidate) = callcand(reset!, c)
-graph(c::FileCandidate) = callcand(graph, c)
+graph(c::FileCandidate) = graph(MemPool.poolget(c.c[])) # Don't want to movetodisk to allow for mutation to happen...
 
 """
     CacheCandidate <: AbstractCandidate
@@ -140,9 +141,9 @@ Caches fitness values produced by `c` until `reset!` is called.
 
 Useful with `HostCandidate` to prevent models from being pushed to/from GPU just to fetch fitness values.
 """
-mutable struct CacheCandidate <: AbstractCandidate
+mutable struct CacheCandidate{C} <: AbstractCandidate
     fitnesscache
-    c::AbstractCandidate
+    c::C
 end
 CacheCandidate(c::AbstractCandidate) = CacheCandidate(nothing, c)
 

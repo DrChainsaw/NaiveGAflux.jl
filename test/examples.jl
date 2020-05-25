@@ -416,7 +416,7 @@ end
 
     evolvedcand = evofun(cachinghostcand)
 
-    @test typeof(evolvedcand) == typeof(cachinghostcand)
+    @test typeof(evolvedcand) <: CacheCandidate{<:HostCandidate{<:CandidateModel}}
 
     @test nout.(vertices(NaiveGAflux.graph(evolvedcand))) == [3, 4, 4]
     @test nout.(vertices(graph)) == [3, 3, 3]
