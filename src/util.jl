@@ -243,3 +243,34 @@ optmap(fopt, felse=identity) = x -> optmap(fopt, x, felse)
 optmap(fopt, x, felse) = optmap(opttype(x), fopt, x, felse)
 optmap(n, fopt, x, felse) = felse(x)
 optmap(::FluxOptimizer, fopt, o, felse) = fopt(o)
+
+
+"""
+    struct Singleton{T}
+    Singleton(val::T)
+
+Wrapper for `val` which prevents it from being copied if the wrapping singleton is copied using `copy` and `deepcopy`.
+
+Also makes sure that only one unique copy of `val` is created when deserializing a serialized `Singleton`.
+"""
+struct Singleton{T}
+    val::T
+end
+val(s::Singleton) = s.val
+
+const singletons = WeakKeyDict{Any, WeakRef}()
+function Serialization.deserialize(s::AbstractSerializer, ::Type{Singleton{T}}) where T
+    val = deserialize(s)
+    return get!(()-> WeakRef(Singleton(val)), singletons, val).value
+end
+
+Base.deepcopy_internal(s::Singleton, stackdict::IdDict) = s
+Base.copy(s::Singleton) = s
+
+Base.iterate(s::Singleton, state...) = iterate(val(s), state)
+
+Base.length(s::Singleton) = length(val(s))
+Base.size(s::Singleton) = size(val(s))
+
+Base.IteratorEltype(s::Singleton) = Base.IteratorEltype(val(s))
+Base.IteratorSize(s::Singleton) = Base.IteratorSize(val(s))
