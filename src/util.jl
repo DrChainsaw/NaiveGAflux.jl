@@ -255,6 +255,11 @@ Also makes sure that only one unique copy of `val` is created when deserializing
 """
 struct Singleton{T}
     val::T
+    function Singleton(val::T) where T
+        s = new{T}(val)
+        singletons[val] = WeakRef(s)
+        return s
+    end
 end
 val(s::Singleton) = s.val
 

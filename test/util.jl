@@ -205,6 +205,6 @@ end
 
         s1,s2  = deserialize.(io)
 
-        @test val(s1) === val(s2) == d
+        @test val(s1) === val(s2) === val(s)
     end
 end
