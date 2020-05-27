@@ -257,16 +257,16 @@ struct Singleton{T}
     val::T
     function Singleton(val::T) where T
         s = new{T}(val)
-        singletons[val] = WeakRef(s)
+        singletons[val] = s
         return s
     end
 end
 val(s::Singleton) = s.val
 
-const singletons = WeakKeyDict{Any, WeakRef}()
+const singletons = WeakKeyDict()
 function Serialization.deserialize(s::AbstractSerializer, ::Type{Singleton{T}}) where T
     val = deserialize(s)
-    return get!(()-> WeakRef(Singleton(val)), singletons, val).value
+    return get!(()-> Singleton(val), singletons, val)
 end
 
 Base.deepcopy_internal(s::Singleton, stackdict::IdDict) = s
