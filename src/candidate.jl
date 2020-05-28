@@ -62,7 +62,7 @@ end
 Flux.@functor HostCandidate
 
 function Flux.train!(c::HostCandidate, data)
-    eagermutation(graph(c)) # Optimization: If there is a LazyMutable somewhere, we want it to do its thing now so we don't end up copying the model to the GPU only to then trigger another copy when the mutations are applied.
+    NaiveNASflux.forcemutation(graph(c)) # Optimization: If there is a LazyMutable somewhere, we want it to do its thing now so we don't end up copying the model to the GPU only to then trigger another copy when the mutations are applied.
     Flux.train!(c.c |> gpu, data)
     cleanopt(c) # As optimizer state does not survive transfer from gpu -> cpu
     c.c |> cpu # As some parts, namely CompGraph change internal state when mapping to GPU
@@ -84,18 +84,6 @@ const gpu_gc = if CuArrays.functional()
 else
     () -> nothing
 end
-
-
-function eagermutation(x) end
-function eagermutation(v::InputVertex) end
-eagermutation(g::CompGraph) = eagermutation.(vertices(g::CompGraph))
-eagermutation(v::AbstractVertex) = eagermutation(base(v))
-eagermutation(v::CompVertex) = eagermutation(v.computation)
-eagermutation(m::AbstractMutableComp) = eagermutation(NaiveNASflux.wrapped(m))
-eagermutation(m::LazyMutable) = m(NoComp())
-
-struct NoComp end
-function (::NaiveNASflux.MutableLayer)(x::NoComp) end
 
 """
     FileCandidate
