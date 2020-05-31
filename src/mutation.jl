@@ -682,7 +682,7 @@ learningrate(o::ShieldedOpt) = learningrate(o.opt)
 learningrate(o) = o.eta
 
 newlr(o, lrf = nudgelr) = sameopt(o, lrf(learningrate(o)))
-sameopt(::T, lr) where T = T(lr)
+sameopt(o, lr) = @set o.eta = lr
 
 """
     AddOptimizerMutation{F} <: AbstractMutation{FluxOptimizer}

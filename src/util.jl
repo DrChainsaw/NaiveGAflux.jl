@@ -193,9 +193,6 @@ Shields `o` from mutation by `OptimizerMutation`.
 """
 struct ShieldedOpt{O}
     opt::O
-
-    ShieldedOpt(o::O) where O = new{O}(o)
-    ShieldedOpt{O}(args...) where O = new{O}(O(args...))
 end
 Flux.Optimise.apply!(o::ShieldedOpt, args...) = Flux.Optimise.apply!(o.opt, args...)
 
@@ -214,7 +211,8 @@ function mergeopts(t::Type{T}, os...) where T
 end
 mergeopts() = []
 mergeopts(t::Type{T}, os::T...) where T = [mergeopts(os...)]
-mergeopts(os::T...) where T = T(prod(learningrate.(os)))
+mergeopts(os...) = first(@set os[1].eta = (prod(learningrate.(os))))
+mergeopts(os::ShieldedOpt{T}...) where T = ShieldedOpt(mergeopts(map(o -> o.opt, os)...))
 mergeopts(os::WeightDecay...) = WeightDecay(mapreduce(o -> o.wd, *, os))
 
 """
