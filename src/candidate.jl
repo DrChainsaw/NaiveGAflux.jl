@@ -201,6 +201,7 @@ function clearstate(s) end
 clearstate(s::AbstractDict) = foreach(k -> delete!(s, k), keys(s))
 
 cleanopt(o::T) where T = foreach(fn -> clearstate(getfield(o, fn)), fieldnames(T))
+cleanopt(o::ShieldedOpt) = cleanopt(o.opt)
 cleanopt(o::Flux.Optimiser) = foreach(cleanopt, o.os)
 cleanopt(c::CandidateModel) = cleanopt(c.opt)
 cleanopt(c::FileCandidate) = callcand(cleanopt, c.c)
