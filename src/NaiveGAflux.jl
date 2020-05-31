@@ -14,7 +14,7 @@ using Setfield
 # For temporary storage of program state for pause/resume type of operations
 using Serialization
 
-const rng_default = Random.GLOBAL_RNG
+const rng_default = MersenneTwister(abs(rand(Int)))
 const modeldir = "models"
 
 # Fitness
