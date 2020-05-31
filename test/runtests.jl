@@ -35,6 +35,9 @@ using Test
     @info "Testing mutation"
     include("mutation.jl")
 
+    @info "Testing crossover"
+    include("crossover.jl")
+
     @info "Testing fitness"
     include("fitness.jl")
 
