@@ -10,47 +10,23 @@ abstract type AbstractCandidate end
 
 Reset state of `c`. Typically needs to be called after evolution to clear old fitness computations.
 """
-function reset!(c::AbstractCandidate) end
+reset!(c::AbstractCandidate) = reset!(wrappedcand(c))
 Base.Broadcast.broadcastable(c::AbstractCandidate) = Ref(c)
 
-"""
-    savemodels(pop::AbstractArray{<:AbstractCandidate}, dir)
-    savemodels(pop::PersistentArray{<:AbstractCandidate})
-
-Save models (i.e. `CompGraph`s) of the given array of `AbstractCandidate`s in JLD2 format in directory `dir` (will be created if not existing).
-
-If `pop` is a `PersistentArray` and no directory is given models will be saved in `pop.savedir/models`.
-
-More suitable for long term storage compared to persisting the candidates themselves.
-"""
-function savemodels(pop::AbstractArray{<:AbstractCandidate}, dir)
-    mkpath(dir)
-    for (i, cand) in enumerate(pop)
-        model = graph(cand)
-        FileIO.save(joinpath(dir, "$i.jld2"), "model$i", cand |> cpu)
-    end
-end
-savemodels(pop::PersistentArray{<:AbstractCandidate}) = savemodels(pop, joinpath(pop.savedir, "models"))
-"""
-    savemodels(dir::AbstractString)
-
-Return a function which accepts an argument `pop` and calls `savemodels(pop, dir)`.
-
-Useful for callbacks to `AutoFlux.fit`.
-"""
-savemodels(dir::AbstractString) = pop -> savemodels(pop,dir)
+wrappedcand(c::AbstractCandidate) = c.c
+graph(c::AbstractCandidate) = graph(wrappedcand(c))
 
 """
     CandidateModel <: Candidate
-    CandidateModel(model::CompGraph, optimizer, lossfunction, fitness::AbstractFitness)
+    CandidateModel(model, optimizer, lossfunction, fitness)
 
 A candidate model consisting of a `CompGraph`, an optimizer a lossfunction and a fitness method.
 """
-struct CandidateModel <: AbstractCandidate
-    graph::CompGraph
-    opt
-    lossfun
-    fitness::AbstractFitness
+struct CandidateModel{G,O,L,F} <: AbstractCandidate
+    graph::G
+    opt::O
+    lossfun::L
+    fitness::F
 end
 
 Flux.functor(c::CandidateModel) = (c.graph, c.opt, c.lossfun), gcl -> CandidateModel(gcl..., c.fitness)
@@ -70,6 +46,8 @@ reset!(model::CandidateModel) = reset!(model.fitness)
 
 graph(model::CandidateModel) = model.graph
 
+wrappedcand(c::CandidateModel) = error("CandidateModel does not wrap any candidate! Check your base case!")
+
 
 """
     HostCandidate <: AbstractCandidate
@@ -77,14 +55,14 @@ graph(model::CandidateModel) = model.graph
 
 Keeps `c` in host memory and transfers to GPU when training or calculating fitness.
 """
-struct HostCandidate <: AbstractCandidate
-    c::AbstractCandidate
+struct HostCandidate{C} <: AbstractCandidate
+    c::C
 end
 
 Flux.@functor HostCandidate
 
 function Flux.train!(c::HostCandidate, data)
-    eagermutation(graph(c)) # Optimization: If there is a LazyMutable somewhere, we want it to do its thing now so we don't end up copying the model to the GPU only to then trigger another copy when the mutations are applied.
+    NaiveNASflux.forcemutation(graph(c)) # Optimization: If there is a LazyMutable somewhere, we want it to do its thing now so we don't end up copying the model to the GPU only to then trigger another copy when the mutations are applied.
     Flux.train!(c.c |> gpu, data)
     cleanopt(c) # As optimizer state does not survive transfer from gpu -> cpu
     c.c |> cpu # As some parts, namely CompGraph change internal state when mapping to GPU
@@ -98,9 +76,6 @@ function fitness(c::HostCandidate)
     return fitval
 end
 
-reset!(c::HostCandidate) = reset!(c.c)
-graph(c::HostCandidate) = graph(c.c)
-
 const gpu_gc = if CuArrays.functional()
     function()
         GC.gc()
@@ -110,19 +85,54 @@ else
     () -> nothing
 end
 
+"""
+    FileCandidate
 
-function eagermutation(x) end
-function eagermutation(v::InputVertex) end
-eagermutation(g::CompGraph) = eagermutation.(vertices(g::CompGraph))
-eagermutation(v::AbstractVertex) = eagermutation(base(v))
-eagermutation(v::CompVertex) = eagermutation(v.computation)
-eagermutation(m::AbstractMutableComp) = eagermutation(NaiveNASflux.wrapped(m))
-eagermutation(m::LazyMutable) = m(NoComp())
+Keeps `c` on disk when not in use and just maintains its [`DRef`](@ref).
 
-struct NoComp end
-function (::NaiveNASflux.MutableLayer)(x::NoComp) end
+Experimental feature. May not work as intended!
+"""
+struct FileCandidate{C} <: AbstractCandidate
+    c::Ref{MemPool.DRef}
+    function FileCandidate{C}(c::MemPool.DRef) where C
+        # Wrap the DRef in a Ref to enable finalizer to do delete file
+        ref = Ref(c)
+        finalizer(r -> MemPool.pooldelete(r[]), ref)
+        new{C}(ref)
+     end
+end
 
+function FileCandidate(c::C, tasklistener = identity) where C
+    cref = MemPool.poolset(c)
+    tasklistener(@async MemPool.movetodisk(cref))
+    return FileCandidate{C}(cref)
+end
 
+function callcand(f, c::FileCandidate, args...)
+    ret = f(MemPool.poolget(c.c[]), args...)
+    @async MemPool.movetodisk(c.c[])
+    return ret
+end
+
+function Serialization.serialize(s::AbstractSerializer, c::FileCandidate)
+    Serialization.writetag(s.io, Serialization.OBJECT_TAG)
+    serialize(s, FileCandidate)
+    serialize(s, NaiveGAflux.wrappedcand(c))
+end
+
+function Serialization.deserialize(s::AbstractSerializer, ::Type{FileCandidate})
+    wrapped = deserialize(s)
+    return FileCandidate(wrapped)
+end
+
+# Mutation needs to be enabled here?
+Flux.functor(c::FileCandidate) = callcand(Flux.functor, c)
+
+Flux.train!(c::FileCandidate, data) = callcand(Flux.train!, c, data)
+fitness(c::FileCandidate) = callcand(fitness, c)
+
+reset!(c::FileCandidate) = callcand(reset!, c)
+wrappedcand(c::FileCandidate) = MemPool.poolget(c.c[])
 
 """
     CacheCandidate <: AbstractCandidate
@@ -132,9 +142,9 @@ Caches fitness values produced by `c` until `reset!` is called.
 
 Useful with `HostCandidate` to prevent models from being pushed to/from GPU just to fetch fitness values.
 """
-mutable struct CacheCandidate <: AbstractCandidate
+mutable struct CacheCandidate{C} <: AbstractCandidate
     fitnesscache
-    c::AbstractCandidate
+    c::C
 end
 CacheCandidate(c::AbstractCandidate) = CacheCandidate(nothing, c)
 
@@ -151,8 +161,6 @@ function reset!(c::CacheCandidate)
     c.fitnesscache = nothing
     reset!(c.c)
 end
-graph(c::CacheCandidate) = graph(c.c)
-
 
 nparams(c::AbstractCandidate) = nparams(graph(c))
 nparams(g::CompGraph) = mapreduce(prod ∘ size, +, params(g).order)
@@ -187,15 +195,17 @@ end
 newcand(c::CandidateModel, mapfield) = CandidateModel(map(mapfield, getproperty.(c, fieldnames(CandidateModel)))...)
 newcand(c::HostCandidate, mapfield) = HostCandidate(newcand(c.c, mapfield))
 newcand(c::CacheCandidate, mapfield) = CacheCandidate(newcand(c.c, mapfield))
+newcand(c::FileCandidate, mapfield) = FileCandidate(callcand(newcand, c, mapfield))
 
 function clearstate(s) end
 clearstate(s::AbstractDict) = foreach(k -> delete!(s, k), keys(s))
 
 cleanopt(o::T) where T = foreach(fn -> clearstate(getfield(o, fn)), fieldnames(T))
+cleanopt(o::ShieldedOpt) = cleanopt(o.opt)
 cleanopt(o::Flux.Optimiser) = foreach(cleanopt, o.os)
 cleanopt(c::CandidateModel) = cleanopt(c.opt)
-cleanopt(c::HostCandidate) = cleanopt(c.c)
-cleanopt(c::CacheCandidate) = cleanopt(c.c)
+cleanopt(c::FileCandidate) = callcand(cleanopt, c.c)
+cleanopt(c::AbstractCandidate) = cleanopt(wrappedcand(c))
 
 """
     randomlrscale(rfun = BoundedRandomWalk(-1.0, 1.0))

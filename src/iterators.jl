@@ -195,6 +195,7 @@ function Base.iterate(itr::BatchIterator, start=1)
 end
 
 ## I *think* speed matters here, so...
+batch(s::Singleton, start, stop) = batch(val(s), start, stop)
 batch(a::AbstractArray{T,1}, start, stop) where T = view(a, start:stop)
 batch(a::AbstractArray{T,2}, start, stop) where T = view(a, :,start:stop)
 batch(a::AbstractArray{T,3}, start, stop) where T = view(a, :,:,start:stop)
@@ -218,7 +219,7 @@ Flux.onehotbatch(itr::BatchIterator, labels) = MapIterator(x -> Flux.onehotbatch
 
 Beware: The data is shuffled in place. Provide a copy if the unshuffled data is also needed.
 """
-struct ShuffleIterator{T<:AbstractArray, R<:AbstractRNG}
+struct ShuffleIterator{T, R<:AbstractRNG}
     base::BatchIterator{T}
     rng::R
 end
@@ -237,6 +238,7 @@ end
 Base.iterate(itr::ShuffleIterator, state) = iterate(itr.base, state)
 
 ## I *think* speed matters here, so...
+shufflelastdim!(rng, s::Singleton) = shufflelastdim!(rng, val(s))
 shufflelastdim!(rng, a::AbstractArray{T,1}) where T = a[:] = a[randperm(rng, size(a,1))]
 shufflelastdim!(rng, a::AbstractArray{T,2}) where T = a[:,:] = a[:, randperm(rng, size(a, 2))]
 shufflelastdim!(rng, a::AbstractArray{T,3}) where T = a[:,:,:] = a[:,:, randperm(rng, size(a, 3))]

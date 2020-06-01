@@ -15,7 +15,7 @@
 
     # Sample 5 models from the initial search space
     models = [CompGraph(inshape, initial_searchspace(inshape)) for _ in 1:5]
-    @test nv.(models) == [3, 5, 3, 4, 3]
+    @test nv.(models) == [3, 4, 3, 5, 3]
 
     # Workaround as losses fail with Flux.OneHotMatrix on Appveyor x86
     onehot(y) = Float32.(Flux.onehotbatch(y, 1:nlabels))
@@ -153,11 +153,11 @@ end
 
     # Sample one architecture from the search space
     graph1 = CompGraph(inputshape, archspace(inputshape))
-    @test nv(graph1) == 64
+    @test nv(graph1) == 126
 
     # And one more...
     graph2 = CompGraph(inputshape, archspace(inputshape))
-    @test nv(graph2) == 50
+    @test nv(graph2) == 103
 end
 
 @testset "Mutation examples" begin
@@ -185,7 +185,7 @@ end
     mutation(graph)
 
     # Input vertex is never mutated
-    @test nout.(vertices(graph)) == [3,5,8]
+    @test nout.(vertices(graph)) == [3,5,4]
 
     # Use the MutationShield trait to protect vertices from mutation
     outlayer = mutable(Dense(nout(layer2), 10), layer2, traitfun = MutationShield)
@@ -193,21 +193,21 @@ end
 
     mutation(graph)
 
-    @test nout.(vertices(graph)) == [3,6,5,10]
+    @test nout.(vertices(graph)) == [3,4,3,10]
 
     # In most cases it makes sense to mutate with a certain probability
     mutation = VertexMutation(MutationProbability(NoutMutation(-0.5, 0.5), 0.5))
 
     mutation(graph)
 
-    @test nout.(vertices(graph)) == [3,7,5,10]
+    @test nout.(vertices(graph)) == [3,3,2,10]
 
     # Or just chose to either mutate the whole graph or don't do anything
-    mutation = MutationProbability(VertexMutation(NoutMutation(-0.5, 0.5)), 0.5)
+    mutation = MutationProbability(VertexMutation(NoutMutation(-0.5, 0.5)), 0.98)
 
     mutation(graph)
 
-    @test nout.(vertices(graph)) == [3,10,6,10]
+    @test nout.(vertices(graph)) == [3,4,3,10]
 
     # Up until now, size changes have only been kept track of, but not actually applied
     @test nout_org.(vertices(graph)) == [3,4,5,10]
@@ -215,7 +215,7 @@ end
     Δoutputs(graph, v -> ones(nout_org(v)))
     apply_mutation(graph)
 
-    @test nout.(vertices(graph)) == nout_org.(vertices(graph)) == [3,10,6,10]
+    @test nout.(vertices(graph)) == nout_org.(vertices(graph)) == [3,4,3,10]
     @test size(graph(ones(3,1))) == (10, 1)
 
     # NeuronSelectMutation keeps track of changed vertices and performs the above steps when invoked
@@ -223,20 +223,20 @@ end
 
     mutation(graph)
 
-    @test nout.(vertices(graph)) == [3,11,7,10]
-    @test nout_org.(vertices(graph)) == [3,10,6,10]
+    @test nout.(vertices(graph)) == [3,3,4,10]
+    @test nout_org.(vertices(graph)) == [3,4,3,10]
 
     select(mutation.m)
 
-    @test nout_org.(vertices(graph)) == [3,11,7,10]
+    @test nout_org.(vertices(graph)) == [3,3,4,10]
     @test size(graph(ones(3,1))) == (10, 1)
 
     # Mutation can also be conditioned:
-    mutation = VertexMutation(MutationFilter(v -> nout(v) < 8, RemoveVertexMutation()))
+    mutation = VertexMutation(MutationFilter(v -> nout(v) < 4, RemoveVertexMutation()))
 
     mutation(graph)
 
-    @test nout.(vertices(graph)) == [3,11,10]
+    @test nout.(vertices(graph)) == [3,4,10]
 
     # When adding vertices it is probably a good idea to try to initialize them as identity mappings
     addmut = AddVertexMutation(VertexSpace(DenseSpace(5, identity)), IdentityWeightInit())
@@ -254,7 +254,7 @@ end
 
     @test_logs (:info, "Selecting parameters...") mutation(graph)
 
-    @test nout.(vertices(graph)) == nout_org.(vertices(graph)) == [3,8,11,10]
+    @test nout.(vertices(graph)) == nout_org.(vertices(graph)) == [3,2,4,10]
 end
 
 @testset "Fitness functions" begin
@@ -416,7 +416,7 @@ end
 
     evolvedcand = evofun(cachinghostcand)
 
-    @test typeof(evolvedcand) == typeof(cachinghostcand)
+    @test typeof(evolvedcand) <: CacheCandidate{<:HostCandidate{<:CandidateModel}}
 
     @test nout.(vertices(NaiveGAflux.graph(evolvedcand))) == [3, 4, 4]
     @test nout.(vertices(graph)) == [3, 3, 3]
@@ -425,7 +425,7 @@ end
     optimizer(c::CandidateModel) = typeof(c.opt)
 
     @test optimizer(cachinghostcand) == ADAM
-    @test optimizer(evolvedcand) == Nesterov
+    @test optimizer(evolvedcand) == Momentum
 end
 
 @testset "Evolution strategies" begin

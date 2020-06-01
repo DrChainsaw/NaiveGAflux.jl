@@ -542,7 +542,7 @@ NaiveNASflux.neuron_value(::Immutable, v) = ones(nout(v))
 NaiveNASflux.neuron_value(::MutationSizeTrait, v) = clean_values(cpu(neuron_value(v)),v)
 clean_values(::Missing, v) = ones(nout_org(v))
 # NaN should perhaps be < 0, but since SelectDirection is used, this might lead to inconsistent results as a subset of neurons for a vertex v whose output vertices are not part of the selection (typically because only v's inputs are touched) are selected. As the output vertices are not changed this will lead to a size inconsistency. Cleanest fix might be to separate "touch output" from "touch input" when formulating the output selection problem.
-clean_values(a::AbstractArray, v) = replace(a, NaN => 0.0001, 0.0 => 0.0001, Inf => 0.0001, -Inf => 0.0001)
+clean_values(a::AbstractArray{T}, v, repval=eps(T)) where T <: AbstractFloat = replace(a, NaN => repval, 0.0 => repval, Inf => repval, -Inf => repval)
 
 
 """
@@ -682,7 +682,7 @@ learningrate(o::ShieldedOpt) = learningrate(o.opt)
 learningrate(o) = o.eta
 
 newlr(o, lrf = nudgelr) = sameopt(o, lrf(learningrate(o)))
-sameopt(::T, lr) where T = T(lr)
+sameopt(o, lr) = @set o.eta = lr
 
 """
     AddOptimizerMutation{F} <: AbstractMutation{FluxOptimizer}

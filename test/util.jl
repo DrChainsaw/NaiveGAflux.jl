@@ -177,3 +177,34 @@ end
     @test om(NaiveGAflux.ShieldedOpt(Momentum())) == isopt
     @test om(Flux.Optimiser(Momentum(), Nesterov())) == isopt
 end
+
+@testset "Singleton" begin
+    import NaiveGAflux: Singleton, val
+    @testset "copy" begin
+        d = Ref("test")
+
+        s1 = Singleton(d)
+        s2 = Singleton(d)
+
+        @test val(s1) === val(s2)
+        @test deepcopy(val(s1)) !== deepcopy(val(s2))
+
+        @test val(deepcopy(s1)) === val(deepcopy(s2))
+        @test val(copy(s1)) === val(copy(s2))
+
+        @test unique(val.(deepcopy([s1,s2])))[] === unique(val.(deepcopy([s2,s1])))[]
+    end
+
+    @testset "Serialization" begin
+        using Serialization
+        d = [1,3,5]
+        s = Singleton(d)
+
+        io = (PipeBuffer(), PipeBuffer())
+        serialize.(io, Ref(s))
+
+        s1,s2  = deserialize.(io)
+
+        @test val(s1) === val(s2) === val(s)
+    end
+end

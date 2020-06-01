@@ -6,11 +6,11 @@ Abstract base type for strategies for how to evolve a population into a new popu
 abstract type AbstractEvolution end
 
 """
-    evolve!(e::AbstractEvolution, population::AbstractArray{<:AbstractCandidate})
+    evolve!(e::AbstractEvolution, population)
 
 Evolve `population` into a new population. New population may or may not contain same individuals as before.
 """
-function evolve! end
+evolve!(e::AbstractEvolution, population) = _evolve!(e, population)
 
 """
     NoOpEvolution <: AbstractEvolution
@@ -19,20 +19,20 @@ function evolve! end
 Does not evolve the given population.
 """
 struct NoOpEvolution <: AbstractEvolution end
-evolve!(::NoOpEvolution, pop) = pop
+_evolve!(::NoOpEvolution, pop) = pop
 
 """
     AfterEvolution <: AbstractEvolution
-    AfterEvolution(evo::AbstractEvolution, fun::Function)
+    AfterEvolution(evo, fun)
 
 Return `fun(newpop)` where `newpop = evolve!(e.evo, pop)` where `pop` is original population to evolve.
 """
-struct AfterEvolution <: AbstractEvolution
-    evo::AbstractEvolution
-    fun::Function
+struct AfterEvolution{F, E} <: AbstractEvolution
+    evo::E
+    fun::F
 end
 
-function evolve!(e::AfterEvolution, pop)
+function _evolve!(e::AfterEvolution, pop)
     newpop = evolve!(e.evo, pop)
     return e.fun(newpop)
 end
@@ -50,29 +50,31 @@ end
 
 """
     EliteSelection <: AbstractEvolution
-    EliteSelection(nselect::Integer)
+    EliteSelection(nselect::Integer, evo=NoOpEvolution())
 
-Selects the only the `nselect` highest fitness candidates.
+Selects the only the `nselect` highest fitness candidates to be passed on to `evo`.
 """
-struct EliteSelection <: AbstractEvolution
-    nselect::Integer
+struct EliteSelection{N, E} <: AbstractEvolution
+    nselect::N
+    evo::E
 end
-evolve!(e::EliteSelection, pop::AbstractArray{<:AbstractCandidate}) = partialsort(pop, 1:e.nselect, by=fitness, rev=true)
+EliteSelection(n::Integer) = EliteSelection(n, NoOpEvolution())
+_evolve!(e::EliteSelection, pop::AbstractArray{<:AbstractCandidate}) = evolve!(e.evo, partialsort(pop, 1:e.nselect, by=fitness, rev=true))
 
 """
     SusSelection <: AbstractEvolution
-    SusSelection(nselect::Integer, evo::AbstractEvolution, rng=rng_default)
+    SusSelection(nselect, evo, rng=rng_default)
 
 Selects candidates for further evolution using stochastic universal sampling.
 """
-struct SusSelection <: AbstractEvolution
-    nselect::Integer
-    evo::AbstractEvolution
-    rng
-    SusSelection(nselect, evo, rng=rng_default) = new(nselect, evo, rng)
+struct SusSelection{N, R, E} <: AbstractEvolution
+    nselect::N
+    evo::E
+    rng::R
 end
+SusSelection(nselect, evo) = SusSelection(nselect, evo, rng_default)
 
-function evolve!(e::SusSelection, pop::AbstractArray{<:AbstractCandidate})
+function _evolve!(e::SusSelection, pop::AbstractArray{<:AbstractCandidate})
     csfitness = cumsum(fitness.(pop))
 
     gridspace = csfitness[end] / e.nselect
@@ -88,7 +90,7 @@ end
 
 """
     TournamentSelection <: AbstractEvolution
-    TournamentSelection(nselect::Integer, k::Integer, p::Real, evo::AbstractEvolution, rng=rng_default)
+    TournamentSelection(nselect, k, p::Real, evo, rng=rng_default)
 
 Selects candidates for further evolution using tournament selection.
 
@@ -99,19 +101,19 @@ Winner of a tournament is selected as the candidate with highest fitness with a
 probability `p`, second highest fitness with a probability `p(p-1)`, third highest
 fitness with a probability of `p((p-1)^2)` and so on.
 """
-struct TournamentSelection <: AbstractEvolution
-    nselect::Integer
-    k::Integer
-    p::Vector{<:Real}
-    evo::AbstractEvolution
-    rng
-    function TournamentSelection(nselect, k, p, evo, rng=rng_default)
+struct TournamentSelection{N,P,E,R} <: AbstractEvolution
+    nselect::N
+    k::N
+    p::P
+    evo::E
+    rng::R
+    function TournamentSelection(nselect::N, k::N, p::P, evo::E, rng::R=rng_default) where {N, P, E, R}
         @assert 0 <= p <= 1 "0 <= p <= 1 not fulfilled! p = $p"
-        return new(nselect, k, p .* ((1 - p) .^ collect(0:k-1)), evo, rng)
+        return new{N, Vector{P}, E, R}(nselect, k, p .* ((1 - p) .^ collect(0:k-1)), evo, rng)
     end
 end
 
-function evolve!(e::TournamentSelection, pop::AbstractArray{<:AbstractCandidate})
+function _evolve!(e::TournamentSelection, pop::AbstractArray{<:AbstractCandidate})
     # Step 1: Create a random tournament order with as little repetition as possible so that we can select
     # e.nselect candidates out of e.nselect tournaments with e.k random candidates in each tournament
     n = e.nselect * e.k
@@ -129,26 +131,26 @@ end
 
 """
     CombinedEvolution <: AbstractEvolution
-    CombinedEvolution(evos::AbstractArray{<:AbstractEvolution})
-    CombinedEvolution(evos::AbstractEvolution...)
+    CombinedEvolution(evos::AbstractArray)
+    CombinedEvolution(evos...)
 
-Combines the evolved populations from several `AbstractEvolutions` into one population.
+Combines the evolved populations from several evolutions into one population.
 """
-struct CombinedEvolution <: AbstractEvolution
-    evos::AbstractArray{<:AbstractEvolution}
+struct CombinedEvolution{E<:AbstractArray} <: AbstractEvolution
+    evos::E
 end
-CombinedEvolution(evos::AbstractEvolution...) = CombinedEvolution(collect(evos))
-evolve!(e::CombinedEvolution, pop) = mapfoldl(evo -> evolve!(evo, pop), vcat, e.evos)
+CombinedEvolution(evos...) = CombinedEvolution(collect(evos))
+_evolve!(e::CombinedEvolution, pop) = mapfoldl(evo -> evolve!(evo, pop), vcat, e.evos)
 
 """
     EvolveCandidates <: AbstractEvolution
-    EvolveCandidates(fun::Function)
+    EvolveCandidates(fun)
 
-Applies `fun` for each candidate in a given population.
+Applies `fun(c)` for each candidate `c` in a given population.
 
 Useful with [`evolvemodel`](@ref).
 """
-struct EvolveCandidates <: AbstractEvolution
-    fun::Function
+struct EvolveCandidates{F} <: AbstractEvolution
+    fun::F
 end
-evolve!(e::EvolveCandidates, pop) = map(e.fun, pop)
+_evolve!(e::EvolveCandidates, pop) = map(e.fun, pop)

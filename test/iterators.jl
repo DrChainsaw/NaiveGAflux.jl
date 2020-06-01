@@ -68,6 +68,13 @@ end
     @test "biter: $itr" == "biter: BatchIterator(size=(2, 3, 4, 5), batchsize=2)"
 end
 
+@testset "BatchIterator singleton" begin
+    itr = BatchIterator(Singleton([1,3,5,7,9,11]), 2)
+    for (i, b) in enumerate(itr)
+        @test b == [1,3] .+ 4(i-1)
+    end
+end
+
 @testset "ShuffleIterator ndims $(length(dims))" for dims in ((5), (3,4), (2,3,4), (2,3,4,5), (2,3,4,5,6), (2,3,4,5,6,7))
     sitr = ShuffleIterator(collect(reshape(1:prod(dims),dims...)), 2, MersenneTwister(123))
     bitr = BatchIterator(collect(reshape(1:prod(dims),dims...)), 2)
@@ -79,4 +86,12 @@ end
         push!(nall, nb...)
     end
     @test sall == nall
+end
+
+@testset "ShuffleIterator singleton" begin
+    itr = ShuffleIterator(Singleton([1,3,5,7,9,11]), 2, MersenneTwister(123))
+    for b in itr
+        @test length(b) == 2
+    end
+    @test sort(vcat(collect(itr)...)) == [1,3,5,7,9,11]
 end

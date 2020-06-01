@@ -19,6 +19,7 @@
         NaiveGAflux.fitness(c::PlotTestCand) = c.fitness
 
         try
+            import MemPool
             @testset "PlotFitness" begin
 
                 p = PlotFitness((args...;kwargs...) -> [], testdir)
@@ -76,10 +77,19 @@
 
                 @test p2(PlotTestCand.(3:5, [30, 40, 50], [300, 400, 500]))
                 @test p2.data ==  [[1 99 Descent; 2 198 Descent; 3 297 ADAM], [2 198 Descent; 3 297 ADAM; 4 396 ADAM],[3 297 ADAM; 4 396 ADAM; 5 495 ADAM]]
+
+                p3 = ScatterOpt((args...;kwargs...) -> true, testdir)
+                @test p3(NaiveGAflux.FileCandidate.(PlotTestCand.(3:5, [30, 40, 50], [300, 400, 500])))
+                # Test that something was added
+                @test length(p3.data) == 1 + length(p2.data)
+                # What was added is just a copy paste of the last thing inserted to p2 so this lazy check works
+                @test p3.data[end] == p2.data[end]
+
             end
 
         finally
             rm(testdir, force=true, recursive=true)
+            MemPool.cleanup()
         end
 
         @testset "MultiPlot" begin

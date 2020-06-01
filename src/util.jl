@@ -131,9 +131,14 @@ function persist(a::PersistentArray)
         serialize(filename(a, i), v)
     end
 end
-FileIO.filename(a::PersistentArray, i::Int) = joinpath(a.savedir, "$i$(a.suffix)")
-Base.rm(a::PersistentArray; force=true, recursive=true) = rm(a.savedir, force=force, recursive=recursive)
-Base.rm(a::PersistentArray, i::Int, force=false, recursive=true) = rm(filename(a,i), force=force, recursive=recursive)
+filename(a::PersistentArray, i::Int) = joinpath(a.savedir, "$i$(a.suffix)")
+function Base.rm(a::PersistentArray; force=true, recursive=true)
+    foreach(i -> rm(a, i; force=force, recursive=recursive), 1:length(a))
+    if readdir(a.savedir) |> isempty
+        rm(a.savedir; force=force, recursive=recursive)
+    end
+end
+Base.rm(a::PersistentArray, i::Int; force=false, recursive=true) = rm(filename(a,i), force=force, recursive=recursive)
 
 Base.size(a::PersistentArray) = size(a.data)
 Base.getindex(a::PersistentArray, i::Int) = getindex(a.data, i)
@@ -188,9 +193,6 @@ Shields `o` from mutation by `OptimizerMutation`.
 """
 struct ShieldedOpt{O}
     opt::O
-
-    ShieldedOpt(o::O) where O = new{O}(o)
-    ShieldedOpt{O}(args...) where O = new{O}(O(args...))
 end
 Flux.Optimise.apply!(o::ShieldedOpt, args...) = Flux.Optimise.apply!(o.opt, args...)
 
@@ -209,7 +211,8 @@ function mergeopts(t::Type{T}, os...) where T
 end
 mergeopts() = []
 mergeopts(t::Type{T}, os::T...) where T = [mergeopts(os...)]
-mergeopts(os::T...) where T = T(prod(learningrate.(os)))
+mergeopts(os...) = first(@set os[1].eta = (prod(learningrate.(os))))
+mergeopts(os::ShieldedOpt{T}...) where T = ShieldedOpt(mergeopts(map(o -> o.opt, os)...))
 mergeopts(os::WeightDecay...) = WeightDecay(mapreduce(o -> o.wd, *, os))
 
 """
@@ -238,3 +241,39 @@ optmap(fopt, felse=identity) = x -> optmap(fopt, x, felse)
 optmap(fopt, x, felse) = optmap(opttype(x), fopt, x, felse)
 optmap(n, fopt, x, felse) = felse(x)
 optmap(::FluxOptimizer, fopt, o, felse) = fopt(o)
+
+
+"""
+    struct Singleton{T}
+    Singleton(val::T)
+
+Wrapper for `val` which prevents it from being copied if the wrapping singleton is copied using `copy` and `deepcopy`.
+
+Also makes sure that only one unique copy of `val` is created when deserializing a serialized `Singleton`.
+"""
+struct Singleton{T}
+    val::T
+    function Singleton(val::T) where T
+        s = new{T}(val)
+        singletons[val] = s
+        return s
+    end
+end
+val(s::Singleton) = s.val
+
+const singletons = WeakKeyDict()
+function Serialization.deserialize(s::AbstractSerializer, ::Type{Singleton{T}}) where T
+    val = deserialize(s)
+    return get!(()-> Singleton(val), singletons, val)
+end
+
+Base.deepcopy_internal(s::Singleton, stackdict::IdDict) = s
+Base.copy(s::Singleton) = s
+
+Base.iterate(s::Singleton, state...) = iterate(val(s), state)
+
+Base.length(s::Singleton) = length(val(s))
+Base.size(s::Singleton) = size(val(s))
+
+Base.IteratorEltype(s::Singleton) = Base.IteratorEltype(val(s))
+Base.IteratorSize(s::Singleton) = Base.IteratorSize(val(s))
