@@ -65,6 +65,7 @@ export PlotFitness, ScatterPop, ScatterOpt, MultiPlot, CbAll
 include("util.jl")
 include("archspace.jl")
 include("mutation.jl")
+include("crossover.jl")
 include("fitness.jl")
 include("candidate.jl")
 include("evolve.jl")
