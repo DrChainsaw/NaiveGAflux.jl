@@ -12,9 +12,9 @@ function crossoverswap(v1::AbstractVertex, v2::AbstractVertex, strategy = () -> 
      return v1,v2
 end
 function crossoverswap(vin1::AbstractVertex, vout1::AbstractVertex, vin2::AbstractVertex, vout2::AbstractVertex, strategy = () -> PostAlignJuMP())
+    # TODO: Handle failure cases (if possible to fail)
     i1, o1 = stripedges(vin1, vout1)
     i2, o2 = stripedges(vin2, vout2)
-
 
     foreach(iv -> create_edge!(iv, vin2; strategy = strategy()), i1)
     foreach(ov -> create_edge!(vout2, ov; strategy = strategy()), o1)
