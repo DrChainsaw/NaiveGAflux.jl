@@ -16,18 +16,35 @@
                 return CompGraph(vi, vo)
             end
 
-            ga = g(4:6, "a")
-            gb = g(1:3, "b")
+            @testset "Single vertex swap" begin
+                ga = g(4:6, "a")
+                gb = g(1:3, "b")
 
-            crossoverswap(vertices(ga)[3], vertices(gb)[3])
-            apply_mutation(ga)
-            apply_mutation(gb)
+                crossoverswap(vertices(ga)[3], vertices(gb)[3])
+                apply_mutation(ga)
+                apply_mutation(gb)
 
-            @test nout.(vertices(ga)) == [3,4,2,6]
-            @test nout.(vertices(gb)) == [3,1,5,3]
+                @test nout.(vertices(ga)) == [3,4,2,6]
+                @test nout.(vertices(gb)) == [3,1,5,3]
 
-            @test size(ga(ones(3, 2))) == (6, 2)
-            @test size(gb(ones(3, 2))) == (3, 2)
+                @test size(ga(ones(3, 2))) == (6, 2)
+                @test size(gb(ones(3, 2))) == (3, 2)
+            end
+
+            @testset "Path swap" begin
+                ga = g(4:8, "a")
+                gb = g(1:5, "b")
+
+                crossoverswap(vertices(ga)[2], vertices(ga)[5], vertices(gb)[3], vertices(gb)[4])
+                apply_mutation(ga)
+                apply_mutation(gb)
+
+                @test nout.(vertices(ga)) == [3,2,3,8]
+                @test nout.(vertices(gb)) == [3,1,4,5,6,7,4,5]
+
+                @test size(ga(ones(3, 2))) == (8, 2)
+                @test size(gb(ones(3, 2))) == (5, 2)
+            end
         end
 
         @testset "Swap add and conc" begin
