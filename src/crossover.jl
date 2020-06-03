@@ -30,7 +30,7 @@ stripedges(vin, vout) = stripinedges!(vin)...,stripoutedges!(vout)...
 function stripinedges!(v)
     i = copy(inputs(v))
     foreach(iv -> remove_edge!(iv, v; strategy = NoSizeChange()), i)
-    return i, 1:length(inputs(v)) # Inds mainly for symmetry with stripoutedges
+    return i, 1:length(i) # Inds mainly for symmetry with stripoutedges
 end
 
 function stripoutedges!(v)
