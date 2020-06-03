@@ -16,11 +16,11 @@ function crossoverswap(vin1::AbstractVertex, vout1::AbstractVertex, vin2::Abstra
     i1, ininds1, o1, oinds1 = stripedges(vin1, vout1)
     i2, ininds2, o2, oinds2 = stripedges(vin2, vout2)
 
-    foreach(iv -> create_edge!(iv, vin2; strategy = strategy()), i1)
-    foreach(ov -> create_edge!(vout2, ov; strategy = strategy()), o1)
+    addinedges!(vin2, i1, ininds1, strategy())
+    addoutedges!(vout2, o1, oinds1, strategy())
 
-    foreach(iv -> create_edge!(iv, vin1; strategy = strategy()), i2)
-    foreach(ov -> create_edge!(vout1, ov; strategy = strategy()), o2)
+    addinedges!(vin1, i2, ininds2, strategy())
+    addoutedges!(vout1, o2, oinds2, strategy())
 
     return vin1, vout1, vin2, vout2
 end
@@ -28,11 +28,6 @@ end
 stripedges(vin, vout) = stripinedges!(vin)...,stripoutedges!(vout)...
 
 function stripinedges!(v)
-    # inds = mapreduce(vcat, unique(inputs(v))) do vi
-    #     @show name(vi)
-    #     @show name.(outputs(vi))
-    #     findall(vio -> vio == v, outputs(vi))
-    # end
     inds = 1:length(inputs(v))
     i = copy(inputs(v))
     foreach(iv -> remove_edge!(iv, v; strategy = NoSizeChange()), i)
@@ -49,11 +44,13 @@ function stripoutedges!(v)
 end
 
 function addinedges!(v, vis, inds, strat)
-    foreach((iv, pos) -> create_edge!(iv, v; pos=pos, strategy=NoSizeChange()), vis, inds)
+    strats = (i == length(vis) ? strat : NoSizeChange() for i in eachindex(vis))
+    foreach((iv, pos, s) -> create_edge!(iv, v; pos=pos, strategy=s), vis, inds, strats)
 end
 
 function addoutedges!(v, vos, inds, strat)
-    foreach((ov, pos) -> create_edge!(v, ov; pos=pos, strategy=NoSizeChange()), vos, inds)
+    strats = (i == length(vos) ? strat : NoSizeChange() for i in eachindex(vos))
+    foreach((ov, pos, s) -> create_edge!(v, ov; pos=pos, strategy=s), vos, inds, strats)
 end
 
 # TODO Rewrite in a non-destrucive manner. LightGraphs?
@@ -65,10 +62,10 @@ function swappablefrom(v)
 end
 
 function swappablefrom(v, seen)
+    push!(seen, v)
     i, ininds = stripinedges!(v)
     ok = all(vv -> vv in seen, all_in_graph(v))
     addinedges!(v, i, ininds, NoSizeChange())
-    push!(seen, v)
     swappable = mapreduce(vi -> swappablefrom(vi, seen), vcat, inputs(v), init=[])
     return ok ? vcat(v, swappable) : swappable
 end

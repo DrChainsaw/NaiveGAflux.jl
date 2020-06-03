@@ -114,7 +114,7 @@
             apply_mutation(ga)
             apply_mutation(gb)
 
-            @test name.(vertices(ga)) == ["a.in", "a.dv1", "a.dvb1", "a.dvba1", "a.dvbb1", "a.conc_ba_bb", "b.dvbb1", "a.conc_a_b", "a.out"]
+            @test name.(vertices(ga)) == ["a.in", "a.dv1", "b.dvbb1", "a.dvb1", "a.dvba1", "a.dvbb1", "a.conc_ba_bb", "a.conc_a_b", "a.out"]
             @test size(ga(ones(3,2))) == (4, 2)
 
             @test name.(vertices(gb)) == ["b.in", "b.dv1", "b.dva1", "b.dvaa1", "b.dvaa2", "b.dvab1", "b.dvab2", "b.add_aa_bb", "b.dvb1", "b.conc_dvb1_dvab2", "a.dva1", "a.dvaa1", "a.dvaa2", "a.dvab1", "a.dvab2", "a.add_aa_bb", "b.conc_ba_bb", "b.conc_a_b", "b.out"]
@@ -179,13 +179,24 @@
             end
 
             g_org = g("a")
+            g_new = copy(g_org)
+
+            indata = randn(MersenneTwister(0), 3, 2)
+            out_org = g_org(indata)
+
+            swappable_new = swappablefrom(v4n(g_new, "a.dva1"))
+            @test name.(swappable_new) == ["a.dva1", "a.ca1"]
+            @test name.(vertices(g_org)) == name.(vertices(g_new))
+
+            @test g_org(indata) == g_new(indata) == out_org
+
             vs_org = vertices(g_org)
 
-            dva1 = v4n(g_org, "a.dva1")
-            swappable = swappablefrom(dva1)
-            @test name.(vertices(g_org)) == name.(vs_org)
+            swappable_org = swappablefrom(v4n(g_org, "a.dva1"))
+            crossoverswap(swappable_org[end], swappable_org[1], swappable_new[end], swappable_new[1])
 
-
+            @test name.(vertices(g_org)) == name.(vertices(g_new)) == name.(vs_org)
+            @test g_org(indata) == g_new(indata) == out_org
 
         end
     end
