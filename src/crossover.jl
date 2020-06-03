@@ -28,10 +28,9 @@ end
 stripedges(vin, vout) = stripinedges!(vin)...,stripoutedges!(vout)...
 
 function stripinedges!(v)
-    inds = 1:length(inputs(v))
     i = copy(inputs(v))
     foreach(iv -> remove_edge!(iv, v; strategy = NoSizeChange()), i)
-    return i, inds
+    return i, 1:length(inputs(v)) # Inds mainly for symmetry with stripoutedges
 end
 
 function stripoutedges!(v)
@@ -44,28 +43,43 @@ function stripoutedges!(v)
 end
 
 function addinedges!(v, vis, inds, strat)
+    # Only need to align sizes after the very last edge (I hope)
     strats = (i == length(vis) ? strat : NoSizeChange() for i in eachindex(vis))
     foreach((iv, pos, s) -> create_edge!(iv, v; pos=pos, strategy=s), vis, inds, strats)
 end
 
 function addoutedges!(v, vos, inds, strat)
+    # Only need to align sizes after the very last edge (I hope)
     strats = (i == length(vos) ? strat : NoSizeChange() for i in eachindex(vos))
     foreach((ov, pos, s) -> create_edge!(v, ov; pos=pos, strategy=s), vos, inds, strats)
 end
 
-# TODO Rewrite in a non-destrucive manner. LightGraphs?
-function swappablefrom(v)
+"""
+    separablefrom(v)
+
+Return an array of vertices for which may be separated from the graph.
+
+More precisely, a connected component which is not connected to the graph can be created if
+    1. All output edges from `v` are removed
+    2. All input edges from a vertex `v'` in the returned array are removed
+
+The disconncted component has `v'` as first vertex and `v` as last and contains all vertices in between them.
+
+Note that output always contains `v`, i.e it is never empty.
+"""
+function separablefrom(v)
+    # Rewrite in a guaranteed to be non-destrucive manner? LightGraphs?
     o, oinds = stripoutedges!(v)
-    swappable = swappablefrom(v, AbstractVertex[v])
+    swappable = separablefrom(v, AbstractVertex[v])
     addoutedges!(v, o, oinds, NoSizeChange())
     return swappable
 end
 
-function swappablefrom(v, seen)
+function separablefrom(v, seen)
     push!(seen, v)
     i, ininds = stripinedges!(v)
     ok = all(vv -> vv in seen, all_in_graph(v))
     addinedges!(v, i, ininds, NoSizeChange())
-    swappable = mapreduce(vi -> swappablefrom(vi, seen), vcat, inputs(v), init=[])
+    swappable = mapreduce(vi -> separablefrom(vi, seen), vcat, inputs(v), init=[])
     return ok ? vcat(v, swappable) : swappable
 end

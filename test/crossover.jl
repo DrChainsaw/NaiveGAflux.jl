@@ -1,7 +1,7 @@
 @testset "Crossover" begin
 
     @testset "CrossoverSwap" begin
-        import NaiveGAflux: crossoverswap, swappablefrom
+        import NaiveGAflux: crossoverswap, separablefrom
 
         iv(np) = inputvertex("$np.in", 3, FluxDense())
         dv(in, outsize, name) = mutable(name, Dense(nout(in), outsize), in)
@@ -96,16 +96,16 @@
 
             ga = g("a")
             vsa = vertices(ga)
-            aswap = swappablefrom(v4n(ga, "a.add_aa_bb"))
+            aswap = separablefrom(v4n(ga, "a.add_aa_bb"))
             @test name.(vsa) == name.(vertices(ga))
             @test name.(aswap) == ["a.add_aa_bb", "a.dva1"]
 
             gb = g("b", true)
             vsb = vertices(gb)
-            @test name.(swappablefrom(v4n(gb, "b.add_aa_bb"))) == ["b.add_aa_bb"]
+            @test name.(separablefrom(v4n(gb, "b.add_aa_bb"))) == ["b.add_aa_bb"]
             @test name.(vsb) == name.(vertices(gb))
 
-            bswap = swappablefrom(v4n(gb, "b.dvbb1"))
+            bswap = separablefrom(v4n(gb, "b.dvbb1"))
             @test name.(vsb) == name.(vertices(gb))
             @test name.(bswap) == ["b.dvbb1"]
 
@@ -121,7 +121,7 @@
             @test size(gb(ones(3,2))) == (4, 2)
         end
 
-        @testset "Swapping preserve edge order" begin
+        @testset "Swapping preserves edge order" begin
             import NaiveGAflux: stripoutedges!, stripinedges!, addoutedges!, addinedges!
             using Random
             function g(np)
@@ -184,7 +184,7 @@
             indata = randn(MersenneTwister(0), 3, 2)
             out_org = g_org(indata)
 
-            swappable_new = swappablefrom(v4n(g_new, "a.dva1"))
+            swappable_new = separablefrom(v4n(g_new, "a.dva1"))
             @test name.(swappable_new) == ["a.dva1", "a.ca1"]
             @test name.(vertices(g_org)) == name.(vertices(g_new))
 
@@ -192,7 +192,7 @@
 
             vs_org = vertices(g_org)
 
-            swappable_org = swappablefrom(v4n(g_org, "a.dva1"))
+            swappable_org = separablefrom(v4n(g_org, "a.dva1"))
             crossoverswap(swappable_org[end], swappable_org[1], swappable_new[end], swappable_new[1])
 
             @test name.(vertices(g_org)) == name.(vertices(g_new)) == name.(vs_org)
