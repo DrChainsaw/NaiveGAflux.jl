@@ -1,10 +1,13 @@
 @testset "Crossover" begin
 
     @testset "CrossoverSwap" begin
-        import NaiveGAflux: crossoverswap
+        import NaiveGAflux: crossoverswap, swappablefrom
 
         iv(np) = inputvertex("$np.in", 3, FluxDense())
         dv(in, outsize, name) = mutable(name, Dense(nout(in), outsize), in)
+
+        v4n(graph::CompGraph, want) = v4n(vertices(graph), want)
+        v4n(vs, want) = vs[findfirst(v -> want == name(v), vs)]
 
         @testset "Simple Dense swap" begin
 
@@ -70,25 +73,6 @@
             @test size(gb(ones(3, 2))) == (3, 2)
         end
 
-        import NaiveGAflux: stripedges, stripinputs, stripoutputs
-        # TODO Rewrite in a non-destrucive manner. LightGraphs?
-        function swappablefrom(v)
-            myinds = map(vo -> indexin([v], inputs(vo)), outputs(v))
-            o = stripoutputs(v)
-            swappable = swappablefrom(v, AbstractVertex[v])
-            foreach((ov, pos) -> create_edge!(v, ov; pos=pos[], strategy = NoSizeChange()), o, myinds)
-            return swappable
-        end
-
-        function swappablefrom(v, seen)
-            i = stripinputs(v)
-            ok = all(vv -> vv in seen, all_in_graph(v))
-            foreach(iv -> create_edge!(iv, v; strategy=NoSizeChange()), i)
-            push!(seen, v)
-            swappable = mapreduce(vi -> swappablefrom(vi, seen), vcat, inputs(v), init=[])
-            return ok ? vcat(v, swappable) : swappable
-        end
-
         @testset "Find swappable path" begin
             function g(np, bconnect = false)
                 vi = iv(np)
@@ -109,9 +93,6 @@
                 conc_a_b = concat("$np.conc_a_b", add_aa_bb, conc_ba_bb)
                 return CompGraph(vi, dv(conc_a_b, 4, "$np.out"))
             end
-
-            v4n(graph::CompGraph, want) = v4n(vertices(graph), want)
-            v4n(vs, want) = vs[findfirst(v -> want == name(v), vs)]
 
             ga = g("a")
             vsa = vertices(ga)
@@ -138,6 +119,74 @@
 
             @test name.(vertices(gb)) == ["b.in", "b.dv1", "b.dva1", "b.dvaa1", "b.dvaa2", "b.dvab1", "b.dvab2", "b.add_aa_bb", "b.dvb1", "b.conc_dvb1_dvab2", "a.dva1", "a.dvaa1", "a.dvaa2", "a.dvab1", "a.dvab2", "a.add_aa_bb", "b.conc_ba_bb", "b.conc_a_b", "b.out"]
             @test size(gb(ones(3,2))) == (4, 2)
+        end
+
+        @testset "Swapping preserve edge order" begin
+            import NaiveGAflux: stripoutedges!, stripinedges!, addoutedges!, addinedges!
+            using Random
+            function g(np)
+                vi = iv(np)
+                dv1 = dv(vi, 2, "$np.dv1")
+                dv2 = dv(vi, 3, "$np.dv2")
+                dv3 = dv(vi, 4, "$np.dv3")
+                ca1 = concat("$np.ca1", dv1, dv2, dv1, dv3, dv1)
+                dva1 = dv(ca1, 4, "$np.dva1")
+                dvb1 = dv(dv2, 3, "$np.dvb1")
+                c2 = concat("$np.c2", dvb1, dva1, dvb1, dva1)
+                c3 = concat("$np.c3", dva1, dva1, dvb1)
+                c4 = concat("$np.c4", c2,c3)
+                return CompGraph(vi, c4)
+            end
+            @testset "Strip and add out edges" begin
+                gg = g("a")
+                dva1 = v4n(gg, "a.dva1")
+
+                indata = randn(MersenneTwister(0), 3,2)
+                graphout_before = gg(indata)
+
+                expected1 = name.(outputs(dva1))
+                expected2 = mapreduce(vo -> name.(inputs(vo)), vcat, unique(outputs(dva1)))
+
+                o, oi = stripoutedges!(dva1)
+                @test outputs(dva1) == []
+                addoutedges!(dva1, o, oi, NoSizeChange())
+                actual1 = name.(outputs(dva1))
+                actual2 = mapreduce(vo -> name.(inputs(vo)), vcat, unique(outputs(dva1)))
+
+                @test actual1 == expected1
+                @test actual2 == expected2
+
+                @test gg(indata) == graphout_before
+            end
+
+            @testset "Strip and add in edges" begin
+                gg = g("a")
+                ca1 = v4n(gg, "a.ca1")
+
+                indata = randn(MersenneTwister(0), 3,2)
+                graphout_before = gg(indata)
+
+                expected = name.(inputs(ca1))
+
+                i, ii = stripinedges!(ca1)
+                @test inputs(ca1) == []
+                addinedges!(ca1, i, ii, NoSizeChange())
+                actual = name.(inputs(ca1))
+
+                @test actual == expected
+
+                @test gg(indata) == graphout_before
+            end
+
+            g_org = g("a")
+            vs_org = vertices(g_org)
+
+            dva1 = v4n(g_org, "a.dva1")
+            swappable = swappablefrom(dva1)
+            @test name.(vertices(g_org)) == name.(vs_org)
+
+
+
         end
     end
 end
