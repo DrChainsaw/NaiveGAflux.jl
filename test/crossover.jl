@@ -191,20 +191,22 @@
             indata = randn(MersenneTwister(0), 3, 2)
             out_org = g_org(indata)
 
-            swappable_new = separablefrom(v4n(g_new, "a.dva1"))
+            swappable_new = v4n.(Ref(g_new), ["a.dva1", "a.ca1"]) #separablefrom(v4n(g_new, "a.dva1"))
             @test name.(swappable_new) == ["a.dva1", "a.ca1"]
             @test name.(vertices(g_org)) == name.(vertices(g_new))
 
             @test g_org(indata) == g_new(indata) == out_org
 
             vs_org = vertices(g_org)
+            nouts_org = nout.(vs_org)
 
-            swappable_org = separablefrom(v4n(g_org, "a.dva1"))
+            swappable_org = v4n.(Ref(g_org), ["a.dva1", "a.ca1"])##separablefrom(v4n(g_org, "a.dva1"))
             crossoverswap(swappable_org[end], swappable_org[1], swappable_new[end], swappable_new[1])
-            apply_mutation(ga)
-            apply_mutation(gb)
+            apply_mutation(g_org)
+            apply_mutation(g_new)
 
             @test name.(vertices(g_org)) == name.(vertices(g_new)) == name.(vs_org)
+            @test nout.(vertices(g_org)) == nout.(vertices(g_new)) == nouts_org
             @test g_org(indata) == g_new(indata) == out_org
         end
 

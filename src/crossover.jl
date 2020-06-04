@@ -25,9 +25,6 @@ function crossoverswap(vin1::AbstractVertex, vout1::AbstractVertex, vin2::Abstra
 
         strat(n) = nr >= n ? PostAlignJuMP() : NoSizeChange()
 
-        @show out_inds.(op.(filter(ii -> ii isa MutationVertex, i1)))
-        @show in_inds.(op.(o1))
-
         addinedges!(vin1, i1, strat(1))
         addoutedges!(vout1, o1, strat(2))
 
@@ -59,25 +56,25 @@ function stripinedges!(v)
     return i
 end
 
-function stripoutedges!(v)
-    # Does not use the same method as stripinedges as this destroys the mutation metadata in the outputs, eventually
-    # causing neurons to be unnecessary recreated. Instead, we insert a new dummy neuron which acts as a buffer for
-    # which we don't care that it is corrupted as we will anyways remove it.
-    insert!(v, v -> conc(v; dims=1), reverse)
-    dummy = outputs(v)[]
-    remove_edge!(v, dummy; strategy = NoSizeChange())
-    return dummy
-end
-
 function addinedges!(v, vis, strat = default_crossoverswap_strategy())
     # Only need to align sizes after the very last edge (I hope)
     strats = (i == length(vis) ? strat : NoSizeChange() for i in eachindex(vis))
     return map((iv, s) -> create_edge!(iv, v; strategy=s), vis, strats)
 end
 
+function stripoutedges!(v)
+    # Does not use the same method as stripinedges as this destroys the mutation metadata in the outputs, eventually
+    # causing neurons to be unnecessary recreated. Instead, we insert a new dummy neuron which acts as a buffer for
+    # which we don't care that it is corrupted as we will anyways remove it.
+    insert!(v, v -> conc(v; dims=1, traitdecoration = t -> NamedTrait(t, "$(name(v)).dummy")), reverse)
+    dummy = outputs(v)[]
+    remove_edge!(v, dummy; strategy = NoSizeChange())
+    return dummy
+end
+
 function addoutedges!(v, dummy, strat = default_crossoverswap_strategy())
     create_edge!(v, dummy, strategy = strat)
-    ret = remove!(dummy, RemoveStrategy(strat))
+    ret = remove!(dummy, RemoveStrategy(NoSizeChange()))
     return ret
 end
 
@@ -98,7 +95,7 @@ function separablefrom(v)
     # Rewrite in a guaranteed to be non-destrucive manner? LightGraphs?
     o = stripoutedges!(v)
     swappable = separablefrom(v, AbstractVertex[v])
-    addoutedges!(v, o)
+    addoutedges!(v, o, NoSizeChange())
     return swappable
 end
 
@@ -106,7 +103,7 @@ function separablefrom(v, seen)
     push!(seen, v)
     ins = stripinedges!(v)
     ok = all(vv -> vv in seen, all_in_graph(v))
-    addinedges!(v, ins)
+    addinedges!(v, ins, NoSizeChange())
     swappable = mapreduce(vi -> separablefrom(vi, seen), vcat, inputs(v), init=[])
     return ok ? vcat(v, swappable) : swappable
 end
