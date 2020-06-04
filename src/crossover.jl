@@ -7,14 +7,15 @@ Swap vertices `vin1` to `vout1` with `vin2` and `vout2` so that `vin1` to `vin2`
 
 Vertices may come from different graphs.
 """
-function crossoverswap(v1::AbstractVertex, v2::AbstractVertex, strategy = default_crossoverswap_strategy)
-     crossoverswap(v1,v1,v2,v2, strategy)
+function crossoverswap(v1::AbstractVertex, v2::AbstractVertex)
+     crossoverswap(v1,v1,v2,v2)
      return v1,v2
 end
-function crossoverswap(vin1::AbstractVertex, vout1::AbstractVertex, vin2::AbstractVertex, vout2::AbstractVertex, strategy = default_crossoverswap_strategy)
+function crossoverswap(vin1::AbstractVertex, vout1::AbstractVertex, vin2::AbstractVertex, vout2::AbstractVertex)
 
-    i1, ininds1, o1, oinds1 = stripedges(vin1, vout1)
-    i2, ininds2, o2, oinds2 = stripedges(vin2, vout2)
+    # Beware: ix and ox are not the same thing!! Check the strip function
+    i1, o1 = stripedges(vin1, vout1)
+    i2, o2 = stripedges(vin2, vout2)
 
     function revert(nr)
         nr >= 1 && stripinedges!(vin2)
@@ -24,19 +25,22 @@ function crossoverswap(vin1::AbstractVertex, vout1::AbstractVertex, vin2::Abstra
 
         strat(n) = nr >= n ? PostAlignJuMP() : NoSizeChange()
 
-        addinedges!(vin1, i1, ininds1, strat(1))
-        addoutedges!(vout1, o1, oinds1, strat(2))
+        @show out_inds.(op.(filter(ii -> ii isa MutationVertex, i1)))
+        @show in_inds.(op.(o1))
 
-        addinedges!(vin2, i2, ininds2, strat(3))
-        addoutedges!(vout2, o2, oinds2, strat(4))
+        addinedges!(vin1, i1, strat(1))
+        addoutedges!(vout1, o1, strat(2))
+
+        addinedges!(vin2, i2, strat(3))
+        addoutedges!(vout2, o2, strat(4))
         return vin1, vout1, vin2, vout2
     end
 
-    addinedges!(vin2, i1, ininds1, strategy()) |> all || return revert(1)
-    addoutedges!(vout2, o1, oinds1, strategy()) |> all || return revert(2)
+    addinedges!(vin2, i1) |> all || return revert(1)
+    addoutedges!(vout2, o1) |> all || return revert(2)
 
-    addinedges!(vin1, i2, ininds2, strategy()) |> all || return revert(3)
-    addoutedges!(vout1, o2, oinds2, strategy()) |> all || return revert(4)
+    addinedges!(vin1, i2) |> all || return revert(3)
+    addoutedges!(vout1, o2) |> all || return revert(4)
 
     return vin1, vout1, vin2, vout2
 end
@@ -47,33 +51,34 @@ NaiveNASlib.prealignsizes(s::FailAlignSizeNoOp, vin, vout, will_rm) = false
 
 default_crossoverswap_strategy() = PostAlignJuMP(DefaultJuMPΔSizeStrategy(); fallback = FailAlignSizeWarn(;andthen=FailAlignSizeNoOp(), msgfun=(vin,vout) -> "Failed to align sizes when adding edge between $(name(vin)) and $(name(vout)) for crossover. Reverting..."))
 
-stripedges(vin, vout) = stripinedges!(vin)...,stripoutedges!(vout)...
+stripedges(vin, vout) = stripinedges!(vin) ,stripoutedges!(vout)
 
 function stripinedges!(v)
     i = copy(inputs(v))
     foreach(iv -> remove_edge!(iv, v; strategy = NoSizeChange()), i)
-    return i, 1:length(i) # Inds mainly for symmetry with stripoutedges
+    return i
 end
 
 function stripoutedges!(v)
-    inds = mapreduce(vcat, unique(outputs(v))) do vo
-        findall(voi -> voi == v, inputs(vo))
-    end
-    o = copy(outputs(v))
-    foreach(ov -> remove_edge!(v, ov; strategy = NoSizeChange()), o)
-    return o, inds
+    # Does not use the same method as stripinedges as this destroys the mutation metadata in the outputs, eventually
+    # causing neurons to be unnecessary recreated. Instead, we insert a new dummy neuron which acts as a buffer for
+    # which we don't care that it is corrupted as we will anyways remove it.
+    insert!(v, v -> conc(v; dims=1), reverse)
+    dummy = outputs(v)[]
+    remove_edge!(v, dummy; strategy = NoSizeChange())
+    return dummy
 end
 
-function addinedges!(v, vis, inds, strat)
+function addinedges!(v, vis, strat = default_crossoverswap_strategy())
     # Only need to align sizes after the very last edge (I hope)
     strats = (i == length(vis) ? strat : NoSizeChange() for i in eachindex(vis))
-    return map((iv, pos, s) -> create_edge!(iv, v; pos=pos, strategy=s), vis, inds, strats)
+    return map((iv, s) -> create_edge!(iv, v; strategy=s), vis, strats)
 end
 
-function addoutedges!(v, vos, inds, strat)
-    # Only need to align sizes after the very last edge (I hope)
-    strats = (i == length(vos) ? strat : NoSizeChange() for i in eachindex(vos))
-    return map((ov, pos, s) -> create_edge!(v, ov; pos=pos, strategy=s), vos, inds, strats)
+function addoutedges!(v, dummy, strat = default_crossoverswap_strategy())
+    create_edge!(v, dummy, strategy = strat)
+    ret = remove!(dummy, RemoveStrategy(strat))
+    return ret
 end
 
 """
@@ -91,17 +96,17 @@ Note that output always contains `v`, i.e it is never empty.
 """
 function separablefrom(v)
     # Rewrite in a guaranteed to be non-destrucive manner? LightGraphs?
-    o, oinds = stripoutedges!(v)
+    o = stripoutedges!(v)
     swappable = separablefrom(v, AbstractVertex[v])
-    addoutedges!(v, o, oinds, NoSizeChange())
+    addoutedges!(v, o)
     return swappable
 end
 
 function separablefrom(v, seen)
     push!(seen, v)
-    i, ininds = stripinedges!(v)
+    ins = stripinedges!(v)
     ok = all(vv -> vv in seen, all_in_graph(v))
-    addinedges!(v, i, ininds, NoSizeChange())
+    addinedges!(v, ins)
     swappable = mapreduce(vi -> separablefrom(vi, seen), vcat, inputs(v), init=[])
     return ok ? vcat(v, swappable) : swappable
 end

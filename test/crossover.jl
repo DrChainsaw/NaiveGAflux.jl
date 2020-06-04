@@ -27,6 +27,9 @@
                 apply_mutation(ga)
                 apply_mutation(gb)
 
+                @test name.(vertices(ga)) == ["a.in", "a.dv1", "b.dv2", "a.dv3"]
+                @test name.(vertices(gb)) == ["b.in", "b.dv1", "a.dv2", "b.dv3"]
+
                 @test nout.(vertices(ga)) == [3,4,2,6]
                 @test nout.(vertices(gb)) == [3,1,5,3]
 
@@ -131,11 +134,13 @@
                 dv3 = dv(vi, 4, "$np.dv3")
                 ca1 = concat("$np.ca1", dv1, dv2, dv1, dv3, dv1)
                 dva1 = dv(ca1, 4, "$np.dva1")
+                dva2 = dv(dva1, 3, "$np.dva2")
                 dvb1 = dv(dv2, 3, "$np.dvb1")
                 c2 = concat("$np.c2", dvb1, dva1, dvb1, dva1)
                 c3 = concat("$np.c3", dva1, dva1, dvb1)
-                c4 = concat("$np.c4", c2,c3)
-                return CompGraph(vi, c4)
+                c4 = concat("$np.c4", c2,c3,dva2)
+                out = dv(c4, 4, "$np.out")
+                return CompGraph(vi, out)
             end
             @testset "Strip and add out edges" begin
                 gg = g("a")
@@ -147,9 +152,10 @@
                 expected1 = name.(outputs(dva1))
                 expected2 = mapreduce(vo -> name.(inputs(vo)), vcat, unique(outputs(dva1)))
 
-                o, oi = stripoutedges!(dva1)
+                dummy = stripoutedges!(dva1)
                 @test outputs(dva1) == []
-                addoutedges!(dva1, o, oi, NoSizeChange())
+                addoutedges!(dva1, dummy)
+                apply_mutation(gg)
                 actual1 = name.(outputs(dva1))
                 actual2 = mapreduce(vo -> name.(inputs(vo)), vcat, unique(outputs(dva1)))
 
@@ -168,9 +174,10 @@
 
                 expected = name.(inputs(ca1))
 
-                i, ii = stripinedges!(ca1)
+                ins = stripinedges!(ca1)
                 @test inputs(ca1) == []
-                addinedges!(ca1, i, ii, NoSizeChange())
+                addinedges!(ca1, ins)
+                apply_mutation(gg)
                 actual = name.(inputs(ca1))
 
                 @test actual == expected
@@ -194,13 +201,15 @@
 
             swappable_org = separablefrom(v4n(g_org, "a.dva1"))
             crossoverswap(swappable_org[end], swappable_org[1], swappable_new[end], swappable_new[1])
+            apply_mutation(ga)
+            apply_mutation(gb)
 
             @test name.(vertices(g_org)) == name.(vertices(g_new)) == name.(vs_org)
             @test g_org(indata) == g_new(indata) == out_org
-
         end
 
         @testset "Revert after failed size align" begin
+            using Random
             idv(in, outsize, name) = mutable(name, Dense(nout(in), outsize), in; traitfun=t -> NamedTrait(Immutable(), name))
 
             function g(np, mergesize, mergeop)
@@ -229,6 +238,8 @@
             ninsb = nin.(vsb)
 
             @test_logs (:warn, "Failed to align sizes when adding edge between b.dv1 and a.m1 for crossover. Reverting...") crossoverswap(vertices(ga)[end-1], vertices(gb)[end-1])
+            apply_mutation(ga)
+            apply_mutation(gb)
 
             @test name.(vsa) == name.(vertices(ga))
             @test name.(vsb) == name.(vertices(gb))
