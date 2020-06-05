@@ -2,6 +2,7 @@
 
     @testset "CrossoverSwap" begin
         import NaiveGAflux: crossoverswap, separablefrom
+        using Random
 
         iv(np) = inputvertex("$np.in", 3, FluxDense())
         dv(in, outsize, name) = mutable(name, Dense(nout(in), outsize), in)
@@ -30,7 +31,7 @@
                 @test name.(vertices(ga)) == ["a.in", "a.dv1", "b.dv2", "a.dv3"]
                 @test name.(vertices(gb)) == ["b.in", "b.dv1", "a.dv2", "b.dv3"]
 
-                @test nout.(vertices(ga)) == [3,4,2,6]
+                @test nout.(vertices(ga)) == [3,1,2,6]
                 @test nout.(vertices(gb)) == [3,1,5,3]
 
                 @test size(ga(ones(3, 2))) == (6, 2)
@@ -69,8 +70,8 @@
             apply_mutation(ga)
             apply_mutation(gb)
 
-            @test nout.(vertices(ga)) == [3, 4, 4, 4, 4, 4, 7]
-            @test nout.(vertices(gb)) == [3, 3, 3, 3, 9, 3]
+            @test nout.(vertices(ga)) == [3, 3, 3, 3, 3, 3, 7]
+            @test nout.(vertices(gb)) == [3, 3, 3, 5, 11, 3]
 
             @test size(ga(ones(3, 2))) == (7, 2)
             @test size(gb(ones(3, 2))) == (3, 2)
@@ -98,20 +99,32 @@
             end
 
             ga = g("a")
+
+            indata = randn(MersenneTwister(1), 3, 2)
+            outa = ga(indata)
+
             vsa = vertices(ga)
             aswap = separablefrom(v4n(ga, "a.add_aa_bb"))
             @test name.(vsa) == name.(vertices(ga))
             @test name.(aswap) == ["a.add_aa_bb", "a.dva1"]
+            apply_mutation(ga)
+            @test ga(indata) == outa
+
 
             gb = g("b", true)
+            outb = gb(indata)
             vsb = vertices(gb)
             @test name.(separablefrom(v4n(gb, "b.add_aa_bb"))) == ["b.add_aa_bb"]
             @test name.(vsb) == name.(vertices(gb))
+            apply_mutation(gb)
+            @test gb(indata) == outb
+
 
             bswap = separablefrom(v4n(gb, "b.dvbb1"))
             @test name.(vsb) == name.(vertices(gb))
             @test name.(bswap) == ["b.dvbb1"]
-
+            apply_mutation(gb)
+            @test gb(indata) == outb
 
             crossoverswap(aswap[end], aswap[1], bswap[end], bswap[1])
             apply_mutation(ga)
@@ -126,7 +139,6 @@
 
         @testset "Swapping preserves edge order" begin
             import NaiveGAflux: stripoutedges!, stripinedges!, addoutedges!, addinedges!
-            using Random
             function g(np)
                 vi = iv(np)
                 dv1 = dv(vi, 2, "$np.dv1")
@@ -175,7 +187,8 @@
                 expected = name.(inputs(ca1))
 
                 ins = stripinedges!(ca1)
-                @test inputs(ca1) == []
+                # Need to add dummy inputs to not mess up mutation metadata and replace neurons
+                @test mapreduce(inputs, vcat, inputs(ca1)) == []
                 addinedges!(ca1, ins)
                 apply_mutation(gg)
                 actual = name.(inputs(ca1))
@@ -191,7 +204,7 @@
             indata = randn(MersenneTwister(0), 3, 2)
             out_org = g_org(indata)
 
-            swappable_new = v4n.(Ref(g_new), ["a.dva1", "a.ca1"]) #separablefrom(v4n(g_new, "a.dva1"))
+            swappable_new = separablefrom(v4n(g_new, "a.dva1"))
             @test name.(swappable_new) == ["a.dva1", "a.ca1"]
             @test name.(vertices(g_org)) == name.(vertices(g_new))
 
@@ -200,7 +213,7 @@
             vs_org = vertices(g_org)
             nouts_org = nout.(vs_org)
 
-            swappable_org = v4n.(Ref(g_org), ["a.dva1", "a.ca1"])##separablefrom(v4n(g_org, "a.dva1"))
+            swappable_org = separablefrom(v4n(g_org, "a.dva1"))
             crossoverswap(swappable_org[end], swappable_org[1], swappable_new[end], swappable_new[1])
             apply_mutation(g_org)
             apply_mutation(g_new)
@@ -211,7 +224,6 @@
         end
 
         @testset "Revert after failed size align" begin
-            using Random
             idv(in, outsize, name) = mutable(name, Dense(nout(in), outsize), in; traitfun=t -> NamedTrait(Immutable(), name))
 
             function g(np, mergesize, mergeop)

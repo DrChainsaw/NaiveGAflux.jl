@@ -23,7 +23,7 @@ function crossoverswap(vin1::AbstractVertex, vout1::AbstractVertex, vin2::Abstra
         nr >= 3 && stripinedges!(vin1)
         nr >= 4 && stripoutedges!(vout1)
 
-        strat(n) = nr >= n ? PostAlignJuMP() : NoSizeChange()
+        strat(n) = nr >= n ? PostAlignJuMP : NoSizeChange
 
         addinedges!(vin1, i1, strat(1))
         addoutedges!(vout1, o1, strat(2))
@@ -51,19 +51,47 @@ default_crossoverswap_strategy() = PostAlignJuMP(DefaultJuMPΔSizeStrategy(); fa
 stripedges(vin, vout) = stripinedges!(vin) ,stripoutedges!(vout)
 
 function stripinedges!(v)
+    # Unfortunately remove_edge! also removes metadata, causing subsequent create_edge! to create new neurons instead of keeping old ones.
+
+    # Instead we create a dummyvertex between v and each of its inputs to act as a buffer and remove the edges from v's inputs to the dummyvertex. The dummyvertex will be removed by addinedges!
     i = copy(inputs(v))
-    foreach(iv -> remove_edge!(iv, v; strategy = NoSizeChange()), i)
+    for (ind, vi) in enumerate(i)
+
+        # We do this instead of insert! as it is a bit too smart and recreates all edges if any vi == vj for i != j where vi and vj are input vertices to v and this throws addinedges! off.
+        dummy = dummyvertex(vi)
+        inputs(v)[ind] = dummy
+        push!(outputs(dummy), v)
+        deleteat!(outputs(vi), findall(vx -> vx == v, outputs(vi)))
+
+        remove_edge!(vi, dummy, strategy = NoSizeChange())
+    end
     return i
 end
 
-function addinedges!(v, vis, strat = default_crossoverswap_strategy())
-    # Only need to align sizes after the very last edge (I hope)
-    strats = (i == length(vis) ? strat : NoSizeChange() for i in eachindex(vis))
-    return map((iv, s) -> create_edge!(iv, v; strategy=s), vis, strats)
+dummyvertex(v) = invariantvertex(identity, v; traitdecoration = t -> NamedTrait(t, "$(name(v)).dummy"))
+
+function addinedges!(v, ins, strat = default_crossoverswap_strategy)
+    dummies = copy(inputs(v))
+    outs = copy(dummies)
+    connectstrat = AbstractConnectStrategy[ConnectAll() for i in eachindex(outs)]
+
+    #More outs than ins: We want to connect every input so lets just pad outs with v as this is what we want in the end
+    while length(outs) < length(ins)
+        push!(outs, v)
+    end
+    # More outs than ins: No problem really as we only care about connecting the ins and extra dummies can be left haning before removal. However, map fails if sizes are not equal.
+    while length(ins) < length(outs)
+        connectstrat[length(outs)] = ConnectNone()
+        pop!(outs)
+    end
+
+    ret = map((iv, ov) -> create_edge!(iv, ov; strategy = strat()),ins, outs) |> all
+    ret &= map((dv, cs) -> remove!(dv, RemoveStrategy(cs, NoSizeChange())), dummies, connectstrat) |> all
+    return ret
 end
 
 function stripoutedges!(v)
-    # Does not use the same method as stripinedges as this destroys the mutation metadata in the outputs, eventually
+    # Similar story as stripinedges to avoid destroying the mutation metadata in the outputs, eventually
     # causing neurons to be unnecessary recreated. Instead, we insert a new dummy neuron which acts as a buffer for
     # which we don't care that it is corrupted as we will anyways remove it.
     insert!(v, v -> conc(v; dims=1, traitdecoration = t -> NamedTrait(t, "$(name(v)).dummy")), reverse)
@@ -72,16 +100,16 @@ function stripoutedges!(v)
     return dummy
 end
 
-function addoutedges!(v, dummy, strat = default_crossoverswap_strategy())
-    create_edge!(v, dummy, strategy = strat)
-    ret = remove!(dummy, RemoveStrategy(NoSizeChange()))
+function addoutedges!(v, dummy, strat = default_crossoverswap_strategy)
+    ret = create_edge!(v, dummy, strategy = strat())
+    ret &= remove!(dummy, RemoveStrategy(NoSizeChange()))
     return ret
 end
 
 """
     separablefrom(v)
 
-Return an array of vertices for which may be separated from the graph.
+Return an array of vertices which may be separated from the graph.
 
 More precisely, a connected component which is not connected to the graph can be created if
     1. All output edges from `v` are removed
@@ -95,15 +123,17 @@ function separablefrom(v)
     # Rewrite in a guaranteed to be non-destrucive manner? LightGraphs?
     o = stripoutedges!(v)
     swappable = separablefrom(v, AbstractVertex[v])
-    addoutedges!(v, o, NoSizeChange())
+    addoutedges!(v, o)
     return swappable
 end
 
 function separablefrom(v, seen)
     push!(seen, v)
     ins = stripinedges!(v)
-    ok = all(vv -> vv in seen, all_in_graph(v))
-    addinedges!(v, ins, NoSizeChange())
+    seen_and_dummies = vcat(seen, inputs(v))
+
+    ok = all(vv -> vv in seen_and_dummies, all_in_graph(v))
+    addinedges!(v, ins)
     swappable = mapreduce(vi -> separablefrom(vi, seen), vcat, inputs(v), init=[])
     return ok ? vcat(v, swappable) : swappable
 end
