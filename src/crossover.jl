@@ -50,7 +50,17 @@ default_crossoverswap_strategy() = PostAlignJuMP(DefaultJuMPΔSizeStrategy(); fa
 
 stripedges(vin, vout) = stripinedges!(vin) ,stripoutedges!(vout)
 
-function stripinedges!(v)
+
+stripinedges!(v) = stripinedges!(v, layertype(v))
+
+function stripinedges!(v, lt)
+    # Need to copy inputs first and iterate
+
+    i = copy(inputs(v))
+    foreach(vi -> remove_edge!(vi, v, strategy=NoSizeChange()), i)
+    return i
+end
+function stripinedges!(v, ::FluxLayer)
     # Unfortunately remove_edge! also removes metadata, causing subsequent create_edge! to create new neurons instead of keeping old ones.
 
     # Instead we create a dummyvertex between v and each of its inputs to act as a buffer and remove the edges from v's inputs to the dummyvertex. The dummyvertex will be removed by addinedges!
@@ -59,6 +69,8 @@ function stripinedges!(v)
 
         # We do this instead of insert! as it is a bit too smart and recreates all edges if any vi == vj for i != j where vi and vj are input vertices to v and this throws addinedges! off.
         dummy = dummyvertex(vi)
+
+        # Manually replace v with dummy as output for vi
         inputs(v)[ind] = dummy
         push!(outputs(dummy), v)
         deleteat!(outputs(vi), findall(vx -> vx == v, outputs(vi)))
@@ -68,12 +80,14 @@ function stripinedges!(v)
     return i
 end
 
-dummyvertex(v) = invariantvertex(identity, v; traitdecoration = t -> NamedTrait(t, "$(name(v)).dummy"))
+
+dummyvertex(v) = conc(v; dims=1, traitdecoration = t -> NamedTrait(t, "$(name(v)).dummy"))
 
 function addinedges!(v, ins, strat = default_crossoverswap_strategy)
     dummies = copy(inputs(v))
     outs = copy(dummies)
     connectstrat = AbstractConnectStrategy[ConnectAll() for i in eachindex(outs)]
+    create_edge_strat = [i == length(ins) ? strat() : NoSizeChange() for i in eachindex(ins)]
 
     #More outs than ins: We want to connect every input so lets just pad outs with v as this is what we want in the end
     while length(outs) < length(ins)
@@ -85,7 +99,7 @@ function addinedges!(v, ins, strat = default_crossoverswap_strategy)
         pop!(outs)
     end
 
-    ret = map((iv, ov) -> create_edge!(iv, ov; strategy = strat()),ins, outs) |> all
+    ret = map((iv, ov, s) -> create_edge!(iv, ov; strategy = s), ins, outs, create_edge_strat) |> all
     ret &= map((dv, cs) -> remove!(dv, RemoveStrategy(cs, NoSizeChange())), dummies, connectstrat) |> all
     return ret
 end
@@ -94,7 +108,7 @@ function stripoutedges!(v)
     # Similar story as stripinedges to avoid destroying the mutation metadata in the outputs, eventually
     # causing neurons to be unnecessary recreated. Instead, we insert a new dummy neuron which acts as a buffer for
     # which we don't care that it is corrupted as we will anyways remove it.
-    insert!(v, v -> conc(v; dims=1, traitdecoration = t -> NamedTrait(t, "$(name(v)).dummy")), reverse)
+    insert!(v, dummyvertex, reverse)
     dummy = outputs(v)[]
     remove_edge!(v, dummy; strategy = NoSizeChange())
     return dummy

@@ -31,7 +31,7 @@
                 @test name.(vertices(ga)) == ["a.in", "a.dv1", "b.dv2", "a.dv3"]
                 @test name.(vertices(gb)) == ["b.in", "b.dv1", "a.dv2", "b.dv3"]
 
-                @test nout.(vertices(ga)) == [3,1,2,6]
+                @test nout.(vertices(ga)) == [3,4,2,6]
                 @test nout.(vertices(gb)) == [3,1,5,3]
 
                 @test size(ga(ones(3, 2))) == (6, 2)
@@ -70,8 +70,8 @@
             apply_mutation(ga)
             apply_mutation(gb)
 
-            @test nout.(vertices(ga)) == [3, 3, 3, 3, 3, 3, 7]
-            @test nout.(vertices(gb)) == [3, 3, 3, 5, 11, 3]
+            @test nout.(vertices(ga)) == [3, 4, 4, 4, 4, 4, 7]
+            @test nout.(vertices(gb)) == [3, 3, 3, 3, 9, 3]
 
             @test size(ga(ones(3, 2))) == (7, 2)
             @test size(gb(ones(3, 2))) == (3, 2)
@@ -188,7 +188,7 @@
 
                 ins = stripinedges!(ca1)
                 # Need to add dummy inputs to not mess up mutation metadata and replace neurons
-                @test mapreduce(inputs, vcat, inputs(ca1)) == []
+                @test inputs(ca1) == []
                 addinedges!(ca1, ins)
                 apply_mutation(gg)
                 actual = name.(inputs(ca1))
