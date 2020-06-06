@@ -136,8 +136,8 @@ Note that output always contains `v`, i.e it is never empty.
 function separablefrom(v)
     # Rewrite in a guaranteed to be non-destrucive manner? LightGraphs?
     o = stripoutedges!(v)
-    swappable = separablefrom(v, AbstractVertex[v])
-    addoutedges!(v, o)
+    swappable = separablefrom(v, AbstractVertex[])
+    addoutedges!(v, o, NoSizeChange)
     return swappable
 end
 
@@ -145,9 +145,8 @@ function separablefrom(v, seen)
     push!(seen, v)
     ins = stripinedges!(v)
     seen_and_dummies = vcat(seen, inputs(v))
-
     ok = all(vv -> vv in seen_and_dummies, all_in_graph(v))
-    addinedges!(v, ins)
+    addinedges!(v, ins, NoSizeChange)
     swappable = mapreduce(vi -> separablefrom(vi, seen), vcat, inputs(v), init=[])
     return ok ? vcat(v, swappable) : swappable
 end
