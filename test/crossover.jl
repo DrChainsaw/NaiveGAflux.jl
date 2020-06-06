@@ -223,14 +223,14 @@
             @test g_org(indata) == g_new(indata) == out_org
         end
 
-        @testset "Revert after failed size align" begin
+        @testset "Partial success" begin
             idv(in, outsize, name) = mutable(name, Dense(nout(in), outsize), in; traitfun=t -> NamedTrait(Immutable(), name))
 
             function g(np, mergesize, mergeop)
                 vi = iv(np)
                 dv1 = dv(vi, mergesize, "$np.dv1")
                 dv2 = idv(dv1, mergesize, "$np.dv2")
-                m1 = mergeop("$np.m1", dv1, vi, dv2, dv1)
+                m1 = mergeop("$np.m1", dv1, vi, dv2)
                 dv3 = dv(m1, 5, "$np.dv3")
                 return CompGraph(vi, dv3)
             end
@@ -238,34 +238,12 @@
             ga = g("a", 3, (vname, vs...) -> +(vname >> vs[1], vs[2:end]...))
             gb = g("b", 5, concat)
 
-            indata = randn(MersenneTwister(0), 3, 2)
-            outa = ga(indata)
-            outb = gb(indata)
-
-            vsa = vertices(ga)
-            vsb = vertices(gb)
-
-            noutsa = nout.(vsa)
-            ninsa = nin.(vsa)
-
-            noutsb = nout.(vsb)
-            ninsb = nin.(vsb)
-
-            @test_logs (:warn, "Failed to align sizes when adding edge between b.dv1 and a.m1 for crossover. Reverting...") crossoverswap(vertices(ga)[end-1], vertices(gb)[end-1])
+            @test @test_logs (:warn, "Failed to align sizes when adding edge between b.dv2 and a.m1 for crossover. Reverting...") crossoverswap(vertices(ga)[end-1], vertices(gb)[end-1]) == (true, false)
             apply_mutation(ga)
-            apply_mutation(gb)
 
-            @test name.(vsa) == name.(vertices(ga))
-            @test name.(vsb) == name.(vertices(gb))
+            @test name.(vertices(ga)) == ["a.in", "a.dv1", "a.dv2", "b.m1", "a.dv3"]
 
-            @test noutsa == nout.(vertices(ga))
-            @test ninsa == nin.(vertices(ga))
-
-            @test noutsb == nout.(vertices(gb))
-            @test ninsb == nin.(vertices(gb))
-
-            @test outa == ga(indata)
-            @test outb == gb(indata)
+            @test size(ga(ones(3,2))) == (5,2)
         end
     end
 end

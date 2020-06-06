@@ -7,49 +7,30 @@ Swap vertices `vin1` to `vout1` with `vin2` and `vout2` so that `vin1` to `vin2`
 
 Vertices may come from different graphs.
 """
-function crossoverswap(v1::AbstractVertex, v2::AbstractVertex)
-     crossoverswap(v1,v1,v2,v2)
-     return v1,v2
-end
+crossoverswap(v1::AbstractVertex, v2::AbstractVertex) = crossoverswap(v1,v1,v2,v2)
+
 function crossoverswap(vin1::AbstractVertex, vout1::AbstractVertex, vin2::AbstractVertex, vout2::AbstractVertex)
 
     # Beware: ix and ox are not the same thing!! Check the strip function
     i1, o1 = stripedges(vin1, vout1)
     i2, o2 = stripedges(vin2, vout2)
 
-    function revert(nr)
-        nr >= 1 && stripinedges!(vin2)
-        nr >= 2 && stripoutedges!(vout2)
-        nr >= 3 && stripinedges!(vin1)
-        nr >= 4 && stripoutedges!(vout1)
+    addinedges!(vin2, i1) |> all || return false, false
+    addoutedges!(vout2, o1) |> all || return false, false
 
-        strat(n) = nr >= n ? PostAlignJuMP : NoSizeChange
+    addinedges!(vin1, i2) |> all || return true, false
+    addoutedges!(vout1, o2) |> all || return true, false
 
-        addinedges!(vin1, i1, strat(1))
-        addoutedges!(vout1, o1, strat(2))
-
-        addinedges!(vin2, i2, strat(3))
-        addoutedges!(vout2, o2, strat(4))
-        return vin1, vout1, vin2, vout2
-    end
-
-    addinedges!(vin2, i1) |> all || return revert(1)
-    addoutedges!(vout2, o1) |> all || return revert(2)
-
-    addinedges!(vin1, i2) |> all || return revert(3)
-    addoutedges!(vout1, o2) |> all || return revert(4)
-
-    return vin1, vout1, vin2, vout2
+    return true, true
 end
 
 struct FailAlignSizeNoOp <: AbstractAlignSizeStrategy end
 NaiveNASlib.postalignsizes(s::FailAlignSizeNoOp, vin, vout, pos) = false
 NaiveNASlib.prealignsizes(s::FailAlignSizeNoOp, vin, vout, will_rm) = false
 
-default_crossoverswap_strategy() = PostAlignJuMP(DefaultJuMPΔSizeStrategy(); fallback = FailAlignSizeWarn(;andthen=FailAlignSizeNoOp(), msgfun=(vin,vout) -> "Failed to align sizes when adding edge between $(name(vin)) and $(name(vout)) for crossover. Reverting..."))
+default_crossoverswap_strategy() = PostAlignJuMP(DefaultJuMPΔSizeStrategy(); fallback = FailAlignSizeWarn(;andthen=FailAlignSizeRevert(), msgfun=(vin,vout) -> "Failed to align sizes when adding edge between $(name(vin)) and $(name(vout)) for crossover. Reverting..."))
 
 stripedges(vin, vout) = stripinedges!(vin) ,stripoutedges!(vout)
-
 
 stripinedges!(v) = stripinedges!(v, layertype(v))
 
@@ -93,7 +74,7 @@ function addinedges!(v, ins, strat = default_crossoverswap_strategy)
     while length(outs) < length(ins)
         push!(outs, v)
     end
-    # More outs than ins: No problem really as we only care about connecting the ins and extra dummies can be left haning before removal. However, map fails if sizes are not equal.
+    # More outs than ins: No problem really as we only care about connecting the ins and extra dummies can be left hanging before removal. However, map fails if sizes are not equal.
     while length(ins) < length(outs)
         connectstrat[length(outs)] = ConnectNone()
         pop!(outs)
