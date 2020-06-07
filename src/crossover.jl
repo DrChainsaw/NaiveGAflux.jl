@@ -15,13 +15,10 @@ function crossoverswap(vin1::AbstractVertex, vout1::AbstractVertex, vin2::Abstra
     i1, o1 = stripedges(vin1, vout1)
     i2, o2 = stripedges(vin2, vout2)
 
-    addinedges!(vin2, i1) |> all || return false, false
-    addoutedges!(vout2, o1) |> all || return false, false
+    success1 = addinedges!(vin2, i1) && addoutedges!(vout2, o1)
+    success2 = addinedges!(vin1, i2) && addoutedges!(vout1, o2)
 
-    addinedges!(vin1, i2) |> all || return true, false
-    addoutedges!(vout1, o2) |> all || return true, false
-
-    return true, true
+    return success1, success2
 end
 
 struct FailAlignSizeNoOp <: AbstractAlignSizeStrategy end

@@ -235,15 +235,25 @@
                 return CompGraph(vi, dv3)
             end
 
-            ga = g("a", 3, (vname, vs...) -> +(vname >> vs[1], vs[2:end]...))
-            gb = g("b", 5, concat)
+            @testset "Fail first" begin
+                ga = g("a", 3, (vname, vs...) -> +(vname >> vs[1], vs[2:end]...))
+                gb = g("b", 5, concat)
 
-            @test @test_logs (:warn, "Failed to align sizes when adding edge between b.dv2 and a.m1 for crossover. Reverting...") crossoverswap(vertices(ga)[end-1], vertices(gb)[end-1]) == (true, false)
-            apply_mutation(ga)
+                @test @test_logs (:warn, "Failed to align sizes when adding edge between b.dv2 and a.m1 for crossover. Reverting...") crossoverswap(vertices(ga)[end-1], vertices(gb)[end-1]) == (true, false)
+                apply_mutation(ga)
+                @test name.(vertices(ga)) == ["a.in", "a.dv1", "a.dv2", "b.m1", "a.dv3"]
+                @test size(ga(ones(3,2))) == (5,2)
+            end
 
-            @test name.(vertices(ga)) == ["a.in", "a.dv1", "a.dv2", "b.m1", "a.dv3"]
+            @testset "Fail second" begin
+                ga = g("a", 5, concat)
+                gb = g("b", 3, (vname, vs...) -> +(vname >> vs[1], vs[2:end]...))
 
-            @test size(ga(ones(3,2))) == (5,2)
+                @test @test_logs (:warn, "Failed to align sizes when adding edge between a.dv2 and b.m1 for crossover. Reverting...") crossoverswap(vertices(ga)[end-1], vertices(gb)[end-1]) == (false, true)
+                apply_mutation(gb)
+                @test name.(vertices(gb)) == ["b.in", "b.dv1", "b.dv2", "a.m1", "b.dv3"]
+                @test size(gb(ones(3,2))) == (5,2)
+            end
         end
     end
 end
