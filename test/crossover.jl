@@ -347,44 +347,68 @@
                 return CompGraph(vi, dvn)
             end
 
-            ga = g("a", (4,5), (3,2))
+            @testset "Generate pairs" begin
+                ga = g("a", (4,5), (3,2))
 
-            vsa = vertices(ga)[2:end]
-            @test sameactdims.(vsa[end], vsa) == sameactdims.(vsa[end-1], vsa) == Bool[0, 0, 0, 1, 1]
-            @test sameactdims.(vsa[1], vsa) == sameactdims.(vsa[2], vsa) == sameactdims.(vsa[3], vsa) == Bool[1, 1, 1, 0, 0]
+                vsa = vertices(ga)[2:end]
+                @test sameactdims.(vsa[end], vsa) == sameactdims.(vsa[end-1], vsa) == Bool[0, 0, 0, 1, 1]
+                @test sameactdims.(vsa[1], vsa) == sameactdims.(vsa[2], vsa) == sameactdims.(vsa[3], vsa) == Bool[1, 1, 1, 0, 0]
 
-            @testset "Match same size" begin
-                gb = g("b", (4,5), (3,2))
-                vsb = vertices(gb)[2:end]
+                @testset "Match same size" begin
+                    gb = g("b", (4,5), (3,2))
+                    vsb = vertices(gb)[2:end]
 
-                @test default_pairgen(vsa, vsb) == (1, 1)
-                @test default_pairgen(vsa, vsb, 3) == (3, 3)
-                @test default_pairgen(vsa, vsb, length(vsa)+1) == nothing
+                    @test default_pairgen(vsa, vsb; ind1=1) == (1, 1)
+                    @test default_pairgen(vsa, vsb; ind1=3) == (3, 3)
+                    @test default_pairgen(vsa, vsb; ind1=length(vsa)+1) == nothing
+                end
+
+                @testset "Match larger" begin
+                    gb = g("b", 2:7, (8,))
+                    vsb = vertices(gb)[2:end]
+
+                    @test default_pairgen(vsa, vsb; ind1=1) == (1, 2)
+                    @test default_pairgen(vsa, vsb; ind1=3) == (3, 5)
+                    @test default_pairgen(vsa, vsb; ind1=5) == (5, 8)
+                end
+
+                @testset "Match smaller" begin
+                    gb = g("b", (2,), (3,))
+                    vsb = vertices(gb)[2:end]
+
+                    @test default_pairgen(vsa, vsb; ind1=1) == (1, 1)
+                    @test default_pairgen(vsa, vsb; ind1=2) == (2, 1)
+                    @test default_pairgen(vsa, vsb; ind1=4) == (4, 3)
+                    @test default_pairgen(vsa, vsb; ind1=5) == (5, 3)
+                end
             end
 
-            @testset "Match larger" begin
-                gb = g("b", 2:7, (8,))
-                vsb = vertices(gb)[2:end]
-
-                @test default_pairgen(vsa, vsb) == (1, 2)
-                @test default_pairgen(vsa, vsb, 3) == (3, 5)
-                @test default_pairgen(vsa, vsb, 5) == (5, 8)
-            end
-
-            @testset "Match smaller" begin
-                gb = g("b", (2,), (3,))
-                vsb = vertices(gb)[2:end]
-
-                @test default_pairgen(vsa, vsb) == (1, 1)
-                @test default_pairgen(vsa, vsb, 2) == (2, 1)
-                @test default_pairgen(vsa, vsb, 4) == (4, 2)
-                @test default_pairgen(vsa, vsb, 5) == (5, 3)
-            end
-
-            @testset "Test swap" begin
+            @testset "Test swap single" begin
+                import NaiveGAflux: crossover, default_pairgen, crossoverswap_bc
+                ga = g("a", 3:4, 5:6)
                 gb = g("b", 2:4, 5:7)
 
-    
+                pairgen(vs1,vs2; ind1=2) = ind1 > 3 ? nothing : default_pairgen(vs1, vs2; ind1=min(2 * ind1, length(vs1)))
+
+                crossfun(args...) = crossoverswap_bc(args...;pairgen = pairgen)
+
+                anames = name.(vertices(ga))
+                bnames = name.(vertices(gb))
+
+                ga_new, gb_new = crossover(ga, gb; pairgen=pairgen, crossoverfun=crossfun)
+
+                # Originals not impacted
+                @test anames == name.(vertices(ga))
+                @test bnames == name.(vertices(gb))
+
+                @test name.(vertices(ga_new)) == ["a.in", "b.cv1", "a.cv2", "b.pv1", "b.dv1", "b.dv2", "a.dv2"]
+                @test name.(vertices(gb_new)) == ["b.in", "a.cv1", "b.cv2", "b.cv3", "a.pv1", "a.dv1", "b.dv3"]
+
+                apply_mutation(ga_new)
+                apply_mutation(gb_new)
+
+                @test size(ga_new(ones(Float32, 4,4,3,2))) == (6, 2)
+                @test size(gb_new(ones(Float32, 4,4,3,2))) == (7, 2)
             end
         end
     end

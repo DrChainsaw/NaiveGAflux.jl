@@ -1,51 +1,90 @@
 
-function crossover(g1::CompGraph, g2::CompGraph, selection, pairgen, crossoverfun)
+"""
+    crossover(g1::CompGraph, g2::CompGraph; selection=FilterMutationAllowed(), pairgen=default_pairgen, crossoverfun=crossoverswap_bc)
+
+Perform crossover between `g1` and `g2` and return the two children `g1'` and `g2'`.
+
+How the crossover is performed depends on `pairgen` and `crossoverfun` as well as `selection`.
+
+`selection` is used to filter out at which vertices the crossoverpoints may be.
+
+`pairgen` return indices of the potential crossover points to use out of the allowed crossover points. New crossover points will be drawn from pairgen until it returns `nothing`.
+
+`crossoverfun` return the result of the crossover which may be same as inputs depending on implementation.
+"""
+function crossover(g1::CompGraph, g2::CompGraph; selection=FilterMutationAllowed(), pairgen=default_pairgen, crossoverfun=crossoverswap_bc)
 
     # pairgen api is very close to the iterator specifiction. Not sure if things would be easier if it was an iterator instead...
-    sel(g) = select(selection(g))
+    sel(g) = select(selection, g)
 
-    inds = pairgen(sel(g1), sel(g2))
+    inds = pairgen(sel(g1), sel(g2), ind1 = 1)
     while !isnothing(inds)
         ind1, ind2 = inds
 
-        g1,g2,v1,v2 = crossoverfun((g1,g2, g -> sel(g)[ind1], g -> sel(g)[ind2]))
+        # sel1 and sel2 returned only because crossoverfun may be a generic AbstractMutation (e.g. MutationProbability) which by contract returns its inputs if noop
+        g1,g2,sel1,sel2 = crossoverfun((g1,g2, g -> sel(g)[ind1], g -> sel(g)[ind2]))
 
         # Graphs may be different now, so we need to reselect
-        inds = pairgen(sel(g1), sel(g2), ind1+1)
+        inds = pairgen(sel(g1), sel(g2), ind1 = ind1+1)
     end
+    return g1, g2
 end
 
 
-function default_pairgen(vs1, vs2, ind1 = 1, deviation = 0.0; rng=rng_default, compatiblefun = sameactdims)
+"""
+    default_pairgen(vs1, vs2, deviation = 0.0; rng=rng_default, compatiblefun = sameactdims, ind1 = rand(rng, eachindex(vs1)))
+
+Return integers `ind1` and `ind2` so that `vs1[ind1]` and `vs2[ind2]` are a suitable pair for crossover.
+
+Input function `compatiblefun(v1,v2)` shall return `true` if `v1` and `v2` can be swapped and is used to determine the set of vertices to select from given.
+
+From the set of compatible vertices in `vs2`, the one which has the smallest relative topologial distance from `vs1[ind2]` is selected. The parameter `devation` can be used to randomly deviate from this where larger magnitude means more deviation.
+"""
+function default_pairgen(vs1, vs2, deviation = 0.0; rng=rng_default, compatiblefun = sameactdims, ind1 = rand(rng, eachindex(vs1)))
     ind1 > length(vs1) && return nothing
+
+    # Make sure the returned indices map to vertices which are compatible so that output from a convolutional layer does not suddenly end up being input to a dense layer.
     candidate_ind2s = filter(i2 -> compatiblefun(vs1[ind1], vs2[i2]), eachindex(vs2))
 
-    order1 = relative_topological_order(vs1) .+ deviation .* randn(rng, length(vs1))
-    order2 = relative_topological_order(vs2) .+ deviation .* randn(rng, length(vs2))
+    order1 = relative_positions(vs1) .+ deviation .* randn(rng, length(vs1))
+    order2 = relative_positions(vs2) .+ deviation .* randn(rng, length(vs2))
 
-    ind2 = argmin(abs.(order2 .- order1[ind1]))
+    ind2 = candidate_ind2s[argmin(abs.(order2[candidate_ind2s] .- order1[ind1]))]
     return ind1, ind2
 end
 
 sameactdims(v1, v2) = NaiveNASflux.actdim(v1) == NaiveNASflux.actdim(v2) && NaiveNASflux.actrank(v1) == NaiveNASflux.actrank(v2)
-relative_topological_order(arr) = collect(eachindex(arr) / length(arr))
+relative_positions(arr) = collect(eachindex(arr) / length(arr))
 
-function crossoverswap((g1,g2,sel1,sel2)::Tuple;rng=rng_default)
+"""
+    crossoverswap_bc((g1,g2,sel1,sel2)::Tuple; pairgen=default_pairgen)
+
+Perform [`crossoverswap`](@Ref) between a set of vertices from `g1` and a set of vertices from `g2`.
+
+Outputs of the swap is selected by `sel1` and `sel2` while inputs are selected from the feasible set (as determined by `separablefrom`) through the supplied `pairgen` function.
+
+Inputs `g1` and `g2` are copied before operation is performed and originals are returned if operation is not successful.
+
+Function is designed to work inside an `AbstractMutation` (e.g. MutationProbability) which is the reason for the awkward signature and return values.
+"""
+function crossoverswap_bc((g1,g2,sel1,sel2)::Tuple; pairgen=default_pairgen)
     g1c = copy(g1)
     g2c = copy(g2)
 
-    vs1 = separablefrom(sel1(g1c))
-    vs2 = separablefrom(sel2(g2c))
+    # Swapping inputs or outputs will replace the whole graph but the CompGraph will have the old inputs causing all kinds of mayhem
+    # Instead of trying to detect it and fixing or try to create new graphs it we'll just no allow it
+    vs1 = filter(v -> allow_mutation(v) && v ∉ g1c.inputs && v ∉ g1c.outputs, separablefrom(sel1(g1c)))
+    vs2 = filter(v -> allow_mutation(v) && v ∉ g2c.inputs && v ∉ g2c.outputs, separablefrom(sel2(g2c)))
 
-    vout1 = vs1[1]
-    vin1 = rand(rng, vs1)
+    # From the two sets of separable vertices, find two matching pairs to use as endpoints in input direction
+    # Endpoint in output direction is already determined by sel1 and sel2 and is returned by separablefrom as the first element
+    ind1, ind2 = pairgen(vs1,vs2)
 
-    vout2 = vs2[1]
-    vin2 = rand(rng, filter(v -> sameactdims(v, vin1)), vs2)
+    success1, success2 = crossoverswap(vs1[ind1], vs1[1], vs2[ind2], vs2[1])
 
-    success1, success2 = crossoverswap(vin1, vout1, vin2, vout2)
     g1ret = success1 ? g1c : g1
     g2ret = success2 ? g2c : g2
+
     return g1ret, g2ret, sel1, sel2 #Just to be compatiable with mutation utils, like MutationProbability
 end
 
@@ -72,6 +111,7 @@ function crossoverswap(vin1::AbstractVertex, vout1::AbstractVertex, vin2::Abstra
     return success1, success2
 end
 
+#TODO: Add in NaiveNASlib?
 struct FailAlignSizeNoOp <: AbstractAlignSizeStrategy end
 NaiveNASlib.postalignsizes(s::FailAlignSizeNoOp, vin, vout, pos) = false
 NaiveNASlib.prealignsizes(s::FailAlignSizeNoOp, vin, vout, will_rm) = false
