@@ -325,4 +325,67 @@
             end
         end
     end
+
+    @testset "Find matching vertices" begin
+        import NaiveGAflux: GlobalPool, sameactdims, default_pairgen
+
+        iv(np) = inputvertex("$np.in", 3, FluxDense())
+        dv(in, outsize, name) = mutable(name, Dense(nout(in), outsize), in)
+        gv(in, name) = invariantvertex(GlobalPool(MaxPool), in; traitdecoration = named(name))
+        cv(in, outsize, name) = mutable(name, Conv((3,3), nout(in) => outsize; pad=(1,1)), in)
+
+        @testset "Linear graph" begin
+            function g(np, cvs, dvs)
+                vi = iv(np)
+                cvn = foldl(enumerate(cvs); init=vi) do vin, (i,s)::Tuple
+                    cv(vin, s, "$np.cv$i")
+                end
+                pv1 = gv(cvn, "$np.pv1")
+                dvn = foldl(enumerate(dvs); init=pv1) do vin, (i,s)::Tuple
+                    dv(vin, s, "$np.dv$i")
+                end
+                return CompGraph(vi, dvn)
+            end
+
+            ga = g("a", (4,5), (3,2))
+
+            vsa = vertices(ga)[2:end]
+            @test sameactdims.(vsa[end], vsa) == sameactdims.(vsa[end-1], vsa) == Bool[0, 0, 0, 1, 1]
+            @test sameactdims.(vsa[1], vsa) == sameactdims.(vsa[2], vsa) == sameactdims.(vsa[3], vsa) == Bool[1, 1, 1, 0, 0]
+
+            @testset "Match same size" begin
+                gb = g("b", (4,5), (3,2))
+                vsb = vertices(gb)[2:end]
+
+                @test default_pairgen(vsa, vsb) == (1, 1)
+                @test default_pairgen(vsa, vsb, 3) == (3, 3)
+                @test default_pairgen(vsa, vsb, length(vsa)+1) == nothing
+            end
+
+            @testset "Match larger" begin
+                gb = g("b", 2:7, (8,))
+                vsb = vertices(gb)[2:end]
+
+                @test default_pairgen(vsa, vsb) == (1, 2)
+                @test default_pairgen(vsa, vsb, 3) == (3, 5)
+                @test default_pairgen(vsa, vsb, 5) == (5, 8)
+            end
+
+            @testset "Match smaller" begin
+                gb = g("b", (2,), (3,))
+                vsb = vertices(gb)[2:end]
+
+                @test default_pairgen(vsa, vsb) == (1, 1)
+                @test default_pairgen(vsa, vsb, 2) == (2, 1)
+                @test default_pairgen(vsa, vsb, 4) == (4, 2)
+                @test default_pairgen(vsa, vsb, 5) == (5, 3)
+            end
+
+            @testset "Test swap" begin
+                gb = g("b", 2:4, 5:7)
+
+    
+            end
+        end
+    end
 end

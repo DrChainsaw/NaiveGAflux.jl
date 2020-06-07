@@ -544,7 +544,7 @@ GlobalPoolSpace(conf::LayerVertexConf, Ts...=(MaxPool, MeanPool)...) = FunctionS
 # About 50% faster on GPU to create a MeanPool and use it compared to dropdims(mean(x, dims=[1:2]), dims=(1,2)). CBA to figure out why...
 struct GlobalPool{PT} end
 GlobalPool(PT) = GlobalPool{PT}()
-(::GlobalPool{PT})(x::AbstractArray{<:Any, N}) where {N, PT} = dropdims(PT(size(x)[1:N-2])(x),dims=Tuple(1:N-2))
+(::GlobalPool{PT})(x::AbstractArray{<:Any, N}) where {N, PT} = Flux.flatten(PT(size(x)[1:N-2])(x))
 
 NaiveNASflux.layertype(gp::GlobalPool) = gp
 NaiveNASflux.layer(gp::GlobalPool) = gp

@@ -1,4 +1,55 @@
 
+function crossover(g1::CompGraph, g2::CompGraph, selection, pairgen, crossoverfun)
+
+    # pairgen api is very close to the iterator specifiction. Not sure if things would be easier if it was an iterator instead...
+    sel(g) = select(selection(g))
+
+    inds = pairgen(sel(g1), sel(g2))
+    while !isnothing(inds)
+        ind1, ind2 = inds
+
+        g1,g2,v1,v2 = crossoverfun((g1,g2, g -> sel(g)[ind1], g -> sel(g)[ind2]))
+
+        # Graphs may be different now, so we need to reselect
+        inds = pairgen(sel(g1), sel(g2), ind1+1)
+    end
+end
+
+
+function default_pairgen(vs1, vs2, ind1 = 1, deviation = 0.0; rng=rng_default, compatiblefun = sameactdims)
+    ind1 > length(vs1) && return nothing
+    candidate_ind2s = filter(i2 -> compatiblefun(vs1[ind1], vs2[i2]), eachindex(vs2))
+
+    order1 = relative_topological_order(vs1) .+ deviation .* randn(rng, length(vs1))
+    order2 = relative_topological_order(vs2) .+ deviation .* randn(rng, length(vs2))
+
+    ind2 = argmin(abs.(order2 .- order1[ind1]))
+    return ind1, ind2
+end
+
+sameactdims(v1, v2) = NaiveNASflux.actdim(v1) == NaiveNASflux.actdim(v2) && NaiveNASflux.actrank(v1) == NaiveNASflux.actrank(v2)
+relative_topological_order(arr) = collect(eachindex(arr) / length(arr))
+
+function crossoverswap((g1,g2,sel1,sel2)::Tuple;rng=rng_default)
+    g1c = copy(g1)
+    g2c = copy(g2)
+
+    vs1 = separablefrom(sel1(g1c))
+    vs2 = separablefrom(sel2(g2c))
+
+    vout1 = vs1[1]
+    vin1 = rand(rng, vs1)
+
+    vout2 = vs2[1]
+    vin2 = rand(rng, filter(v -> sameactdims(v, vin1)), vs2)
+
+    success1, success2 = crossoverswap(vin1, vout1, vin2, vout2)
+    g1ret = success1 ? g1c : g1
+    g2ret = success2 ? g2c : g2
+    return g1ret, g2ret, sel1, sel2 #Just to be compatiable with mutation utils, like MutationProbability
+end
+
+
 """
     crossoverswap(v1::AbstractVertex, v2::AbstractVertex, strategy = () -> PostAlignJuMP())
     crossoverswap(vin1::AbstractVertex, vout1::AbstractVertex, vin2::AbstractVertex, vout2::AbstractVertex, strategy = () -> PostAlignJuMP())
