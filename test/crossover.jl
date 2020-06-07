@@ -255,5 +255,74 @@
                 @test size(gb(ones(3,2))) == (5,2)
             end
         end
+
+        @testset "Swap invariant layers" begin
+            bv(in, name) = mutable(name, BatchNorm(nout(in)), in)
+            pv(in, name) = mutable(name, MaxPool((3,3); pad=(1,1)), in)
+            cv(in, outsize, name) = mutable(name, Conv((3,3), nout(in) => outsize; pad=(1,1)), in)
+
+            @testset "Linear graph" begin
+                function g(np)
+                    vi = iv(np)
+                    cv1 = cv(vi, 4, "$np.cv1")
+                    bv1 = bv(cv1, "$np.bv1")
+                    cv2 = cv(bv1, 5, "$np.cv2")
+                    pv1 = pv(cv2, "$np.pv1")
+                    cv3 = cv(pv1, 2, "$np.cv3")
+                    return CompGraph(vi, cv3)
+                end
+
+                @testset "Swap $v1 to $v2" for (v1,v2) in (
+                    ("bv1", "bv1"),
+                    ("pv1", "pv1"),
+                    ("bv1", "pv1")
+                    )
+
+                    vs(g, np) = v4n(g, "$np.$v1"), v4n(g, "$np.$v2")
+
+                    ga = g("a")
+                    gb = g("b")
+
+                    @test crossoverswap(vs(ga, "a")..., vs(gb, "b")...) == (true, true)
+
+                    @test "a.$v1" ∉ name.(vertices(ga))
+                    @test "b.$v1" ∈ name.(vertices(ga))
+
+                    @test "a.$v2" ∉ name.(vertices(ga))
+                    @test "b.$v2" ∈ name.(vertices(ga))
+
+                    @test "b.$v1" ∉ name.(vertices(gb))
+                    @test "a.$v1" ∈ name.(vertices(gb))
+
+                    @test "b.$v2" ∉ name.(vertices(gb))
+                    @test "a.$v2" ∈ name.(vertices(gb))
+
+                    apply_mutation(ga)
+                    apply_mutation(gb)
+
+                    @test size(ga(ones(4,4,3,2))) == (2,2,2,2)
+                    @test size(gb(ones(4,4,3,2))) == (2,2,2,2)
+                end
+
+                @testset "Self swap is noop" begin
+                    g_org = g("a")
+
+                    bn = layer(v4n(g_org, "a.bv1"))
+                    bn.γ .= randn(Float32, nout(bn))
+
+                    indata = randn(4,4,3,2)
+                    out_org = g_org(indata)
+
+                    g_new = copy(g_org)
+
+                    @test crossoverswap(v4n(g_org, "a.bv1"), v4n(g_new, "a.bv1")) == (true, true)
+                    apply_mutation(g_org)
+                    apply_mutation(g_new)
+
+                    @test g_org(indata) == out_org
+                    @test g_new(indata) == out_org
+                end
+            end
+        end
     end
 end
