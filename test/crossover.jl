@@ -1,7 +1,7 @@
 @testset "Crossover" begin
 
     @testset "CrossoverSwap" begin
-        import NaiveGAflux: crossoverswap, separablefrom
+        import NaiveGAflux: crossoverswap!, separablefrom
         using Random
 
         iv(np) = inputvertex("$np.in", 3, FluxDense())
@@ -24,7 +24,7 @@
                 ga = g(4:6, "a")
                 gb = g(1:3, "b")
 
-                crossoverswap(vertices(ga)[3], vertices(gb)[3])
+                crossoverswap!(vertices(ga)[3], vertices(gb)[3])
                 apply_mutation(ga)
                 apply_mutation(gb)
 
@@ -42,7 +42,7 @@
                 ga = g(4:8, "a")
                 gb = g(1:5, "b")
 
-                crossoverswap(vertices(ga)[2], vertices(ga)[5], vertices(gb)[3], vertices(gb)[4])
+                crossoverswap!(vertices(ga)[2], vertices(ga)[5], vertices(gb)[3], vertices(gb)[4])
                 apply_mutation(ga)
                 apply_mutation(gb)
 
@@ -65,7 +65,7 @@
             ga = g(3:7, "a", (vs...) ->concat("a.merge", vs...))
             gb = g(3 .* ones(Int, 4), "b", (vs...) -> +("b.merge" >> vs[1], vs[2:end]...))
 
-            crossoverswap(vertices(ga)[end-1], vertices(gb)[end-1])
+            crossoverswap!(vertices(ga)[end-1], vertices(gb)[end-1])
 
             apply_mutation(ga)
             apply_mutation(gb)
@@ -126,7 +126,7 @@
             apply_mutation(gb)
             @test gb(indata) == outb
 
-            crossoverswap(aswap[end], aswap[1], bswap[end], bswap[1])
+            crossoverswap!(aswap[end], aswap[1], bswap[end], bswap[1])
             apply_mutation(ga)
             apply_mutation(gb)
 
@@ -214,7 +214,7 @@
             nouts_org = nout.(vs_org)
 
             swappable_org = separablefrom(v4n(g_org, "a.dva1"))
-            crossoverswap(swappable_org[end], swappable_org[1], swappable_new[end], swappable_new[1])
+            crossoverswap!(swappable_org[end], swappable_org[1], swappable_new[end], swappable_new[1])
             apply_mutation(g_org)
             apply_mutation(g_new)
 
@@ -239,7 +239,7 @@
                 ga = g("a", 3, (vname, vs...) -> +(vname >> vs[1], vs[2:end]...))
                 gb = g("b", 5, concat)
 
-                @test @test_logs (:warn, "Failed to align sizes when adding edge between b.dv2 and a.m1 for crossover. Reverting...") crossoverswap(vertices(ga)[end-1], vertices(gb)[end-1]) == (true, false)
+                @test @test_logs (:warn, "Failed to align sizes when adding edge between b.dv2 and a.m1 for crossover. Reverting...") crossoverswap!(vertices(ga)[end-1], vertices(gb)[end-1]) == (true, false)
                 apply_mutation(ga)
                 @test name.(vertices(ga)) == ["a.in", "a.dv1", "a.dv2", "b.m1", "a.dv3"]
                 @test size(ga(ones(3,2))) == (5,2)
@@ -249,7 +249,7 @@
                 ga = g("a", 5, concat)
                 gb = g("b", 3, (vname, vs...) -> +(vname >> vs[1], vs[2:end]...))
 
-                @test @test_logs (:warn, "Failed to align sizes when adding edge between a.dv2 and b.m1 for crossover. Reverting...") crossoverswap(vertices(ga)[end-1], vertices(gb)[end-1]) == (false, true)
+                @test @test_logs (:warn, "Failed to align sizes when adding edge between a.dv2 and b.m1 for crossover. Reverting...") crossoverswap!(vertices(ga)[end-1], vertices(gb)[end-1]) == (false, true)
                 apply_mutation(gb)
                 @test name.(vertices(gb)) == ["b.in", "b.dv1", "b.dv2", "a.m1", "b.dv3"]
                 @test size(gb(ones(3,2))) == (5,2)
@@ -283,7 +283,7 @@
                     ga = g("a")
                     gb = g("b")
 
-                    @test crossoverswap(vs(ga, "a")..., vs(gb, "b")...) == (true, true)
+                    @test crossoverswap!(vs(ga, "a")..., vs(gb, "b")...) == (true, true)
 
                     @test "a.$v1" ∉ name.(vertices(ga))
                     @test "b.$v1" ∈ name.(vertices(ga))
@@ -315,7 +315,7 @@
 
                     g_new = copy(g_org)
 
-                    @test crossoverswap(v4n(g_org, "a.bv1"), v4n(g_new, "a.bv1")) == (true, true)
+                    @test crossoverswap!(v4n(g_org, "a.bv1"), v4n(g_new, "a.bv1")) == (true, true)
                     apply_mutation(g_org)
                     apply_mutation(g_new)
 

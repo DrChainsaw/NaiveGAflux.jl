@@ -80,7 +80,7 @@ function crossoverswap_bc((g1,g2,sel1,sel2)::Tuple; pairgen=default_pairgen)
     # Endpoint in output direction is already determined by sel1 and sel2 and is returned by separablefrom as the first element
     ind1, ind2 = pairgen(vs1,vs2)
 
-    success1, success2 = crossoverswap(vs1[ind1], vs1[1], vs2[ind2], vs2[1])
+    success1, success2 = crossoverswap!(vs1[ind1], vs1[1], vs2[ind2], vs2[1])
 
     g1ret = success1 ? g1c : g1
     g2ret = success2 ? g2c : g2
@@ -90,21 +90,23 @@ end
 
 
 """
-    crossoverswap(v1::AbstractVertex, v2::AbstractVertex, strategy = () -> PostAlignJuMP())
-    crossoverswap(vin1::AbstractVertex, vout1::AbstractVertex, vin2::AbstractVertex, vout2::AbstractVertex, strategy = () -> PostAlignJuMP())
+    crossoverswap!(v1::AbstractVertex, v2::AbstractVertex)
+    crossoverswap!(vin1::AbstractVertex, vout1::AbstractVertex, vin2::AbstractVertex, vout2::AbstractVertex)
 
 Swap vertices `vin1` to `vout1` with `vin2` and `vout2` so that `vin1` to `vin2` is placed in the same position of the graph as `vin2` to `vout2` and vice versa.
 
 Vertices may come from different graphs.
 """
-crossoverswap(v1::AbstractVertex, v2::AbstractVertex) = crossoverswap(v1,v1,v2,v2)
+crossoverswap!(v1::AbstractVertex, v2::AbstractVertex) = crossoverswap!(v1,v1,v2,v2)
 
-function crossoverswap(vin1::AbstractVertex, vout1::AbstractVertex, vin2::AbstractVertex, vout2::AbstractVertex)
+function crossoverswap!(vin1::AbstractVertex, vout1::AbstractVertex, vin2::AbstractVertex, vout2::AbstractVertex)
 
     # Beware: ix and ox are not the same thing!! Check the strip function
     i1, o1 = stripedges(vin1, vout1)
     i2, o2 = stripedges(vin2, vout2)
 
+    # success1 mapped to vin2 and vout2 looks backwards, but remember that vin2 and vout2 are the new guys being inserted in everything connected to i1 and o1
+    # Returning success status instead of acting as a noop at failure is not very nice, but I could not come up with a way which was 100% to revert a botched attempt and making a backup of vertices before doing any changes is not easy to deal with for the receiver either
     success1 = addinedges!(vin2, i1) && addoutedges!(vout2, o1)
     success2 = addinedges!(vin1, i2) && addoutedges!(vout1, o2)
 
