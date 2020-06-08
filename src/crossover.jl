@@ -14,15 +14,23 @@ How the crossover is performed depends on `pairgen` and `crossoverfun` as well a
 """
 function crossover(g1::CompGraph, g2::CompGraph; selection=FilterMutationAllowed(), pairgen=default_pairgen, crossoverfun=crossoverswap_bc)
 
-    # pairgen api is very close to the iterator specifiction. Not sure if things would be easier if it was an iterator instead...
     sel(g) = select(selection, g)
 
+    ninputs1 = length(g1.inputs)
+    ninputs2 = length(g2.inputs)
+    noutputs1 = length(g1.outputs)
+    noutputs2 = length(g2.outputs)
+
+    # pairgen api is very close to the iterator specification. Not sure if things would be easier if it was an iterator instead...
     inds = pairgen(sel(g1), sel(g2), ind1 = 1)
     while !isnothing(inds)
         ind1, ind2 = inds
 
         # sel1 and sel2 returned only because crossoverfun may be a generic AbstractMutation (e.g. MutationProbability) which by contract returns its inputs if noop
-        g1,g2,sel1,sel2 = crossoverfun((g1,g2, g -> sel(g)[ind1], g -> sel(g)[ind2]))
+        v1, v2 = crossoverfun((sel(g1)[ind1], sel(g2)[ind2]))
+
+        g1 = regraph(v1, ninputs1, noutputs1)
+        g2 = regraph(v2, ninputs2, noutputs2)
 
         # Graphs may be different now, so we need to reselect
         inds = pairgen(sel(g1), sel(g2), ind1 = ind1+1)
@@ -30,6 +38,18 @@ function crossover(g1::CompGraph, g2::CompGraph; selection=FilterMutationAllowed
     return g1, g2
 end
 
+regraph(v::AbstractVertex) = regraph(all_in_graph(v))
+function regraph(vs)
+    ins = filter(v -> isempty(inputs(v)), vs)
+    outs = filter(v -> isempty(outputs(v)), vs)
+    return CompGraph(ins, outs)
+end
+function regraph(x, ninputs, noutputs)
+    g = regraph(x)
+    @assert ninputs == length(g.inputs) "Incorrect number of inputs! Expected $ninputs but got $(length(g.inputs))"
+    @assert noutputs == length(g.outputs) "Incorrect number of inputs! Expected $noutputs but got $(length(g.outputs))"
+    return g
+end
 
 """
     default_pairgen(vs1, vs2, deviation = 0.0; rng=rng_default, compatiblefun = sameactdims, ind1 = rand(rng, eachindex(vs1)))
@@ -57,24 +77,29 @@ sameactdims(v1, v2) = NaiveNASflux.actdim(v1) == NaiveNASflux.actdim(v2) && Naiv
 relative_positions(arr) = collect(eachindex(arr) / length(arr))
 
 """
-    crossoverswap_bc((g1,g2,sel1,sel2)::Tuple; pairgen=default_pairgen)
+    crossoverswap_bc((v1,v2)::Tuple; pairgen=default_pairgen)
 
-Perform [`crossoverswap`](@Ref) between a set of vertices from `g1` and a set of vertices from `g2`.
+Perform [`crossoverswap!`](@Ref) with `v1` and `v2` as output crossover points.
 
-Outputs of the swap is selected by `sel1` and `sel2` while inputs are selected from the feasible set (as determined by `separablefrom`) through the supplied `pairgen` function.
+Inputs are selected from the feasible set (as determined by `separablefrom`) through the supplied `pairgen` function.
 
-Inputs `g1` and `g2` are copied before operation is performed and originals are returned if operation is not successful.
+Inputs `v1` and `v2` along with their entire graph are copied before operation is performed and originals are returned if operation is not successful.
 
-Function is designed to work inside an `AbstractMutation` (e.g. MutationProbability) which is the reason for the awkward signature and return values.
+Function is designed to work inside an `AbstractMutation` (e.g. MutationProbability).
 """
-function crossoverswap_bc((g1,g2,sel1,sel2)::Tuple; pairgen=default_pairgen)
-    g1c = copy(g1)
-    g2c = copy(g2)
+function crossoverswap_bc((v1,v2)::Tuple; pairgen=default_pairgen)
+    # This is highly annoying: crossoverswap! does multiple remove/create_edge! and is therefore very hard to revert should something go wrong with one of the steps.
+    # To mitigate this a backup copy is used. It is however not easy to backup a single vertex as it is connected to all other vertices in the graph, meaning that the whole graph must be copied. Sigh...
+    function copyvertex(v)
+        g = regraph(v)
+        vs = vertices(copy(g))
+        return vs[indexin([v], vertices(g))][]
+    end
+    v1c = copyvertex(v1)
+    v2c = copyvertex(v2)
 
-    # Swapping inputs or outputs will replace the whole graph but the CompGraph will have the old inputs causing all kinds of mayhem
-    # Instead of trying to detect it and fixing or try to create new graphs it we'll just no allow it
-    vs1 = filter(v -> allow_mutation(v) && v ∉ g1c.inputs && v ∉ g1c.outputs, separablefrom(sel1(g1c)))
-    vs2 = filter(v -> allow_mutation(v) && v ∉ g2c.inputs && v ∉ g2c.outputs, separablefrom(sel2(g2c)))
+    vs1 = filter(allow_mutation, separablefrom(v1c))
+    vs2 = filter(allow_mutation, separablefrom(v2c))
 
     # From the two sets of separable vertices, find two matching pairs to use as endpoints in input direction
     # Endpoint in output direction is already determined by sel1 and sel2 and is returned by separablefrom as the first element
@@ -82,10 +107,11 @@ function crossoverswap_bc((g1,g2,sel1,sel2)::Tuple; pairgen=default_pairgen)
 
     success1, success2 = crossoverswap!(vs1[ind1], vs1[1], vs2[ind2], vs2[1])
 
-    g1ret = success1 ? g1c : g1
-    g2ret = success2 ? g2c : g2
+    v1ret = success1 ? v1c : v1
+    v2ret = success2 ? v2c : v2
 
-    return g1ret, g2ret, sel1, sel2 #Just to be compatiable with mutation utils, like MutationProbability
+    # Note! Flip v1 and v2 for same reason as success1 and 2 are flipped in crossoverswap!
+    return v2ret, v1ret
 end
 
 

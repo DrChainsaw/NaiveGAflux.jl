@@ -326,7 +326,7 @@
         end
     end
 
-    @testset "Find matching vertices" begin
+    @testset "VertexCrossover" begin
         import NaiveGAflux: GlobalPool, sameactdims, default_pairgen
 
         iv(np) = inputvertex("$np.in", 3, FluxDense())
@@ -345,6 +345,20 @@
                     dv(vin, s, "$np.dv$i")
                 end
                 return CompGraph(vi, dvn)
+            end
+
+            @testset "regraph" begin
+                import NaiveGAflux: regraph
+
+                g_org = g("test", 3:4, 5:6)
+
+                v = vertices(g_org)[4]
+
+                g_new = regraph(v, 1, 1)
+                @test name.(vertices(g_org)) == name.(vertices(g_new))
+
+                @test_throws AssertionError regraph(v, 2 ,1)
+                @test_throws AssertionError regraph(v, 1, 2)
             end
 
             @testset "Generate pairs" begin
@@ -388,7 +402,7 @@
                 ga = g("a", 3:4, 5:6)
                 gb = g("b", 2:4, 5:7)
 
-                pairgen(vs1,vs2; ind1=2) = ind1 > 3 ? nothing : default_pairgen(vs1, vs2; ind1=min(2 * ind1, length(vs1)))
+                pairgen(vs1,vs2; ind1=1) = ind1 > 3 ? nothing : default_pairgen(vs1, vs2; ind1=min(2*ind1, length(vs1)))
 
                 crossfun(args...) = crossoverswap_bc(args...;pairgen = pairgen)
 
@@ -401,14 +415,14 @@
                 @test anames == name.(vertices(ga))
                 @test bnames == name.(vertices(gb))
 
-                @test name.(vertices(ga_new)) == ["a.in", "b.cv1", "a.cv2", "b.pv1", "b.dv1", "b.dv2", "a.dv2"]
-                @test name.(vertices(gb_new)) == ["b.in", "a.cv1", "b.cv2", "b.cv3", "a.pv1", "a.dv1", "b.dv3"]
+                @test name.(vertices(ga_new)) == ["a.in", "b.cv1", "b.cv2", "b.cv3", "a.pv1", "b.dv2", "b.dv3"]
+                @test name.(vertices(gb_new)) == ["b.in", "a.cv1", "a.cv2", "b.pv1", "b.dv1", "a.dv1", "a.dv2"]
 
                 apply_mutation(ga_new)
                 apply_mutation(gb_new)
 
-                @test size(ga_new(ones(Float32, 4,4,3,2))) == (6, 2)
-                @test size(gb_new(ones(Float32, 4,4,3,2))) == (7, 2)
+                @test size(ga_new(ones(Float32, 4,4,3,2))) == (7, 2)
+                @test size(gb_new(ones(Float32, 4,4,3,2))) == (6, 2)
             end
         end
     end
