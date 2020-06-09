@@ -55,7 +55,7 @@ NaiveNASlib.clone(t::MutationShield;cf=clone) = MutationShield(cf(base(t), cf=cf
 """
     AbstractVertexSelection
 
-Abstract type for determining how to select vertices from a `CompGraph`
+Abstract type for determining how to select vertices from a `CompGraph` or an array of vertices.
 """
 abstract type AbstractVertexSelection end
 
@@ -66,6 +66,7 @@ Select all vertices in `g`.
 """
 struct AllVertices <:AbstractVertexSelection end
 select(::AllVertices, g::CompGraph) = vertices(g)
+select(::AllVertices, vs::AbstractArray) = vs
 
 """
     FilterMutationAllowed
@@ -76,7 +77,7 @@ struct FilterMutationAllowed <:AbstractVertexSelection
     s::AbstractVertexSelection
 end
 FilterMutationAllowed() = FilterMutationAllowed(AllVertices())
-select(s::FilterMutationAllowed, g::CompGraph) = filter(allow_mutation, select(s.s, g))
+select(s::FilterMutationAllowed, x) = filter(allow_mutation, select(s.s, x))
 
 """
     ApplyIf <: DecoratingTrait

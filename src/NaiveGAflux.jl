@@ -41,6 +41,9 @@ export AbstractVertexSelection, AllVertices, FilterMutationAllowed
 # mutation types
 export AbstractMutation, MutationProbability, WeightedMutationProbability, HighValueMutationProbability, LowValueMutationProbability, MutationList, RecordMutation, LogMutation, MutationFilter, PostMutation, VertexMutation, NoutMutation, AddVertexMutation, RemoveVertexMutation, AddEdgeMutation, RemoveEdgeMutation, KernelSizeMutation, KernelSizeMutation2D, ActivationFunctionMutation, NeuronSelectMutation, PostMutation, NeuronSelect, RemoveZeroNout, OptimizerMutation, LearningRateMutation, AddOptimizerMutation
 
+# Crossover types
+export AbstractCrossover, VertexCrossover, CrossoverSwap
+
 # mutation auxillaries
 export NeuronSelect, RemoveZeroNout
 

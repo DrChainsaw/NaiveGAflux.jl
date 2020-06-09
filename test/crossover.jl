@@ -366,7 +366,8 @@
 
                 vsa = vertices(ga)[2:end]
                 @test sameactdims.(vsa[end], vsa) == sameactdims.(vsa[end-1], vsa) == Bool[0, 0, 0, 1, 1]
-                @test sameactdims.(vsa[1], vsa) == sameactdims.(vsa[2], vsa) == sameactdims.(vsa[3], vsa) == Bool[1, 1, 1, 0, 0]
+                @test sameactdims.(vsa[1], vsa) == sameactdims.(vsa[2], vsa) == Bool[1, 1, 0, 0, 0]
+                @test sameactdims.(vsa[3], vsa) == Bool[0,0,1,0,0]
 
                 @testset "Match same size" begin
                     gb = g("b", (4,5), (3,2))
@@ -382,7 +383,7 @@
                     vsb = vertices(gb)[2:end]
 
                     @test default_pairgen(vsa, vsb; ind1=1) == (1, 2)
-                    @test default_pairgen(vsa, vsb; ind1=3) == (3, 5)
+                    @test default_pairgen(vsa, vsb; ind1=3) == (3, 7) # Only global pool matches with global pool
                     @test default_pairgen(vsa, vsb; ind1=5) == (5, 8)
                 end
 
@@ -392,19 +393,20 @@
 
                     @test default_pairgen(vsa, vsb; ind1=1) == (1, 1)
                     @test default_pairgen(vsa, vsb; ind1=2) == (2, 1)
+                    @test default_pairgen(vsa, vsb; ind1=3) == (3, 2) # Only global pool matches with global pool
                     @test default_pairgen(vsa, vsb; ind1=4) == (4, 3)
                     @test default_pairgen(vsa, vsb; ind1=5) == (5, 3)
                 end
             end
 
             @testset "Test swap single" begin
-                import NaiveGAflux: crossover, default_pairgen, crossoverswap_bc
+                import NaiveGAflux: crossover, default_pairgen, crossoverswap
                 ga = g("a", 3:4, 5:6)
                 gb = g("b", 2:4, 5:7)
 
                 pairgen(vs1,vs2; ind1=1) = ind1 > 3 ? nothing : default_pairgen(vs1, vs2; ind1=min(2*ind1, length(vs1)))
 
-                crossfun(args...) = crossoverswap_bc(args...;pairgen = pairgen)
+                crossfun(args...) = crossoverswap(args...;pairgen = pairgen)
 
                 anames = name.(vertices(ga))
                 bnames = name.(vertices(gb))
@@ -423,6 +425,44 @@
 
                 @test size(ga_new(ones(Float32, 4,4,3,2))) == (7, 2)
                 @test size(gb_new(ones(Float32, 4,4,3,2))) == (6, 2)
+            end
+
+
+            @testset "Crossover with PostMutation" begin
+                import NaiveGAflux: select_neurons, Nout, default_neuronselect, default_pairgen
+
+                # TODO: Make NeuronSelectMutation able to accept RecordMutation of AbstractCrossover?
+                function (n::NeuronSelect)(m::AbstractCrossover, (v1,v2)::Tuple)
+                    select_neurons(Nout(), NaiveNASlib.flatten(v1), v -> ones(nout_org(v)))
+                    select_neurons(Nout(), NaiveNASlib.flatten(v2), v -> ones(nout_org(v)))
+                end
+
+                pairgen_outer(vs1,vs2; ind1=1) = default_pairgen(vs1, vs2; ind1=2ind1)
+                pairgen_inner(vs1, vs2) = default_pairgen(vs1, vs2; ind1=1)
+
+                c = VertexCrossover(PostMutation(CrossoverSwap(;pairgen=pairgen_inner), NeuronSelect()); pairgen=pairgen_outer)
+
+                ga = g("a", 3:6, 7:8)
+                gb = g("b", 2:3, 4:10)
+
+                anames = name.(vertices(ga))
+                bnames = name.(vertices(gb))
+
+                ga_new, gb_new = c((ga,gb))
+
+                # Originals not impacted
+                @test anames == name.(vertices(ga))
+                @test bnames == name.(vertices(gb))
+
+                @test name.(vertices(ga_new)) == ["a.in", "a.cv1", "b.cv2", "a.cv3", "a.cv4", "a.pv1", "b.dv6", "a.dv2"]
+                @test name.(vertices(gb_new)) == ["b.in", "b.cv1", "a.cv2", "b.pv1", "b.dv1", "b.dv2", "b.dv3", "b.dv4", "b.dv5", "a.dv1", "b.dv7"]
+
+                # apply_mutation will make nout(v) == nout_org(v)
+                @test nout.(vertices(ga)) == nout_org.(vertices(ga)) == [3, 3, 4, 5, 6, 6, 7, 8]
+                @test nout.(vertices(gb)) == nout_org.(vertices(gb)) == [3, 2, 3, 3, 4, 5, 6, 7, 8, 9, 10]
+
+                @test size(ga(ones(4,4,3,2))) == (8,2)
+                @test size(gb(ones(4,4,3,2))) == (10,2)
             end
         end
     end

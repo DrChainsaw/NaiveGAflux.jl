@@ -148,7 +148,7 @@ end
     VertexMutation(m::AbstractMutation{AbstractVertex}, s::AbstractVertexSelection)
     VertexMutation(m::AbstractMutation{AbstractVertex})
 
-Applies a wrapped `AbstractMutation{AbstractVertex}` for each selected vertex in a `CompGraph`.
+Applies a wrapped `AbstractMutation{AbstractVertex}` to each selected vertex in a `CompGraph`.
 
 Vertices to select is determined by the configured `AbstractVertexSelection`.
 """
@@ -528,7 +528,10 @@ select(m::NeuronSelectMutation) = select_neurons(m.strategy, m.m.mutated, m.rank
 
 select_neurons(::T, vs, rankfun) where T = error("Neuron select not implemented for $T")
 function select_neurons(strategy::Nout, vs::AbstractArray{AbstractVertex}, rankfun::Function)
-    vchanged = filter(v -> nout(v) != nout_org(v), vs)
+    vchanged = filter(vs) do v
+        # Some structural operations (create/remove edges/vertices) might result in nout(v) being unchanged but nin of its outputs is changed
+        nout(v) != nout_org(v) || any(vo -> nin(vo) != nin_org(vo), outputs(v))
+    end
     isempty(vchanged) && return
 
     vall = unique(mapfoldl(v -> all_in_Δsize_graph(v, Output()), vcat, vchanged))
