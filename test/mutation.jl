@@ -285,7 +285,7 @@
         end
 
 
-        @testset "NeuronSelect" begin
+        @testset "neuronselect" begin
             m1 = MutationProbability(NeuronSelectMutation(oddfirst, noutselect, NoutMutation(0.5, MockRng([1]))), Probability(0.2, MockRng([0.1, 0.3])))
             m2 = MutationProbability(NeuronSelectMutation(oddfirst, noutselect, NoutMutation(-0.5, MockRng([0]))), Probability(0.2, MockRng([0.3, 0.1])))
             m = VertexMutation(MutationList(m1, m2))
@@ -295,7 +295,7 @@
             g = CompGraph(inpt, v3)
 
             @test m(g) == g
-            NeuronSelect()(m, g)
+            neuronselect(m, g)
             vs = vertices(g)[2:end]
 
             @test [out_inds(op(vs[1]))] == in_inds(op(vs[2])) == [[1,2,3,-1]]

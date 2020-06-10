@@ -349,10 +349,9 @@ addmut = AddVertexMutation(VertexSpace(DenseSpace(5, identity)), IdentityWeightI
 noutmut = NeuronSelectMutation(NoutMutation(-0.8, 0.8))
 mutation = VertexMutation(MutationList(addmut, noutmut))
 # For deeply composed blobs like this, it can be cumbersome to "dig up" the NeuronSelectMutation.
-# NeuronSelect helps finding NeuronSelectMutations in the compositional hierarchy
-neuronselect = NeuronSelect()
+# neuronselect helps finding NeuronSelectMutations in the compositional hierarchy
 
-# PostMutation lets us add actions to perform after a mutation is done
+# PostMutation lets us add actions to perform after a mutation is done (such as neuronselect)
 logselect(m, g) = @info "Selecting parameters..."
 mutation = PostMutation(mutation, logselect, neuronselect)
 

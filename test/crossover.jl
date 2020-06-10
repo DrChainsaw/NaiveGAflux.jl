@@ -432,7 +432,7 @@
                 import NaiveGAflux: select_neurons, Nout, default_neuronselect, default_pairgen
 
                 # TODO: Make NeuronSelectMutation able to accept RecordMutation of AbstractCrossover?
-                function (n::NeuronSelect)(m::AbstractCrossover, (v1,v2)::Tuple)
+                function neuronselect(m::AbstractCrossover, (v1,v2)::Tuple)
                     select_neurons(Nout(), NaiveNASlib.flatten(v1), v -> ones(nout_org(v)))
                     select_neurons(Nout(), NaiveNASlib.flatten(v2), v -> ones(nout_org(v)))
                 end
@@ -440,7 +440,7 @@
                 pairgen_outer(vs1,vs2; ind1=1) = default_pairgen(vs1, vs2; ind1=2ind1)
                 pairgen_inner(vs1, vs2) = default_pairgen(vs1, vs2; ind1=1)
 
-                c = VertexCrossover(PostMutation(CrossoverSwap(;pairgen=pairgen_inner), NeuronSelect()); pairgen=pairgen_outer)
+                c = VertexCrossover(PostMutation(CrossoverSwap(;pairgen=pairgen_inner), neuronselect); pairgen=pairgen_outer)
 
                 ga = g("a", 3:6, 7:8)
                 gb = g("b", 2:3, 4:10)

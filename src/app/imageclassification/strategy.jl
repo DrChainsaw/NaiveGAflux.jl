@@ -335,9 +335,9 @@ function graphmutation(inshape)
     mremv = MutationFilter(g -> nv(g) > 5, mremv)
 
     # Create two possible mutations: One which is guaranteed to not increase the size:
-    dsize = MutationList(mremv, PostMutation(dnout, NeuronSelect()), dkern, mreme, maddm)
+    dsize = MutationList(mremv, PostMutation(dnout, neuronselect), dkern, mreme, maddm)
     # ...and another which can (and typically does) increase the size:
-    isize = MutationList(PostMutation(inout, NeuronSelect()), ikern, madde, maddm, maddv)
+    isize = MutationList(PostMutation(inout, neuronselect), ikern, madde, maddm, maddv)
     # Add mutation last as new vertices with neuron_value == 0 screws up outputs selection as per https://github.com/DrChainsaw/NaiveNASlib.jl/issues/39
 
     mgp = VertexMutation(MutationProbability(LogMutation(v -> "\tMutate global pool type for $(name(v))", MutateGlobalPool()), 0.1), SelectGlobalPool())

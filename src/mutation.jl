@@ -571,17 +571,15 @@ end
 
 
 """
-    NeuronSelect()
+    neuronselect(m, e)
 
-Search a given `AbstractMutation` hieararchy for `NeuronSelectMutations` and invoke `select` on them
+Search `AbstractMutation` hieararchy `m` for `NeuronSelectMutations` and invoke `select` on them
 """
-struct NeuronSelect end
-
-(s::NeuronSelect)(m, e) = s(m)
-function (s::NeuronSelect)(m) end
-(s::NeuronSelect)(m::T) where T <:AbstractMutation = foreach(fn -> s(getfield(m,fn)), fieldnames(T))
-(s::NeuronSelect)(a::Union{AbstractVector, Tuple}) = foreach(ae -> s(ae), a)
-(s::NeuronSelect)(m::NeuronSelectMutation) = select(m)
+neuronselect(m, e) = neuronselect(m)
+function neuronselect(m) end
+neuronselect(m::T) where T <:AbstractMutation = foreach(fn -> neuronselect(getfield(m,fn)), fieldnames(T))
+neuronselect(a::Union{AbstractVector, Tuple}) = foreach(ae -> neuronselect(ae), a)
+neuronselect(m::NeuronSelectMutation) = select(m)
 
 """
     RemoveZeroNout()
