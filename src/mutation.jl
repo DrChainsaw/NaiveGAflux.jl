@@ -107,6 +107,11 @@ function (m::RecordMutation)(e)
     push!(m.mutated, em)
     return em
 end
+function fetchmutated!(m::RecordMutation)
+    mutated = copy(m.mutated)
+    deleteat!(m.mutated, eachindex(m.mutated))
+    return mutated
+end
 
 """
     LogMutation{T} <:AbstractMutation{T}
@@ -532,7 +537,7 @@ NeuronSelectOut() = NeuronSelectOut(ApplyAfter())
 
 Select neurons for each `AbstractVertex` mutated by `m`.
 """
-select(m::NeuronSelectMutation) = select_neurons(m.strategy, m.m.mutated, m.rankfun)
+select(m::NeuronSelectMutation) = select_neurons(m.strategy, fetchmutated!(m.m), m.rankfun)
 
 function select_neurons(s, vs::AbstractArray{NTuple{N, AbstractVertex}}, rankfun) where N
     vsn = reduce((t, r) -> vcat.(t, r), vs)
@@ -541,7 +546,7 @@ end
 select_neurons(s, v::AbstractVertex, rankfun) = select_neurons(s, [v], rankfun)
 
 function select_neurons(s::NeuronSelectFlatten, vs::AbstractArray{<:AbstractVertex}, rankfun)
-    allvs = foldr((v, vsf) -> NaiveNASlib.flatten(v, vsf), vs, init=AbstractVertex[])
+    allvs = foldr(NaiveNASlib.flatten, vs, init=AbstractVertex[])
     select_neurons(s.s, allvs, rankfun)
 end
 
