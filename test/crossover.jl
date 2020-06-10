@@ -429,18 +429,12 @@
 
 
             @testset "Crossover with PostMutation" begin
-                import NaiveGAflux: select_neurons, Nout, default_neuronselect, default_pairgen
-
-                # TODO: Make NeuronSelectMutation able to accept RecordMutation of AbstractCrossover?
-                function neuronselect(m::AbstractCrossover, (v1,v2)::Tuple)
-                    select_neurons(Nout(), NaiveNASlib.flatten(v1), v -> ones(nout_org(v)))
-                    select_neurons(Nout(), NaiveNASlib.flatten(v2), v -> ones(nout_org(v)))
-                end
+                import NaiveGAflux: select_neurons, default_neuronselect, default_pairgen
 
                 pairgen_outer(vs1,vs2; ind1=1) = default_pairgen(vs1, vs2; ind1=2ind1)
                 pairgen_inner(vs1, vs2) = default_pairgen(vs1, vs2; ind1=1)
 
-                c = VertexCrossover(PostMutation(CrossoverSwap(;pairgen=pairgen_inner), neuronselect); pairgen=pairgen_outer)
+                c = VertexCrossover(PostMutation(NeuronSelectMutation(v -> ones(nout_org(v)), CrossoverSwap(;pairgen=pairgen_inner)), neuronselect); pairgen=pairgen_outer)
 
                 ga = g("a", 3:6, 7:8)
                 gb = g("b", 2:3, 4:10)
@@ -457,9 +451,26 @@
                 @test name.(vertices(ga_new)) == ["a.in", "a.cv1", "b.cv2", "a.cv3", "a.cv4", "a.pv1", "b.dv6", "a.dv2"]
                 @test name.(vertices(gb_new)) == ["b.in", "b.cv1", "a.cv2", "b.pv1", "b.dv1", "b.dv2", "b.dv3", "b.dv4", "b.dv5", "a.dv1", "b.dv7"]
 
-                # apply_mutation will make nout(v) == nout_org(v)
-                @test nout.(vertices(ga)) == nout_org.(vertices(ga)) == [3, 3, 4, 5, 6, 6, 7, 8]
-                @test nout.(vertices(gb)) == nout_org.(vertices(gb)) == [3, 2, 3, 3, 4, 5, 6, 7, 8, 9, 10]
+                @test nout.(vertices(ga_new)) == nout_org.(vertices(ga_new))
+                @test mapreduce(nin, vcat, vertices(ga_new)) == mapreduce(nin_org, vcat, vertices(ga_new))
+
+                @test nout.(vertices(gb_new)) == nout_org.(vertices(gb_new))
+                @test mapreduce(nin, vcat, vertices(gb_new)) == mapreduce(nin_org, vcat, vertices(gb_new))
+
+                NaiveNASflux.forcemutation(ga_new)
+                NaiveNASflux.forcemutation(gb_new)
+
+                @test nout(v4n(ga_new, "b.cv2")) == nout(layer(v4n(ga_new, "b.cv2")))
+                @test nin(v4n(ga_new, "a.cv3")) == [nin(layer(v4n(ga_new, "a.cv3")))]
+
+                @test nout(v4n(ga_new, "b.dv6")) == nout(layer(v4n(ga_new, "b.dv6")))
+                @test nin(v4n(ga_new, "a.dv2")) == [nin(layer(v4n(ga_new, "a.dv2")))]
+
+                @test nout(v4n(gb_new, "a.cv2")) == nout(layer(v4n(gb_new, "a.cv2")))
+                @test nin(v4n(gb_new, "b.dv1")) == [nin(layer(v4n(gb_new, "b.dv1")))]
+
+                @test nout(v4n(gb_new, "a.dv1")) == nout(layer(v4n(gb_new, "a.dv1")))
+                @test nin(v4n(gb_new, "b.dv7")) == [nin(layer(v4n(gb_new, "b.dv7")))]
 
                 @test size(ga(ones(4,4,3,2))) == (8,2)
                 @test size(gb(ones(4,4,3,2))) == (10,2)

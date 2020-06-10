@@ -103,8 +103,9 @@ struct RecordMutation{T} <:AbstractMutation{T}
 end
 RecordMutation(m::AbstractMutation{T}) where T = RecordMutation(m, T[])
 function (m::RecordMutation)(e)
-    push!(m.mutated, e)
-    m.m(e)
+    em = m.m(e)
+    push!(m.mutated, em)
+    return em
 end
 
 """
@@ -498,26 +499,33 @@ Possible to select ranking method for neurons using `rankfun` which takes a muta
 
 How to select neurons depends a bit on what operation the wrapped `RecordMutation` performs. If not supplied explicitly an attempt to infer it will be made, resulting in an error if not possible.
 """
-struct NeuronSelectMutation{T} <: AbstractMutation{AbstractVertex}
+struct NeuronSelectMutation{T, MT} <: AbstractMutation{MT}
     rankfun::Function
     strategy::T
-    m::RecordMutation{AbstractVertex}
+    m::RecordMutation{MT}
 end
-NeuronSelectMutation(rankfun, m::AbstractMutation{AbstractVertex}) = NeuronSelectMutation(rankfun, neuron_select_strategy(m), m)
-NeuronSelectMutation(rankfun, strategy, m::AbstractMutation{AbstractVertex}) = NeuronSelectMutation(rankfun, strategy, RecordMutation(m))
-NeuronSelectMutation(m::AbstractMutation{AbstractVertex}) = NeuronSelectMutation(default_neuronselect, m)
-NeuronSelectMutation(m::RecordMutation{AbstractVertex}) = NeuronSelectMutation(default_neuronselect, neuron_select_strategy(m.m), m)
+NeuronSelectMutation(rankfun, m::AbstractMutation) = NeuronSelectMutation(rankfun, neuron_select_strategy(m), m)
+NeuronSelectMutation(rankfun, strategy, m::AbstractMutation) = NeuronSelectMutation(rankfun, strategy, RecordMutation(m))
+NeuronSelectMutation(m::AbstractMutation) = NeuronSelectMutation(default_neuronselect, m)
+NeuronSelectMutation(m::RecordMutation) = NeuronSelectMutation(default_neuronselect, neuron_select_strategy(m.m), m)
 
 (m::NeuronSelectMutation)(v::AbstractVertex) = m.m(v)
+(m::NeuronSelectMutation)(vs::NTuple{N, AbstractVertex}) where N = m.m(vs)
 
 neuron_select_strategy(::T) where T <:AbstractMutation = error("Neuron select strategy not implemented for $T")
-neuron_select_strategy(::RemoveVertexMutation) = Nout()
-neuron_select_strategy(::NoutMutation) = Nout()
+neuron_select_strategy(::RemoveVertexMutation) = NeuronSelectOut()
+neuron_select_strategy(::NoutMutation) =  NeuronSelectOut()
+neuron_select_strategy(::AbstractCrossover) = NeuronSelectFlatten()
 
-struct Nout
+struct NeuronSelectFlatten{T}
+    s::T
+end
+NeuronSelectFlatten() = NeuronSelectFlatten(NeuronSelectOut())
+
+struct NeuronSelectOut
     s::AbstractSelectionStrategy
 end
-Nout() = Nout(ApplyAfter())
+NeuronSelectOut() = NeuronSelectOut(ApplyAfter())
 
 """
     select(m::NeuronSelectMutation)
@@ -526,15 +534,25 @@ Select neurons for each `AbstractVertex` mutated by `m`.
 """
 select(m::NeuronSelectMutation) = select_neurons(m.strategy, m.m.mutated, m.rankfun)
 
-select_neurons(::T, vs, rankfun) where T = error("Neuron select not implemented for $T")
-function select_neurons(strategy::Nout, vs::AbstractArray{AbstractVertex}, rankfun::Function)
+function select_neurons(s, vs::AbstractArray{NTuple{N, AbstractVertex}}, rankfun) where N
+    vsn = reduce((t, r) -> vcat.(t, r), vs)
+    map(vsi -> select_neurons(s, vsi, rankfun), vsn) |> all
+end
+select_neurons(s, v::AbstractVertex, rankfun) = select_neurons(s, [v], rankfun)
+
+function select_neurons(s::NeuronSelectFlatten, vs::AbstractArray{<:AbstractVertex}, rankfun)
+    allvs = foldr((v, vsf) -> NaiveNASlib.flatten(v, vsf), vs, init=AbstractVertex[])
+    select_neurons(s.s, allvs, rankfun)
+end
+
+function select_neurons(strategy::NeuronSelectOut, vs::AbstractArray{<:AbstractVertex}, rankfun)
     vchanged = filter(vs) do v
         # Some structural operations (create/remove edges/vertices) might result in nout(v) being unchanged but nin of its outputs is changed
         nout(v) != nout_org(v) || any(vo -> nin(vo) != nin_org(vo), outputs(v))
     end
-    isempty(vchanged) && return
+    isempty(vchanged) && return true
 
-    vall = unique(mapfoldl(v -> all_in_Δsize_graph(v, Output()), vcat, vchanged))
+    vall = unique(mapreduce(v -> all_in_Δsize_graph(v, Output()), vcat, vchanged))
     Δoutputs(strategy.s, vall, rankfun)
 end
 

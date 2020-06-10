@@ -267,7 +267,7 @@
         end
         batchnorm(inpt; name="bn") = mutable(name, BatchNorm(nout(inpt)), inpt)
 
-        noutselect = NaiveGAflux.Nout(OutSelectExact())
+        noutselect = NaiveGAflux.NeuronSelectOut(OutSelectExact())
 
         @testset "NeuronSelectMutation NoutMutation" begin
             inpt = inputvertex("in", 3, FluxDense())
