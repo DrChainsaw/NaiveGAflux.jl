@@ -1,13 +1,4 @@
 """
-    AbstractCrossover{T}
-
-Type alias for `AbstractMutation{Tuple{T,T}}` defining a crossover of two entities of type `T`.
-
-Implementations are expected to be callable using a tuple of two type `T` as only input.
-"""
-AbstractCrossover{T} = AbstractMutation{Tuple{T,T}}
-
-"""
     VertexCrossover{S, PF, CF}
     VertexCrossover(crossover ;selection=FilterMutationAllowed(), pairgen=default_pairgen)
     VertexCrossover(crossover, deviation::Number; selection=FilterMutationAllowed())
@@ -126,6 +117,8 @@ function default_pairgen(vs1, vs2, deviation = 0.0; rng=rng_default, compatiblef
     # Make sure the returned indices map to vertices which are compatible so that output from a convolutional layer does not suddenly end up being input to a dense layer.
     candidate_ind2s = filter(i2 -> compatiblefun(vs1[ind1], vs2[i2]), eachindex(vs2))
 
+    isempty(candidate_ind2s) && return nothing
+
     order1 = relative_positions(vs1) .+ deviation .* randn(rng, length(vs1))
     order2 = relative_positions(vs2) .+ deviation .* randn(rng, length(vs2))
 
@@ -170,7 +163,11 @@ function crossoverswap(v1, v2; pairgen=default_pairgen, selection=FilterMutation
 
     # From the two sets of separable vertices, find two matching pairs to use as endpoints in input direction
     # Endpoint in output direction is already determined by sel1 and sel2 and is returned by separablefrom as the first element
-    ind1, ind2 = pairgen(vs1,vs2)
+    inds = pairgen(vs1,vs2)
+
+    isnothing(inds) && return v1, v2
+
+    ind1, ind2 = inds
 
     success1, success2 = crossoverswap!(vs1[ind1], vs1[1], vs2[ind2], vs2[1])
 

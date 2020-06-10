@@ -1,14 +1,14 @@
 @testset "Crossover" begin
 
+    v4n(graph::CompGraph, want) = v4n(vertices(graph), want)
+    v4n(vs, want) = vs[findfirst(v -> want == name(v), vs)]
+
     @testset "CrossoverSwap" begin
         import NaiveGAflux: crossoverswap!, separablefrom
         using Random
 
         iv(np) = inputvertex("$np.in", 3, FluxDense())
         dv(in, outsize, name) = mutable(name, Dense(nout(in), outsize), in)
-
-        v4n(graph::CompGraph, want) = v4n(vertices(graph), want)
-        v4n(vs, want) = vs[findfirst(v -> want == name(v), vs)]
 
         @testset "Simple Dense swap" begin
 
@@ -472,8 +472,80 @@
                 @test nout(v4n(gb_new, "a.dv1")) == nout(layer(v4n(gb_new, "a.dv1")))
                 @test nin(v4n(gb_new, "b.dv7")) == [nin(layer(v4n(gb_new, "b.dv7")))]
 
-                @test size(ga(ones(4,4,3,2))) == (8,2)
-                @test size(gb(ones(4,4,3,2))) == (10,2)
+                @test size(ga_new(ones(4,4,3,2))) == (8,2)
+                @test size(gb_new(ones(4,4,3,2))) == (10,2)
+            end
+        end
+
+        @testset "Branchy graph" begin
+            function forks(vbase, vf, vs, np)
+                fin = map(enumerate(vs)) do (i, s)
+                    vf(vbase, s, "$np$i")
+                end
+
+                return map(enumerate(fin)) do (i, fstart)
+                    foldl(enumerate(vs[1:end-i]); init=fstart) do vin, (i,s)::Tuple
+                        vf(vin, s, "$(name(fstart)).$i")
+                    end
+                end
+            end
+
+            function g(np, cvs, dvs)
+                vi = iv(np)
+                cvbase = cv(vi, 3, "$np.cvbbase")
+
+                cvfa = forks(cvbase, cv, cvs, "$np.cvfa")
+                m1 = concat("$np.m1", cvfa...)
+
+                cvfb = map(enumerate(forks(m1, cv, cvs, "$np.cvfb"))) do (i, vin)
+                    cv(vin, minimum(cvs), "$(name(vin)).out")
+                end
+                m2 = +("$np.m2" >> cvfb[1], cvfb[2:end]...)
+
+                pv1 = gv(m2, "$np.pv1")
+                dvn = foldl(enumerate(dvs); init=pv1) do vin, (i,s)::Tuple
+                    dv(vin, s, "$np.dv$i")
+                end
+                return CompGraph(vi, dvn)
+            end
+
+            @testset "Crossover with MutationProbability and PostMutation" begin
+                import NaiveGAflux: select_neurons, default_neuronselect, default_pairgen
+
+                pairgen_inner(vs1, vs2) = default_pairgen(vs1, vs2; ind1=length(vs1))
+
+                # TODO: This is the one which should be used!
+                #c = VertexCrossover(MutationProbability(PostMutation(NeuronSelectMutation(v -> ones(nout_org(v)), CrossoverSwap(;pairgen=pairgen_inner)), neuronselect), Probability(0.2, MockRng([0.3, 0.1, 0.3]))))
+
+                c = VertexCrossover(MutationProbability(CrossoverSwap(;pairgen=pairgen_inner), Probability(0.2, MockRng([0.3, 0.1, 0.3]))))
+
+                ga = g("a", 3:6, 7:8)
+                gb = g("b", 2:3, 4:10)
+
+                anames = name.(vertices(ga))
+                bnames = name.(vertices(gb))
+
+                ga_new, gb_new = c((ga,gb))
+
+                # TODO: Should not be needed, but gb_new is broken somehow...
+                apply_mutation(ga_new)
+                apply_mutation(gb_new)
+
+                # Originals not impacted
+                @test anames == name.(vertices(ga))
+                @test bnames == name.(vertices(gb))
+
+                @test unique(first.(split.(name.(vertices(ga_new)), '.'))) == ["a" ,"b"]
+                @test unique(first.(split.(name.(vertices(gb_new)), '.'))) == ["b" ,"a"]
+
+                @test nout.(vertices(ga_new)) == nout_org.(vertices(ga_new))
+                @test mapreduce(nin, vcat, vertices(ga_new)) == mapreduce(nin_org, vcat, vertices(ga_new))
+
+                @test nout.(vertices(gb_new)) == nout_org.(vertices(gb_new))
+                @test mapreduce(nin, vcat, vertices(gb_new)) == mapreduce(nin_org, vcat, vertices(gb_new))
+
+                @test size(ga_new(ones(Float32, 4,4,3,2))) == (8,2)
+                @test size(gb_new(ones(Float32, 4,4,3,2))) == (10,2)
             end
         end
     end

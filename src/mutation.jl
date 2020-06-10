@@ -8,6 +8,15 @@ Implementations are expected to be callable using an entity of type `T` as only 
 abstract type AbstractMutation{T} end
 
 """
+    AbstractCrossover{T}
+
+Type alias for `AbstractMutation{Tuple{T,T}}` defining a crossover of two entities of type `T`.
+
+Implementations are expected to be callable using a tuple of two type `T` as only input.
+"""
+AbstractCrossover{T} = AbstractMutation{Tuple{T,T}}
+
+"""
     MutationProbability{T} <:AbstractMutation{T}
     MutationProbability(m::AbstractMutation{T}, p::Probability)
     MutationProbability(m::AbstractMutation{T}, p::Number)
