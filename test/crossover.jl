@@ -514,10 +514,7 @@
 
                 pairgen_inner(vs1, vs2) = default_pairgen(vs1, vs2; ind1=length(vs1))
 
-                # TODO: This is the one which should be used!
-                #c = VertexCrossover(MutationProbability(PostMutation(NeuronSelectMutation(v -> ones(nout_org(v)), CrossoverSwap(;pairgen=pairgen_inner)), neuronselect), Probability(0.2, MockRng([0.3, 0.1, 0.3]))))
-
-                c = VertexCrossover(MutationProbability(CrossoverSwap(;pairgen=pairgen_inner), Probability(0.2, MockRng([0.3, 0.1, 0.3]))))
+                c = VertexCrossover(MutationProbability(PostMutation(NeuronSelectMutation(v -> ones(nout_org(v)), CrossoverSwap(;pairgen=pairgen_inner)), neuronselect), Probability(0.2, MockRng([0.3, 0.1, 0.3]))))
 
                 ga = g("a", 3:6, 7:8)
                 gb = g("b", 2:3, 4:10)
@@ -526,10 +523,6 @@
                 bnames = name.(vertices(gb))
 
                 ga_new, gb_new = c((ga,gb))
-
-                # TODO: Should not be needed, but gb_new is broken somehow...
-                apply_mutation(ga_new)
-                apply_mutation(gb_new)
 
                 # Originals not impacted
                 @test anames == name.(vertices(ga))
