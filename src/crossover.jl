@@ -191,9 +191,12 @@ This operation can fail, leaving one or both graphs in a corrupted state where e
 
 Return a tuple `(success1, success2)` where `success1` is true if `vin2` and `vou2` was successfully swapped in to the graph which previously contained `vin1` and `vout1` and vice versa for `success2`.
 """
-crossoverswap!(v1::AbstractVertex, v2::AbstractVertex) = crossoverswap!(v1,v1,v2,v2)
+crossoverswap!(v1::AbstractVertex, v2::AbstractVertex; kwargs...) = crossoverswap!(v1,v1,v2,v2; kwargs...)
 
-function crossoverswap!(vin1::AbstractVertex, vout1::AbstractVertex, vin2::AbstractVertex, vout2::AbstractVertex)
+function crossoverswap!(vin1::AbstractVertex, vout1::AbstractVertex, vin2::AbstractVertex, vout2::AbstractVertex; mergefun = default_mergefun)
+
+    # If vin1 can only take a single input while vin2 has multiple inputs (or vice versa) we need to add a vertex before which merges the inputs
+    vin1, vin2 = check_singleinput!(vin1, vin2, mergefun)
 
     # Beware: ix and ox are not the same thing!! Check the strip function
     i1, o1 = stripedges!(vin1, vout1)
@@ -205,6 +208,21 @@ function crossoverswap!(vin1::AbstractVertex, vout1::AbstractVertex, vin2::Abstr
     success2 = addinedges!(vin1, i2) && addoutedges!(vout1, o2)
 
     return success1, success2
+end
+
+function check_singleinput!(v1, v2, mergefun)
+    singleinputs = singleinput.([v1, v2])
+
+    needmerge1 = singleinputs[1] && !all(singleinputs)
+    needmerge2 = singleinputs[2] && !all(singleinputs)
+
+    function addmerge!(v)
+        insert!(inputs(v)[], vv -> mergefun(vv))
+        return inputs(v)[]
+    end
+    v1 = needmerge1 ? addmerge!(v1) : v1
+    v2 = needmerge2 ? addmerge!(v2) : v2
+    return v1, v2
 end
 
 #TODO: Add in NaiveNASlib?

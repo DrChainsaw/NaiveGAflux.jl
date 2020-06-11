@@ -77,6 +77,34 @@
             @test size(gb(ones(3, 2))) == (3, 2)
         end
 
+        @testset "Swap conc and dense" begin
+            function g(sizes, np, cfun)
+                vi = iv(np)
+                vs = map((i, s) -> dv(vi, s, "$np.dv$i"), eachindex(sizes[1:end]), sizes[1:end])
+                vm = cfun("$np.merge", vs...)
+                dvn = dv(vm, 2, "$np.dvn")
+                dvo = dv(dvn, 4, "$np.dvo")
+                return CompGraph(vi, dvo)
+            end
+
+            ga = g(2:4, "a", concat)
+            gb = g(2:4, "b", concat)
+
+            crossoverswap!(vertices(ga)[end-1], vertices(gb)[end-2]; mergefun = v -> concat("extramerge", v))
+
+            @test name.(vertices(ga)) == ["a.in", "a.dv1", "a.dv2", "a.dv3", "a.merge", "b.merge", "a.dvo"]
+            @test name.(vertices(gb)) == ["b.in", "b.dv1", "b.dv2", "b.dv3", "extramerge", "a.dvn", "b.dvn", "b.dvo"]
+
+            @test nout.(vertices(ga)) == [3, 2, 3, 4, 9, 9, 4]
+            @test nout.(vertices(gb)) == [3, 2, 3, 4, 9, 2, 2, 4]
+
+            apply_mutation(ga)
+            apply_mutation(gb)
+
+            @test size(ga(ones(3, 2))) == (4, 2)
+            @test size(gb(ones(3, 2))) == (4, 2)
+        end
+
         @testset "Find swappable path" begin
             function g(np, bconnect = false)
                 vi = iv(np)
