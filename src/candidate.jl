@@ -117,7 +117,7 @@ end
 function Serialization.serialize(s::AbstractSerializer, c::FileCandidate)
     Serialization.writetag(s.io, Serialization.OBJECT_TAG)
     serialize(s, FileCandidate)
-    serialize(s, NaiveGAflux.wrappedcand(c))
+    callcand(cc -> serialize(s,cc), c)
 end
 
 function Serialization.deserialize(s::AbstractSerializer, ::Type{FileCandidate})
