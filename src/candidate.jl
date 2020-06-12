@@ -169,13 +169,12 @@ nparams(c::AbstractCandidate) = nparams(graph(c))
 nparams(g::CompGraph) = mapreduce(prod ∘ size, +, params(g).order)
 
 """
-    evolvemodel(m::AbstractMutation{CompGraph}, newfields::Function=deepcopy)
+    evolvemodel(m::AbstractMutation{CompGraph}, mapothers=deepcopy)
     evolvemodel(m::AbstractMutation{CompGraph}, om::AbstractMutation{FluxOptimizer}, mapothers=deepcopy)
 
 Return a function which maps a `AbstractCandidate c1` to a new `AbstractCandidate c2` where any `CompGraph`s `g` in `c1` will be m(copy(g))` in `c2`. Same principle is applied to any optimisers if `om` is present.
 
-
-All other fields are mapped through the function `newfields`.
+All other fields are mapped through the function `mapothers` (default `deepcopy`).
 
 Intended use is together with [`EvolveCandidates`](@ref).
 """
@@ -188,6 +187,18 @@ function evolvemodel(m::AbstractMutation{CompGraph}, mapothers=deepcopy)
     mapcandidate(copymutate, mapothers)
 end
 evolvemodel(m::AbstractMutation{CompGraph}, om::AbstractMutation{FluxOptimizer}, mapothers=deepcopy) = evolvemodel(m, optmap(om, mapothers))
+
+evolvemodel(m::AbstractCrossover{CompGraph}, mapothers=deepcopy) = (c1, c2)::Tuple -> begin
+    # This allows FileCandidate to write the graph back to disk as we don't want to mutate the orignal candidate.
+    # Perhaps align single individual mutation to this pattern for consistency?
+    g1 = graph(c1, identity)
+    g2 = graph(c2, identity)
+
+    g1, g2 = m((copy(g1), copy(g2)))
+
+    return mapcandidate(g -> g1, mapothers)(c1), mapcandidate(g -> g2, mapothers)(c2)
+end
+
 
 function mapcandidate(mapgraph, mapothers=deepcopy)
     mapfield(g::CompGraph) = mapgraph(g)

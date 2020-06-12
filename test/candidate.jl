@@ -55,8 +55,8 @@
             evofun = evolvemodel(graphmutation, optmutation)
             newcand = evofun(cand)
 
-            @test nv(NaiveGAflux.graph(newcand)) == 2
-            @test nv(NaiveGAflux.graph(cand)) == 3
+            @test NaiveGAflux.graph(newcand, nv) == 2
+            @test NaiveGAflux.graph(cand, nv) == 3
 
             optimizer(c::AbstractCandidate) = optimizer(c.c)
             optimizer(c::CandidateModel) = typeof(c.opt)
@@ -66,6 +66,17 @@
 
             Flux.train!(cand, data(cand))
             Flux.train!(newcand, data(newcand))
+
+            graphcrossover = VertexCrossover(CrossoverSwap(;pairgen = (v1,v2) -> (1,1)); pairgen = (v1,v2;ind1) -> ind1==1 ? (1,1) : nothing)
+            crossfun = evolvemodel(graphcrossover)
+
+            newcand1, newcand2 = crossfun((cand, cand))
+
+            @test NaiveGAflux.graph(newcand1, nv) == 3
+            @test NaiveGAflux.graph(newcand2, nv) == 3
+
+            Flux.train!(newcand1, data(newcand1))
+            Flux.train!(newcand2, data(newcand2))
 
         finally
             MemPool.cleanup()

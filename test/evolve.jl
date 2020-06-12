@@ -50,6 +50,21 @@
         @test evolve!(CombinedEvolution(NoOpEvolution(), NoOpEvolution()), pop) == vcat(pop,pop)
     end
 
+    @testset "PairCandidates" begin
+        struct PairConsumer <: AbstractEvolution end
+        nseen = 0
+        function NaiveGAflux._evolve!(::PairConsumer, pop)
+            nseen = length(pop)
+            @test typeof(pop) == Vector{Tuple{MockCand, MockCand}}
+            return pop
+        end
+
+        @test evolve!(PairCandidates(NoOpEvolution()), []) == []
+        pop = MockCand.(1:9)
+        @test evolve!(PairCandidates(PairConsumer()), pop) == pop
+        @test nseen == 5
+    end
+
     @testset "EvolveCandidates" begin
         pop = MockCand.([2,3,5,9])
         @test fitness.(evolve!(EvolveCandidates(mc -> MockCand(2mc.val)), pop)) == 2fitness.(pop)
