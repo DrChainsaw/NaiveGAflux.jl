@@ -278,7 +278,7 @@ Add an edge from a vertex `vi` to another vertex `vo` randomly selected from `vs
 
 Higher values of `p` will give more preference to earlier vertices of `vs`.
 
-If `vo` is not capable of having multiple inputs (determined by `singleinput(v) == true`), `vm = mergefun(voi)` where `voi` is a randomly selected input to `vo` will be used instead of `vo`.
+If `vo` is not capable of having multiple inputs (determined by `singleinput(v) == true`), `vm = mergefun(voi)` where `voi` is a randomly selected input to `vo` will be used instead of `vo` and `vo` will be added as the output of `vm`.
 
 When selecting neurons/outputs after any eventual size change the values `valuefun(v)` will be used to determine the value of each output in vertex `v`. Note that `length(valuefun(v)) == nout_org(v)` must hold.
 
@@ -342,6 +342,7 @@ function try_add_edge(vi, vo, mergefun, valuefun=default_neuronselect)
         if singleinput(voi)
             vm = mergefun(voi)
             # Insert vm between voi and vo, i.e voi -> vo turns into voi -> vm -> vo
+            # vs -> [vo] means only add the new vertex between voi and vo as voi could have other outputs
             insert!(voi, vv -> vm, vs -> [vo])
             cleanup_failed = function()
                 length(inputs(vm)) > 1 && return

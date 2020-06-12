@@ -24,10 +24,9 @@ VertexCrossover(crossover, deviation::Number; selection=FilterMutationAllowed())
 
 """
     CrossoverSwap{F, S} <: AbstractCrossover{<:AbstractVertex}
-    CrossoverSwap(pairgen, selection)
-    CrossoverSwap(;pairgen=default_pairgen, selection=FilterMutationAllowed())
-    CrossoverSwap(deviation::Number; selection=FilterMutationAllowed())
-    CrossoverSwap(selection::AbstractVertexSelection)
+    CrossoverSwap(pairgen, mergefun, selection)
+    CrossoverSwap(;pairgen=default_pairgen, mergefun=default_mergefun, selection=FilterMutationAllowed())
+    CrossoverSwap(deviation::Number; mergefun=default_mergefun, selection=FilterMutationAllowed())
 
 Swap out a part of one graph with a part of another graph, making sure that the graphs do not become connected in the process.
 
@@ -35,18 +34,21 @@ More concretely, swaps a set of consecutive vertices `vs1` set of consecutive ve
 
 The last vertex in `vs1` is `v1` and the last output of `vs2` is `v2`. The other members of `vs1` and `vs2` are determined by `pairgen` (default [`default_pairgen`](@Ref)) and `selection` (default [`FilterMutationAllowed`](@Ref)).
 
+If a vertex `v` is not capable of having multiple inputs (determined by `singleinput(v) == true`), `vm = mergefun(vi)` where `vi` is the input to `v` will be used instead of `v` and `v` will be added as the output of `vm` if necessary.
+
 See also [`crossoverswap`](@Ref)
 
+Note: High likelyhood of large accuracy degradation after applying this mutation.
 """
-struct CrossoverSwap{F, S} <: AbstractCrossover{AbstractVertex}
-    pairgen::F
+struct CrossoverSwap{F1, F2, S} <: AbstractCrossover{AbstractVertex}
+    pairgen::F1
+    mergefun::F2
     selection::S
 end
-CrossoverSwap(;pairgen=default_pairgen, selection=FilterMutationAllowed()) = CrossoverSwap(pairgen, selection)
-CrossoverSwap(deviation::Number; selection=FilterMutationAllowed()) = CrossoverSwap((vs1,vs2) -> default_pairgen(vs1, vs2, deviation), selection)
-CrossoverSwap(selection::AbstractVertexSelection) = CrossoverSwap(default_pairgen, selection)
+CrossoverSwap(;pairgen=default_pairgen, mergefun=default_mergefun, selection=FilterMutationAllowed()) = CrossoverSwap(pairgen, mergefun, selection)
+CrossoverSwap(deviation::Number; mergefun=default_mergefun, selection=FilterMutationAllowed()) = CrossoverSwap((vs1,vs2) -> default_pairgen(vs1, vs2, deviation), mergefun, selection)
 
-(c::CrossoverSwap)((v1,v2)::Tuple) = crossoverswap(v1, v2; pairgen = c.pairgen, selection=c.selection)
+(c::CrossoverSwap)((v1,v2)::Tuple) = crossoverswap(v1, v2; pairgen = c.pairgen, mergefun=c.mergefun, selection=c.selection)
 
 
 """
@@ -144,7 +146,7 @@ Inputs are selected from the feasible set (as determined by `separablefrom` and 
 Inputs `v1` and `v2` along with their entire graph are copied before operation is performed and originals are returned if operation is not successful.
 """
 crossoverswap((v1, v2)::Tuple; kwargs...) = crossoverswap(v1, v2; kwargs...)
-function crossoverswap(v1, v2; pairgen=default_pairgen, selection=FilterMutationAllowed())
+function crossoverswap(v1, v2; pairgen=default_pairgen, mergefun=default_mergefun, selection=FilterMutationAllowed())
     # This is highly annoying: crossoverswap! does multiple remove/create_edge! and is therefore very hard to revert should something go wrong with one of the steps.
     # To mitigate this a backup copy is used. It is however not easy to backup a single vertex as it is connected to all other vertices in the graph, meaning that the whole graph must be copied. Sigh...
     function copyvertex(v)
@@ -169,7 +171,7 @@ function crossoverswap(v1, v2; pairgen=default_pairgen, selection=FilterMutation
 
     ind1, ind2 = inds
 
-    success1, success2 = crossoverswap!(vs1[ind1], vs1[1], vs2[ind2], vs2[1])
+    success1, success2 = crossoverswap!(vs1[ind1], vs1[1], vs2[ind2], vs2[1]; mergefun=mergefun)
 
     v1ret = success1 ? v1c : v1
     v2ret = success2 ? v2c : v2
@@ -217,7 +219,8 @@ function check_singleinput!(v1, v2, mergefun)
     needmerge2 = singleinputs[2] && !all(singleinputs)
 
     function addmerge!(v)
-        insert!(inputs(v)[], vv -> mergefun(vv))
+        # vs -> [v] means only add the new vertex between vi and v as vi could have other outputs
+        insert!(inputs(v)[], vi -> mergefun(vi), vs -> [v])
         return inputs(v)[]
     end
     v1 = needmerge1 ? addmerge!(v1) : v1
