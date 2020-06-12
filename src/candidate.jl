@@ -15,6 +15,8 @@ Base.Broadcast.broadcastable(c::AbstractCandidate) = Ref(c)
 
 wrappedcand(c::AbstractCandidate) = c.c
 graph(c::AbstractCandidate) = graph(wrappedcand(c))
+# This is mainly for FileCandidate to allow for writing the graph back to disk after f is done
+graph(c::AbstractCandidate, f) = graph(wrappedcand(c), f)
 
 """
     CandidateModel <: Candidate
@@ -44,7 +46,7 @@ fitness(model::CandidateModel) = fitness(model.fitness, instrument(Validate(), m
 
 reset!(model::CandidateModel) = reset!(model.fitness)
 
-graph(model::CandidateModel) = model.graph
+graph(model::CandidateModel, f=identity) = f(model.graph)
 
 wrappedcand(c::CandidateModel) = error("CandidateModel does not wrap any candidate! Check your base case!")
 
@@ -133,6 +135,7 @@ fitness(c::FileCandidate) = callcand(fitness, c)
 
 reset!(c::FileCandidate) = callcand(reset!, c)
 wrappedcand(c::FileCandidate) = MemPool.poolget(c.c[])
+graph(c::FileCandidate, f) = callcand(graph, c, f)
 
 """
     CacheCandidate <: AbstractCandidate

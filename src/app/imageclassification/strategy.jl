@@ -275,7 +275,7 @@ end
 evolvecandidate(inshape) = evolvemodel(graphmutation(inshape), optmutation())
 
 function clear_redundant_vertices(pop)
-    foreach(cand -> check_apply(NaiveGAflux.graph(cand)), pop)
+    foreach(cand -> NaiveGAflux.graph(cand, check_apply), pop)
     return pop
 end
 

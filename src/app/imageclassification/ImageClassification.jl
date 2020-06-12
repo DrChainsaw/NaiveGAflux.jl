@@ -12,7 +12,7 @@ using Serialization
 
 export ImageClassifier, fit
 
-modelname(c::AbstractCandidate) = modelname(NaiveGAflux.graph(c))
+modelname(c::AbstractCandidate) = NaiveGAflux.graph(c, modelname)
 modelname(g::CompGraph) = split(name(g.inputs[]),'.')[1]
 
 include("strategy.jl")
@@ -112,7 +112,7 @@ function evolutionloop(population, evostrategy, trainingiter, cb)
         @info "Begin generation $(generation(population))"
 
         for (i, cand) in enumerate(population)
-            @info "\tTrain candidate $i with $(nv(NaiveGAflux.graph(cand))) vertices"
+            @info "\tTrain candidate $i with $(NaiveGAflux.graph(cand, nv)) vertices"
             Flux.train!(cand, iter)
         end
 
