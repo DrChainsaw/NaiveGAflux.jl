@@ -3,6 +3,11 @@
     v4n(graph::CompGraph, want) = v4n(vertices(graph), want)
     v4n(vs, want) = vs[findfirst(v -> want == name(v), vs)]
 
+    selapply(gs...) = foreach(gs) do g
+        #Δoutputs(g, v -> ones(nout_org(v)))
+        apply_mutation(g)
+    end
+
     @testset "CrossoverSwap" begin
         import NaiveGAflux: crossoverswap!, separablefrom
         using Random
@@ -25,8 +30,7 @@
                 gb = g(1:3, "b")
 
                 crossoverswap!(vertices(ga)[3], vertices(gb)[3])
-                apply_mutation(ga)
-                apply_mutation(gb)
+                selapply(ga,gb)
 
                 @test name.(vertices(ga)) == ["a.in", "a.dv1", "b.dv2", "a.dv3"]
                 @test name.(vertices(gb)) == ["b.in", "b.dv1", "a.dv2", "b.dv3"]
@@ -43,8 +47,7 @@
                 gb = g(1:5, "b")
 
                 crossoverswap!(vertices(ga)[2], vertices(ga)[5], vertices(gb)[3], vertices(gb)[4])
-                apply_mutation(ga)
-                apply_mutation(gb)
+                selapply(ga,gb)
 
                 @test nout.(vertices(ga)) == [3,2,3,8]
                 @test nout.(vertices(gb)) == [3,1,4,5,6,7,4,5]
@@ -54,26 +57,45 @@
             end
         end
 
-        @testset "Swap add and conc" begin
+        @testset "Swap add and conc with conc larger" begin
             function g(sizes, np, cfun)
                 vi = iv(np)
                 vs = map((i, s) -> dv(vi, s, "$np.dv$i"), eachindex(sizes[1:end-1]), sizes[1:end-1])
-                vm = cfun(vs...)
+                vm = cfun("$np.merge", vs...)
                 return CompGraph(vi, dv(vm, sizes[end], "$np.dv$(length(sizes))"))
             end
 
-            ga = g(3:7, "a", (vs...) ->concat("a.merge", vs...))
-            gb = g(3 .* ones(Int, 4), "b", (vs...) -> +("b.merge" >> vs[1], vs[2:end]...))
+            ga = g(3:7, "a", concat)
+            gb = g(3 .* ones(Int, 4), "b", (name, vs...) -> +(name >> vs[1], vs[2:end]...))
 
-            crossoverswap!(vertices(ga)[end-1], vertices(gb)[end-1])
-
-            apply_mutation(ga)
-            apply_mutation(gb)
+            @test crossoverswap!(vertices(ga)[end-1], vertices(gb)[end-1]) == (true, true)
+            selapply(ga,gb)
 
             @test nout.(vertices(ga)) == [3, 4, 4, 4, 4, 4, 7]
-            @test nout.(vertices(gb)) == [3, 3, 3, 3, 9, 3]
+            @test nout.(vertices(gb)) == [3, 1, 2, 2, 5, 3]
 
             @test size(ga(ones(3, 2))) == (7, 2)
+            @test size(gb(ones(3, 2))) == (3, 2)
+        end
+
+        @testset "Swap add and conc with add larger" begin
+            function g(sizes, np, cfun)
+                vi = iv(np)
+                vs = map((i, s) -> dv(vi, s, "$np.dv$i"), eachindex(sizes[1:end-1]), sizes[1:end-1])
+                vm = cfun("$np.merge", vs...)
+                return CompGraph(vi, dv(vm, sizes[end], "$np.dv$(length(sizes))"))
+            end
+
+            ga = g(3:6, "a", concat)
+            gb = g(3 .* ones(Int, 6), "b", (name, vs...) -> +(name >> vs[1], vs[2:end]...))
+
+            @test crossoverswap!(vertices(ga)[end-1], vertices(gb)[end-1]) == (true, true)
+            selapply(ga,gb)
+
+            @test nout.(vertices(ga)) == [3, 3, 3, 3, 3, 6]
+            @test nout.(vertices(gb)) == [3, 1, 1, 1, 1, 1, 5, 3]
+
+            @test size(ga(ones(3, 2))) == (6, 2)
             @test size(gb(ones(3, 2))) == (3, 2)
         end
 
@@ -95,11 +117,10 @@
             @test name.(vertices(ga)) == ["a.in", "a.dv1", "a.dv2", "a.dv3", "a.merge", "b.merge", "a.dvo"]
             @test name.(vertices(gb)) == ["b.in", "b.dv1", "b.dv2", "b.dv3", "extramerge", "a.dvn", "b.dvn", "b.dvo"]
 
-            @test nout.(vertices(ga)) == [3, 2, 3, 4, 9, 9, 4]
-            @test nout.(vertices(gb)) == [3, 2, 3, 4, 9, 2, 2, 4]
+            @test nout.(vertices(ga)) == [3, 1, 1, 1, 3, 3, 4]
+            @test nout.(vertices(gb)) == [3, 3, 3, 4, 10, 3, 2, 4]
 
-            apply_mutation(ga)
-            apply_mutation(gb)
+            selapply(ga,gb)
 
             @test size(ga(ones(3, 2))) == (4, 2)
             @test size(gb(ones(3, 2))) == (4, 2)
@@ -135,28 +156,28 @@
             aswap = separablefrom(v4n(ga, "a.add_aa_bb"))
             @test name.(vsa) == name.(vertices(ga))
             @test name.(aswap) == ["a.add_aa_bb", "a.dva1"]
-            apply_mutation(ga)
-            @test ga(indata) == outa
+            selapply(ga)
 
+            @test ga(indata) == outa
 
             gb = g("b", true)
             outb = gb(indata)
             vsb = vertices(gb)
             @test name.(separablefrom(v4n(gb, "b.add_aa_bb"))) == ["b.add_aa_bb"]
             @test name.(vsb) == name.(vertices(gb))
-            apply_mutation(gb)
-            @test gb(indata) == outb
+            selapply(gb)
 
+            @test gb(indata) == outb
 
             bswap = separablefrom(v4n(gb, "b.dvbb1"))
             @test name.(vsb) == name.(vertices(gb))
             @test name.(bswap) == ["b.dvbb1"]
-            apply_mutation(gb)
+            selapply(gb)
+
             @test gb(indata) == outb
 
             crossoverswap!(aswap[end], aswap[1], bswap[end], bswap[1])
-            apply_mutation(ga)
-            apply_mutation(gb)
+            selapply(ga,gb)
 
             @test name.(vertices(ga)) == ["a.in", "a.dv1", "b.dvbb1", "a.dvb1", "a.dvba1", "a.dvbb1", "a.conc_ba_bb", "a.conc_a_b", "a.out"]
             @test size(ga(ones(3,2))) == (4, 2)
@@ -195,7 +216,8 @@
                 dummy = stripoutedges!(dva1)
                 @test outputs(dva1) == []
                 addoutedges!(dva1, dummy)
-                apply_mutation(gg)
+                selapply(gg)
+
                 actual1 = name.(outputs(dva1))
                 actual2 = mapreduce(vo -> name.(inputs(vo)), vcat, unique(outputs(dva1)))
 
@@ -215,10 +237,10 @@
                 expected = name.(inputs(ca1))
 
                 ins = stripinedges!(ca1)
-                # Need to add dummy inputs to not mess up mutation metadata and replace neurons
-                @test inputs(ca1) == []
+                @test mapreduce(inputs, vcat, inputs(ca1)) == []
                 addinedges!(ca1, ins)
-                apply_mutation(gg)
+                selapply(gg)
+
                 actual = name.(inputs(ca1))
 
                 @test actual == expected
@@ -243,8 +265,8 @@
 
             swappable_org = separablefrom(v4n(g_org, "a.dva1"))
             crossoverswap!(swappable_org[end], swappable_org[1], swappable_new[end], swappable_new[1])
-            apply_mutation(g_org)
-            apply_mutation(g_new)
+            selapply(g_org,g_new)
+
 
             @test name.(vertices(g_org)) == name.(vertices(g_new)) == name.(vs_org)
             @test nout.(vertices(g_org)) == nout.(vertices(g_new)) == nouts_org
@@ -267,8 +289,9 @@
                 ga = g("a", 3, (vname, vs...) -> +(vname >> vs[1], vs[2:end]...))
                 gb = g("b", 5, concat)
 
-                @test @test_logs (:warn, "Failed to align sizes when adding edge between b.dv2 and a.m1 for crossover. Reverting...") crossoverswap!(vertices(ga)[end-1], vertices(gb)[end-1]) == (true, false)
-                apply_mutation(ga)
+                @test @test_logs (:warn, "Failed to align sizes when adding edge between b.dv2 and a.dv2.dummy for crossover. Reverting...") crossoverswap!(vertices(ga)[end-1], vertices(gb)[end-1]) == (true, false)
+                selapply(ga)
+
                 @test name.(vertices(ga)) == ["a.in", "a.dv1", "a.dv2", "b.m1", "a.dv3"]
                 @test size(ga(ones(3,2))) == (5,2)
             end
@@ -277,8 +300,9 @@
                 ga = g("a", 5, concat)
                 gb = g("b", 3, (vname, vs...) -> +(vname >> vs[1], vs[2:end]...))
 
-                @test @test_logs (:warn, "Failed to align sizes when adding edge between a.dv2 and b.m1 for crossover. Reverting...") crossoverswap!(vertices(ga)[end-1], vertices(gb)[end-1]) == (false, true)
-                apply_mutation(gb)
+                @test @test_logs (:warn, "Failed to align sizes when adding edge between a.dv2 and b.dv2.dummy for crossover. Reverting...") crossoverswap!(vertices(ga)[end-1], vertices(gb)[end-1]) == (false, true)
+                selapply(gb)
+
                 @test name.(vertices(gb)) == ["b.in", "b.dv1", "b.dv2", "a.m1", "b.dv3"]
                 @test size(gb(ones(3,2))) == (5,2)
             end
@@ -325,8 +349,7 @@
                     @test "b.$v2" ∉ name.(vertices(gb))
                     @test "a.$v2" ∈ name.(vertices(gb))
 
-                    apply_mutation(ga)
-                    apply_mutation(gb)
+                    selapply(ga,gb)
 
                     @test size(ga(ones(4,4,3,2))) == (2,2,2,2)
                     @test size(gb(ones(4,4,3,2))) == (2,2,2,2)
@@ -344,8 +367,7 @@
                     g_new = copy(g_org)
 
                     @test crossoverswap!(v4n(g_org, "a.bv1"), v4n(g_new, "a.bv1")) == (true, true)
-                    apply_mutation(g_org)
-                    apply_mutation(g_new)
+                    selapply(g_org,g_new)
 
                     @test g_org(indata) == out_org
                     @test g_new(indata) == out_org
@@ -448,8 +470,7 @@
                 @test name.(vertices(ga_new)) == ["a.in", "b.cv1", "b.cv2", "b.cv3", "a.pv1", "b.dv2", "b.dv3"]
                 @test name.(vertices(gb_new)) == ["b.in", "a.cv1", "a.cv2", "b.pv1", "b.dv1", "a.dv1", "a.dv2"]
 
-                apply_mutation(ga_new)
-                apply_mutation(gb_new)
+                selapply(ga_new,gb_new)
 
                 @test size(ga_new(ones(Float32, 4,4,3,2))) == (7, 2)
                 @test size(gb_new(ones(Float32, 4,4,3,2))) == (6, 2)

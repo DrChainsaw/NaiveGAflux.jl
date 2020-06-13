@@ -233,28 +233,27 @@ struct FailAlignSizeNoOp <: AbstractAlignSizeStrategy end
 NaiveNASlib.postalignsizes(s::FailAlignSizeNoOp, vin, vout, pos) = false
 NaiveNASlib.prealignsizes(s::FailAlignSizeNoOp, vin, vout, will_rm) = false
 
-default_crossoverswap_strategy() = PostAlignJuMP(DefaultJuMPΔSizeStrategy(); fallback = FailAlignSizeWarn(;andthen=FailAlignSizeRevert(), msgfun=(vin,vout) -> "Failed to align sizes when adding edge between $(name(vin)) and $(name(vout)) for crossover. Reverting..."))
+# TODO: Change valuefun!!
+function default_crossoverswap_strategy(valuefun = v -> ones(nout_org(v)))
+    alignstrat = PostAlignJuMP(DefaultJuMPΔSizeStrategy(), fallback=FailAlignSizeWarn(msgfun = (vin,vout) -> "Failed to align sizes when adding edge between $(name(vin)) and $(name(vout)) for crossover. Reverting..."))
+
+    selectstrat = OutSelect{Exact}(OutSelect{Relaxed}(LogSelectionFallback("Reverting...", NoutRevert())))
+
+    return PostSelectOutputs(selectstrat, alignstrat, valuefun, FailAlignSizeRevert())
+end
 
 stripedges!(vin, vout) = stripinedges!(vin) ,stripoutedges!(vout)
 
-stripinedges!(v) = stripinedges!(v, layertype(v))
-
-function stripinedges!(v, lt)
-    # Need to copy inputs first and iterate
-
-    i = copy(inputs(v))
-    foreach(vi -> remove_edge!(vi, v, strategy=NoSizeChange()), i)
-    return i
-end
-function stripinedges!(v, ::FluxLayer)
+function stripinedges!(v)
     # Unfortunately remove_edge! also removes metadata, causing subsequent create_edge! to create new neurons instead of keeping old ones.
 
     # Instead we create a dummyvertex between v and each of its inputs to act as a buffer and remove the edges from v's inputs to the dummyvertex. The dummyvertex will be removed by addinedges!
     i = copy(inputs(v))
+
     for (ind, vi) in enumerate(i)
 
         # We do this instead of insert! as it is a bit too smart and recreates all edges if any vi == vj for i != j where vi and vj are input vertices to v and this throws addinedges! off.
-        dummy = dummyvertex(vi)
+        dummy = dummyvertex(vi, trait(v))
 
         # Manually replace v with dummy as output for vi
         inputs(v)[ind] = dummy
@@ -267,12 +266,16 @@ function stripinedges!(v, ::FluxLayer)
 end
 
 
-dummyvertex(v) = conc(v; dims=1, traitdecoration = t -> NamedTrait(t, "$(name(v)).dummy"))
+# TODO: All dummyvertices can be invariantvertex?
+dummyvertex(v) = dummyvertex(v, trait(v))
+dummyvertex(v, t::DecoratingTrait) = dummyvertex(v, base(t))
+dummyvertex(v, t) = invariantvertex(identity, v; traitdecoration = t -> NamedTrait(t, "$(name(v)).dummy"))
+dummyvertex(v, t::SizeAbsorb) = conc(v; dims=1, traitdecoration = t -> NamedTrait(t, "$(name(v)).dummy"))
 
 function addinedges!(v, ins, strat = default_crossoverswap_strategy)
     dummies = copy(inputs(v))
     outs = copy(dummies)
-    connectstrat = AbstractConnectStrategy[ConnectAll() for i in eachindex(outs)]
+    connectstrat = AbstractConnectStrategy[ConnectAll() for i in eachindex(dummies)]
     create_edge_strat = [i == length(ins) ? strat() : NoSizeChange() for i in eachindex(ins)]
 
     #More outs than ins: We want to connect every input so lets just pad outs with v as this is what we want in the end
@@ -281,13 +284,16 @@ function addinedges!(v, ins, strat = default_crossoverswap_strategy)
     end
     # More outs than ins: No problem really as we only care about connecting the ins and extra dummies can be left hanging before removal. However, map fails if sizes are not equal.
     while length(ins) < length(outs)
-        connectstrat[length(outs)] = ConnectNone()
+        #connectstrat[length(outs)] = ConnectNone()
+        # TODO: Cleanup patched legacy design!!
         pop!(outs)
+        vrm = pop!(dummies)
+        pop!(connectstrat)
+        remove!(vrm, RemoveStrategy(ConnectNone(), NoSizeChange()))
     end
 
-    ret = map((iv, ov, s) -> create_edge!(iv, ov; strategy = s), ins, outs, create_edge_strat) |> all
-    ret &= map((dv, cs) -> remove!(dv, RemoveStrategy(cs, NoSizeChange())), dummies, connectstrat) |> all
-    return ret
+    success = map((iv, ov, s) -> create_edge!(iv, ov; strategy = s), ins, outs, create_edge_strat) |> all
+    return success &= map((dv, cs) -> remove!(dv, RemoveStrategy(cs, NoSizeChange())), dummies, connectstrat) |> all
 end
 
 function stripoutedges!(v)
@@ -301,9 +307,9 @@ function stripoutedges!(v)
 end
 
 function addoutedges!(v, dummy, strat = default_crossoverswap_strategy)
-    ret = create_edge!(v, dummy, strategy = strat())
-    ret &= remove!(dummy, RemoveStrategy(NoSizeChange()))
-    return ret
+    #TODO: Try to avoid large negative size changes here, e.g. by doing a Δnout/Δnin before creating the edge?
+    success = create_edge!(v, dummy, strategy = strat())
+    return success &= remove!(dummy, RemoveStrategy(NoSizeChange()))
 end
 
 """
