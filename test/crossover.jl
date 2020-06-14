@@ -401,10 +401,6 @@
 
             @testset "Swap double transparent parlayer" begin
 
-                #TODO: Just used for debugging. Remove!
-                NaiveNASlib.out_inds(v) = out_inds(op(v))
-                NaiveNASlib.in_inds(v) = in_inds(op(v))
-
                 function g(sizes, np)
                     vi = iv(np)
                     cv1 = cv(vi, sizes[1], "$np.cv1")

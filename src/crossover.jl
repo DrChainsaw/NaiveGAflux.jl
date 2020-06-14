@@ -173,8 +173,9 @@ function crossoverswap(v1, v2; pairgen=default_pairgen, mergefun=default_mergefu
 
     success1, success2 = crossoverswap!(vs1[ind1], vs1[1], vs2[ind2], vs2[1]; mergefun=mergefun)
 
-    v1ret = success1 ? v1c : v1
-    v2ret = success2 ? v2c : v2
+    # Note: Success 1 and 2 are mapped to v2 and v1 respectively as success1 means we successfully inserted v1c into the graph which held v2c and vice versa
+    v1ret = success2 ? v1c : v1
+    v2ret = success1 ? v2c : v2
 
     # Note! Flip v1 and v2 for same reason as success1 and 2 are flipped in crossoverswap!
     return v2ret, v1ret
@@ -210,10 +211,12 @@ function crossoverswap!(vin1::AbstractVertex, vout1::AbstractVertex, vin2::Abstr
     success1 = addinedges!(vin2, i1, strategy)
     success1 && apply_mutation.(all_in_Δsize_graph(vin2, Input()))
     success1 &= success1 && addoutedges!(vout2, o1, strategy)
+    success1 && apply_mutation.(all_in_Δsize_graph(vout2, Output()))
 
     success2 = addinedges!(vin1, i2, strategy)
     success2 && apply_mutation.(all_in_Δsize_graph(vin1, Input()))
     success2 &= success2 && addoutedges!(vout1, o2, strategy)
+    success2 && apply_mutation.(all_in_Δsize_graph(vout1, Output()))
 
     return success1, success2
 end
