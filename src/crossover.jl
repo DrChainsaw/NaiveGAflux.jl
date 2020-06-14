@@ -195,7 +195,7 @@ Return a tuple `(success1, success2)` where `success1` is true if `vin2` and `vo
 """
 crossoverswap!(v1::AbstractVertex, v2::AbstractVertex; kwargs...) = crossoverswap!(v1,v1,v2,v2; kwargs...)
 
-function crossoverswap!(vin1::AbstractVertex, vout1::AbstractVertex, vin2::AbstractVertex, vout2::AbstractVertex; mergefun = default_mergefun)
+function crossoverswap!(vin1::AbstractVertex, vout1::AbstractVertex, vin2::AbstractVertex, vout2::AbstractVertex; mergefun = default_mergefun, strategy=default_crossoverswap_strategy)
 
     # If vin1 can only take a single input while vin2 has multiple inputs (or vice versa) we need to add a vertex before which merges the inputs
     vin1, vin2 = check_singleinput!(vin1, vin2, mergefun)
@@ -206,8 +206,13 @@ function crossoverswap!(vin1::AbstractVertex, vout1::AbstractVertex, vin2::Abstr
 
     # success1 mapped to vin2 and vout2 looks backwards, but remember that vin2 and vout2 are the new guys being inserted in everything connected to i1 and o1
     # Returning success status instead of acting as a noop at failure is not very nice, but I could not come up with a way which was 100% to revert a botched attempt and making a backup of vertices before doing any changes is not easy to deal with for the receiver either
-    success1 = addinedges!(vin2, i1) && addoutedges!(vout2, o1)
-    success2 = addinedges!(vin1, i2) && addoutedges!(vout1, o2)
+    success1 = addinedges!(vin2, i1, strategy)
+    success1 && apply_mutation.(all_in_Δsize_graph(vin2, Input()))
+    success1 &= success1 && addoutedges!(vout2, o1, strategy)
+
+    success2 = addinedges!(vin1, i2, strategy)
+    success2 && apply_mutation.(all_in_Δsize_graph(vin1, Input()))
+    success2 &= success2 && addoutedges!(vout1, o2, strategy)
 
     return success1, success2
 end
@@ -282,8 +287,9 @@ function addinedges!(v, ins, strat = default_crossoverswap_strategy)
     while length(outs) < length(ins)
         push!(outs, v)
     end
-    # More outs than ins: No problem really as we only care about connecting the ins and extra dummies can be left hanging before removal. However, map fails if sizes are not equal.
-    while length(ins) < length(outs)
+    # More outs than ins: This means that v had more inputs in its old graph compared to the vertex it was swapped with.
+    # No problem really as we only care about connecting the ins and extra dummies can be left hanging with no input before removal. However, this might leave v with larger nout than it really has if not removed before adding inputs.
+    while length(ins) < length(dummies)
         #connectstrat[length(outs)] = ConnectNone()
         # TODO: Cleanup patched legacy design!!
         pop!(outs)
@@ -293,7 +299,7 @@ function addinedges!(v, ins, strat = default_crossoverswap_strategy)
     end
 
     success = map((iv, ov, s) -> create_edge!(iv, ov; strategy = s), ins, outs, create_edge_strat) |> all
-    return success &= map((dv, cs) -> remove!(dv, RemoveStrategy(cs, NoSizeChange())), dummies, connectstrat) |> all
+    return success && map((dv, cs) -> remove!(dv, RemoveStrategy(cs, NoSizeChange())), dummies, connectstrat) |> all
 end
 
 function stripoutedges!(v)
@@ -309,7 +315,7 @@ end
 function addoutedges!(v, dummy, strat = default_crossoverswap_strategy)
     #TODO: Try to avoid large negative size changes here, e.g. by doing a Δnout/Δnin before creating the edge?
     success = create_edge!(v, dummy, strategy = strat())
-    return success &= remove!(dummy, RemoveStrategy(NoSizeChange()))
+    return success && remove!(dummy, RemoveStrategy(NoSizeChange()))
 end
 
 """

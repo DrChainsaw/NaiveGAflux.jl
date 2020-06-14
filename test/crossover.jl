@@ -176,7 +176,7 @@
 
             @test gb(indata) == outb
 
-            crossoverswap!(aswap[end], aswap[1], bswap[end], bswap[1])
+            @test crossoverswap!(aswap[end], aswap[1], bswap[end], bswap[1]) == (true, true)
             selapply(ga,gb)
 
             @test name.(vertices(ga)) == ["a.in", "a.dv1", "b.dvbb1", "a.dvb1", "a.dvba1", "a.dvbb1", "a.conc_ba_bb", "a.conc_a_b", "a.out"]
@@ -372,6 +372,31 @@
                     @test g_org(indata) == out_org
                     @test g_new(indata) == out_org
                 end
+            end
+
+            @testset "Swap double transparent parlayer" begin
+
+                #TODO: Just used for debugging. Remove!
+                NaiveNASlib.out_inds(v) = out_inds(op(v))
+                NaiveNASlib.in_inds(v) = in_inds(op(v))
+
+                function g(sizes, np)
+                    vi = iv(np)
+                    cv1 = cv(vi, sizes[1], "$np.cv1")
+                    bv1 = bv(cv1, "$np.bv1")
+                    bv2 = bv(bv1, "$np.bv2")
+                    cv2 = cv(bv2, sizes[2], "$np.cv2")
+                    cv3 = cv(cv2, 4, "$np.cv3")
+                    return CompGraph(vi, cv2)
+                end
+
+                ga = g((3,2), "a")
+                gb = g((6,2), "b")
+
+                strat = () -> NaiveGAflux.default_crossoverswap_strategy(v -> 1:nout_org(v))
+                @test crossoverswap!(vertices(ga)[3], vertices(ga)[4], vertices(gb)[3], vertices(gb)[4]; strategy = strat) == (true,true)
+
+                selapply(ga,gb)
             end
         end
     end
