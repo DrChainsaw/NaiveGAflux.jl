@@ -127,63 +127,88 @@
         end
 
         @testset "Find swappable path" begin
-            function g(np, bconnect = false)
-                vi = iv(np)
-                dv1 = dv(vi, 4, "$np.dv1")
 
-                dva1 = dv(dv1, 3, "$np.dva1")
-                dvaa1 = dv(dva1, 5, "$np.dvaa1")
-                dvaa2 = dv(dvaa1, 4, "$np.dvaa2")
-                dvab1 = dv(dva1, 2, "$np.dvab1")
-                dvab2 = dv(dvab1, 4, "$np.dvab2")
-                add_aa_bb = "$np.add_aa_bb" >> dvaa2 + dvab2
+            @testset "Residual on input" begin
+                function g(np)
+                    vi = iv(np)
+                    dv1 = dv(vi, 4, "$np.dv1")
+                    dv2 = dv(dv1, nout(vi), "$np.dv2")
+                    add1 = "$np.add1" >> vi + dv2
+                    dv3 = dv(add1, 4, "$np.dv3")
+                    dv4 = dv(dv3, 3, "$np.dv4")
+                    return CompGraph(vi, dv4)
+                end
 
-                dvb1 = dv(dv1, 5, "$np.dvb1")
-                vba1 = bconnect ? concat("$np.conc_dvb1_dvab2", dvb1, dvab2) : dv(dvb1, nout(dvb1) + nout(dvab2), "$np.dvba1")
-                dvbb1 = dv(dv1, 4, "$np.dvbb1")
-                conc_ba_bb = concat("$np.conc_ba_bb", vba1, dvbb1)
+                ga = g("a")
 
-                conc_a_b = concat("$np.conc_a_b", add_aa_bb, conc_ba_bb)
-                return CompGraph(vi, dv(conc_a_b, 4, "$np.out"))
+                indata = randn(MersenneTwister(1), 3, 2)
+                outa = ga(indata)
+
+                vsa = vertices(ga)
+                aswap = separablefrom(v4n(ga, "a.dv3"), ga.inputs)
+                @test name.(aswap) == ["a.dv3", "a.add1"]
+
             end
 
-            ga = g("a")
+            @testset "Dual branched graph with optional extra connection" begin
+                function g(np, bconnect = false)
+                    vi = iv(np)
+                    dv1 = dv(vi, 4, "$np.dv1")
 
-            indata = randn(MersenneTwister(1), 3, 2)
-            outa = ga(indata)
+                    dva1 = dv(dv1, 3, "$np.dva1")
+                    dvaa1 = dv(dva1, 5, "$np.dvaa1")
+                    dvaa2 = dv(dvaa1, 4, "$np.dvaa2")
+                    dvab1 = dv(dva1, 2, "$np.dvab1")
+                    dvab2 = dv(dvab1, 4, "$np.dvab2")
+                    add_aa_bb = "$np.add_aa_bb" >> dvaa2 + dvab2
 
-            vsa = vertices(ga)
-            aswap = separablefrom(v4n(ga, "a.add_aa_bb"))
-            @test name.(vsa) == name.(vertices(ga))
-            @test name.(aswap) == ["a.add_aa_bb", "a.dva1"]
-            selapply(ga)
+                    dvb1 = dv(dv1, 5, "$np.dvb1")
+                    vba1 = bconnect ? concat("$np.conc_dvb1_dvab2", dvb1, dvab2) : dv(dvb1, nout(dvb1) + nout(dvab2), "$np.dvba1")
+                    dvbb1 = dv(dv1, 4, "$np.dvbb1")
+                    conc_ba_bb = concat("$np.conc_ba_bb", vba1, dvbb1)
 
-            @test ga(indata) == outa
+                    conc_a_b = concat("$np.conc_a_b", add_aa_bb, conc_ba_bb)
+                    return CompGraph(vi, dv(conc_a_b, 4, "$np.out"))
+                end
 
-            gb = g("b", true)
-            outb = gb(indata)
-            vsb = vertices(gb)
-            @test name.(separablefrom(v4n(gb, "b.add_aa_bb"))) == ["b.add_aa_bb"]
-            @test name.(vsb) == name.(vertices(gb))
-            selapply(gb)
+                ga = g("a")
 
-            @test gb(indata) == outb
+                indata = randn(MersenneTwister(1), 3, 2)
+                outa = ga(indata)
 
-            bswap = separablefrom(v4n(gb, "b.dvbb1"))
-            @test name.(vsb) == name.(vertices(gb))
-            @test name.(bswap) == ["b.dvbb1"]
-            selapply(gb)
+                vsa = vertices(ga)
+                aswap = separablefrom(v4n(ga, "a.add_aa_bb"), ga.inputs)
+                @test name.(vsa) == name.(vertices(ga))
+                @test name.(aswap) == ["a.add_aa_bb", "a.dva1"]
+                selapply(ga)
 
-            @test gb(indata) == outb
+                @test ga(indata) == outa
 
-            @test crossoverswap!(aswap[end], aswap[1], bswap[end], bswap[1]) == (true, true)
-            selapply(ga,gb)
+                gb = g("b", true)
+                outb = gb(indata)
+                vsb = vertices(gb)
+                @test name.(separablefrom(v4n(gb, "b.add_aa_bb"), gb.inputs)) == ["b.add_aa_bb"]
+                @test name.(vsb) == name.(vertices(gb))
+                selapply(gb)
 
-            @test name.(vertices(ga)) == ["a.in", "a.dv1", "b.dvbb1", "a.dvb1", "a.dvba1", "a.dvbb1", "a.conc_ba_bb", "a.conc_a_b", "a.out"]
-            @test size(ga(ones(3,2))) == (4, 2)
+                @test gb(indata) == outb
 
-            @test name.(vertices(gb)) == ["b.in", "b.dv1", "b.dva1", "b.dvaa1", "b.dvaa2", "b.dvab1", "b.dvab2", "b.add_aa_bb", "b.dvb1", "b.conc_dvb1_dvab2", "a.dva1", "a.dvaa1", "a.dvaa2", "a.dvab1", "a.dvab2", "a.add_aa_bb", "b.conc_ba_bb", "b.conc_a_b", "b.out"]
-            @test size(gb(ones(3,2))) == (4, 2)
+                bswap = separablefrom(v4n(gb, "b.dvbb1"), gb.inputs)
+                @test name.(vsb) == name.(vertices(gb))
+                @test name.(bswap) == ["b.dvbb1"]
+                selapply(gb)
+
+                @test gb(indata) == outb
+
+                @test crossoverswap!(aswap[end], aswap[1], bswap[end], bswap[1]) == (true, true)
+                selapply(ga,gb)
+
+                @test name.(vertices(ga)) == ["a.in", "a.dv1", "b.dvbb1", "a.dvb1", "a.dvba1", "a.dvbb1", "a.conc_ba_bb", "a.conc_a_b", "a.out"]
+                @test size(ga(ones(3,2))) == (4, 2)
+
+                @test name.(vertices(gb)) == ["b.in", "b.dv1", "b.dva1", "b.dvaa1", "b.dvaa2", "b.dvab1", "b.dvab2", "b.add_aa_bb", "b.dvb1", "b.conc_dvb1_dvab2", "a.dva1", "a.dvaa1", "a.dvaa2", "a.dvab1", "a.dvab2", "a.add_aa_bb", "b.conc_ba_bb", "b.conc_a_b", "b.out"]
+                @test size(gb(ones(3,2))) == (4, 2)
+            end
         end
 
         @testset "Swapping preserves edge order" begin

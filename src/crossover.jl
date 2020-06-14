@@ -155,13 +155,13 @@ function crossoverswap(v1, v2; pairgen=default_pairgen, mergefun=default_mergefu
         # This should speed up the operation and reduce memory consumption.
         # Someone else most likely wants the graph copied, but in the general case this happens before the crossover operation is even initiated. Lets see how things play out before we try it...
         vs = vertices(copy(g))
-        return vs[indexin([v], vertices(g))][]
+        return vs[indexin([v], vertices(g))][], g.inputs
     end
-    v1c = copyvertex(v1)
-    v2c = copyvertex(v2)
+    v1c, ivs1 = copyvertex(v1)
+    v2c, ivs2 = copyvertex(v2)
 
-    vs1 = select(selection, separablefrom(v1c))
-    vs2 = select(selection, separablefrom(v2c))
+    vs1 = select(selection, separablefrom(v1c, ivs1))
+    vs2 = select(selection, separablefrom(v2c, ivs2))
 
     # From the two sets of separable vertices, find two matching pairs to use as endpoints in input direction
     # Endpoint in output direction is already determined by sel1 and sel2 and is returned by separablefrom as the first element
@@ -206,6 +206,7 @@ function crossoverswap!(vin1::AbstractVertex, vout1::AbstractVertex, vin2::Abstr
 
     # success1 mapped to vin2 and vout2 looks backwards, but remember that vin2 and vout2 are the new guys being inserted in everything connected to i1 and o1
     # Returning success status instead of acting as a noop at failure is not very nice, but I could not come up with a way which was 100% to revert a botched attempt and making a backup of vertices before doing any changes is not easy to deal with for the receiver either
+
     success1 = addinedges!(vin2, i1, strategy)
     success1 && apply_mutation.(all_in_Δsize_graph(vin2, Input()))
     success1 &= success1 && addoutedges!(vout2, o1, strategy)
@@ -331,20 +332,20 @@ The disconncted component has `v'` as first vertex and `v` as last and contains 
 
 Note that output always contains `v`, i.e it is never empty.
 """
-function separablefrom(v)
+function separablefrom(v, forbidden = AbstractVertex[])
     # Rewrite in a guaranteed to be non-destrucive manner? LightGraphs?
     o = stripoutedges!(v)
-    swappable = separablefrom(v, AbstractVertex[])
+    swappable = separablefrom(v, forbidden, AbstractVertex[])
     addoutedges!(v, o, NoSizeChange)
     return swappable
 end
 
-function separablefrom(v, seen)
+function separablefrom(v, forbidden, seen)
     push!(seen, v)
     ins = stripinedges!(v)
     seen_and_dummies = vcat(seen, inputs(v))
-    ok = all(vv -> vv in seen_and_dummies, all_in_graph(v))
+    ok = all(vv -> vv in seen_and_dummies && vv ∉ forbidden, all_in_graph(v))
     addinedges!(v, ins, NoSizeChange)
-    swappable = mapreduce(vi -> separablefrom(vi, seen), vcat, inputs(v), init=[])
+    swappable = mapreduce(vi -> separablefrom(vi, forbidden, seen), vcat, inputs(v), init=[])
     return ok ? vcat(v, swappable) : swappable
 end
