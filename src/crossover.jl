@@ -155,7 +155,7 @@ function crossoverswap(v1, v2; pairgen=default_pairgen, mergefun=default_mergefu
         # This should speed up the operation and reduce memory consumption.
         # Someone else most likely wants the graph copied, but in the general case this happens before the crossover operation is even initiated. Lets see how things play out before we try it...
         vs = vertices(copy(g))
-        return vs[indexin([v], vertices(g))][], g.inputs
+        return vs[indexin([v], vertices(g))][], filter(vv -> isempty(inputs(vv)), vs)
     end
     v1c, ivs1 = copyvertex(v1)
     v2c, ivs2 = copyvertex(v2)
