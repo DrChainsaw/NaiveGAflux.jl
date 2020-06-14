@@ -207,14 +207,15 @@ function crossoverswap!(vin1::AbstractVertex, vout1::AbstractVertex, vin2::Abstr
 
     # success1 mapped to vin2 and vout2 looks backwards, but remember that vin2 and vout2 are the new guys being inserted in everything connected to i1 and o1
     # Returning success status instead of acting as a noop at failure is not very nice, but I could not come up with a way which was 100% to revert a botched attempt and making a backup of vertices before doing any changes is not easy to deal with for the receiver either
-
     success1 = addinedges!(vin2, i1, strategy)
-    success1 && apply_mutation.(all_in_Δsize_graph(vin2, Input()))
+    # o1 ends up in Δsize graph when vin2 is right before a skip connection and vout2 is a size transparent vertex right before the connection is merged (!)
+    success1 && apply_mutation.(filter(v -> v != o1, all_in_Δsize_graph(vin2, Input())))
     success1 &= success1 && addoutedges!(vout2, o1, strategy)
     success1 && apply_mutation.(all_in_Δsize_graph(vout2, Output()))
 
     success2 = addinedges!(vin1, i2, strategy)
-    success2 && apply_mutation.(all_in_Δsize_graph(vin1, Input()))
+    # o2 ends up in Δsize graph when vin1 is right before a skip connection and vout1 is a size transparent vertex right before the connection is merged (!)
+    success2 && apply_mutation.(filter(v -> v != o2, all_in_Δsize_graph(vin1, Input())))
     success2 &= success2 && addoutedges!(vout1, o2, strategy)
     success2 && apply_mutation.(all_in_Δsize_graph(vout1, Output()))
 

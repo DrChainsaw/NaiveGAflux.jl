@@ -5,6 +5,7 @@
 
     selapply(gs...) = foreach(gs) do g
         #Δoutputs(g, v -> ones(nout_org(v)))
+        # TODO: Should be redundant now
         apply_mutation(g)
     end
 
@@ -124,6 +125,34 @@
 
             @test size(ga(ones(3, 2))) == (4, 2)
             @test size(gb(ones(3, 2))) == (4, 2)
+        end
+
+        @testset "Swap residual" begin
+            function g(sizes, np, withinv)
+                vi = iv(np)
+                dv0 = dv(vi, 3, "$np.dv0")
+                dv1 = dv(dv0, sizes[1], "$np.dv1")
+                vo = foldl(enumerate(sizes[2:end]); init=dv1) do vin, (i,s)::Tuple
+                    dv(vin, s, "$np.dv$i")
+                end
+                dvn = dv(vo, sizes[1], "$np.dvn")
+                vn = withinv ? invariantvertex(identity, dvn; traitdecoration= named("$np.inv")) : dvn
+                add = "$np.add" >> dv1 + vn
+                dvo = dv(add, 4, "$np.dvo")
+                return CompGraph(vi, dvo)
+            end
+
+            @testset "Invariant before add" begin
+                ga = g(4:6, "a", true)
+                gb = g(5:6, "b", true)
+
+                vsa = vertices(ga)
+                vsb = vertices(gb)
+
+                @test crossoverswap!(vsa[4], vsa[end-2], vsb[4], vsb[end-2]) == (true, true)
+                @test size(ga(ones(Float32, 3, 2))) == (4,2)
+                @test size(gb(ones(Float32, 3, 2))) == (4,2)
+            end
         end
 
         @testset "Find swappable path" begin
