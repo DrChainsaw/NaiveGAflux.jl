@@ -189,11 +189,8 @@
             cv2 = cv(mv, "cv2"; ks=(3,3))
 
             tr = shapetrace(cv2)
-            # @show name(tr.origin)
-            # for tt in  tr.trace
-            #     @show tt
-            # end
 
+            @test fshape(squashshapes(tr), (13,17)) == size(CompGraph(vi,cv2)(ones(Float32, 13,17,1,1)))[1:2]
         end
     end
 end

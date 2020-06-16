@@ -102,15 +102,31 @@ struct ShapeTraceV0{T,V1,V2} <: AbstractShapeTraceX
 end
 ShapeTraceV0(v) = ShapeTraceV0(v, v, tuple())
 
-function add_op(tr::ShapeTraceV0, v, op, Δshapes...)
+function add_op(tr::ShapeTraceV0, v, Δshapes...)
     Δshapes_valid = filter_noops(Δshapes...)
     return ShapeTraceV0(tr.origin, v, (tr.trace..., Δshapes_valid...))
 end
 
-Base.merge(v, trs::ShapeTraceV0...) = ShapeTraceV0(v, v, tuple((ShapeTraceV0(t.origin, v, t.trace) for t in trs)...))
+Base.merge(v, trs::ShapeTraceV0...) = ShapeTraceV0(v, v, tuple(tuple((ShapeTraceV0(t.origin, v, t.trace) for t in trs)...)))
 
 shapepaths(t::ShapeTraceV0) = t.origin => shapepaths.(t.trace)
 shapepaths(x) = x
+
+squashshapes(t::ShapeTraceV0) = squashshapes(t.trace)
+squashshapes(t::Tuple) = mapfoldl(squashshapes, squashshapes, t)
+function squashshapes(t::Tuple{Vararg{ShapeTraceV0}})
+     squashed = unique(map(squashshapes, t))
+     length(squashed) == 1 && return first(squashed)
+     return Tuple(squashed) # Danger danger! Graph probably only works for one single input shape
+end
+squashshapes(t1::ShapeTraceV0, t2::ShapeTraceV0) = t1,t2 # Can squash?
+squashshapes(t::ShapeTraceV0, s::Tuple{Vararg{ΔShape}}) = squashshapes(t.trace, s)
+squashshapes(s::Tuple{Vararg{ΔShape}}, t::ShapeTraceV0) = squashshapes(s, t.trace)
+squashshapes(s::Tuple{Vararg{ΔShape}}, t::Tuple{Vararg{ShapeTraceV0}}) = s,t # Danger danger! Graph probably only works for one single input shape
+squashshapes(t::Tuple{Vararg{ShapeTraceV0}}, s::Tuple{Vararg{ΔShape}}) = t,s # Danger danger! Graph probably only works for one single input shape
+squashshapes(s1::Tuple{Vararg{ΔShape}}, s2::Tuple{Vararg{ΔShape}}) = squashshapes((s1...,s2...))
+
+
 
 
 function shapetrace(v::AbstractVertex; trfun = v -> ShapeTraceV0(v))
@@ -139,7 +155,7 @@ function shapequery(::FluxConv{N}, v, tr) where N
     ks = size(NaiveNASflux.weights(c))[1:N]
     Δwindow = Δshape_from_window(ks, c.dilation, c.pad)
     Δstride = ShapeDiv(c.stride)
-    add_op(tr, v, c, Δwindow, Δstride)
+    add_op(tr, v, Δwindow, Δstride)
 end
 
 function Δshape_from_window(ws::NTuple{N}, dilation, pad) where N
