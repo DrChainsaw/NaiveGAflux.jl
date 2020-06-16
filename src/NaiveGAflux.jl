@@ -66,6 +66,7 @@ export AutoFlux
 export PlotFitness, ScatterPop, ScatterOpt, MultiPlot, CbAll
 
 include("util.jl")
+include("shape.jl")
 include("archspace.jl")
 include("mutation.jl")
 include("crossover.jl")
