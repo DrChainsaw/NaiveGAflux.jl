@@ -1,12 +1,12 @@
 @testset "Shape" begin
-    import NaiveGAflux: ΔShape, ShapeAdd, ShapeMul, ShapeDiv, AggΔShape, fshape, revert, combine, combine_same, filter_noops, ShapeTraceV0, shapetrace, shapequery, squashshapes, orderΔshapes
+    import NaiveGAflux: ΔShape, ShapeAdd, ShapeMul, ShapeDiv, AggΔShape, fshape, revert, combine, combine, filter_noops, ShapeTraceV0, shapetrace, shapequery, squashshapes, orderΔshapes
 
     @testset "ΔShapes" begin
 
         @testset "ShapeAdd" begin
             @test fshape(ShapeAdd((1,2)), (3,4)) == (4,6)
             @test fshape(combine(ShapeAdd((1,2)), ShapeAdd((-2,-1))), (3,4)) == (2,5)
-            @test combine_same(ShapeAdd((1,2)), ShapeAdd((3,4))) == tuple(ShapeAdd((4,6)))
+            @test combine(ShapeAdd((1,2)), ShapeAdd((3,4))) == tuple(ShapeAdd((4,6)))
             @test revert(ShapeAdd((1,2))) == ShapeAdd((-1,-2))
             @test filter_noops(ShapeAdd((0,1,2,3))) == tuple(ShapeAdd((0,1,2,3)))
             @test filter_noops(ShapeAdd((0,0))) == tuple()
@@ -15,7 +15,7 @@
         @testset "ShapeMul" begin
             @test fshape(ShapeMul((1,2)), (3,4)) == (3,8)
             @test fshape(combine(ShapeMul((1,2)), ShapeMul((2,3))), (3,4)) == (6,24)
-            @test combine_same(ShapeMul((1,2)), ShapeMul((3,4))) == tuple(ShapeMul((3,8)))
+            @test combine(ShapeMul((1,2)), ShapeMul((3,4))) == tuple(ShapeMul((3,8)))
             @test revert(ShapeMul((1,2))) == ShapeDiv((1,2))
             @test filter_noops(ShapeMul((0,1,2,3))) == tuple(ShapeMul((0,1,2,3)))
             @test filter_noops(ShapeMul((1,1))) == tuple()
@@ -24,7 +24,7 @@
         @testset "ShapeDiv" begin
             @test fshape(ShapeDiv((1,2)), (3,4)) == (3,2)
             @test fshape(combine(ShapeDiv((1,2)), ShapeDiv((2,3))), (3,4)) == (2,1)
-            @test combine_same(ShapeDiv((1,2)), ShapeDiv((3,4))) == tuple(ShapeDiv((3,8)))
+            @test combine(ShapeDiv((1,2)), ShapeDiv((3,4))) == tuple(ShapeDiv((3,8)))
             @test revert(ShapeDiv((1,2))) == ShapeMul((1,2))
             @test filter_noops(ShapeDiv((0,1,2,3))) == tuple(ShapeDiv((0,1,2,3)))
             @test filter_noops(ShapeDiv((1,1))) == tuple()
@@ -42,29 +42,12 @@
             (ShapeDiv(2,2), ShapeMul(4,4), tuple(ShapeDiv(2,2), ShapeMul(4,4))),
             (ShapeMul(2,2), ShapeDiv(4,4), tuple(ShapeMul(2,2), ShapeDiv(4,4)))
             )
-            act = combine_same(s1,s2)
+            act = combine(s1,s2)
             @test act == exp
             @testset "Same fshape with insize $insize" for insize in 1:5:100
                 is = (insize,insize+1)
                 @test fshape((s1,s2), is) == fshape(act, is) == fshape(exp, is)
             end
-        end
-
-        @testset "AggΔShape" begin
-            as = AggΔShape((ShapeAdd((1,2)), ShapeMul((3,4))))
-            @test fshape(as, (4,5)) == (15, 28)
-            @test as == combine(ShapeAdd((1,2)), ShapeMul((3,4)))
-            @test combine(as, ShapeAdd((5,6))) == AggΔShape((ShapeAdd((1,2)), ShapeMul((3,4)), ShapeAdd((5,6))))
-            @test combine(ShapeAdd((5,6)), as) == combine(ShapeAdd((6,8)), ShapeMul((3,4)))
-
-            @test combine(as, ShapeMul((5,6))) == combine(ShapeAdd((1,2)), ShapeMul((15,24)))
-            @test combine(ShapeMul((5,6)), as) == AggΔShape((ShapeMul((5,6)), ShapeAdd((1,2)), ShapeMul((3,4))))
-
-            @test filter_noops(as) == tuple(as)
-            @test filter_noops(combine(ShapeMul((1,1)), as)) == tuple(as)
-            @test filter_noops(combine(ShapeMul((1,1)), ShapeAdd((1,1)))) == tuple(ShapeAdd((1,1)))
-
-            @test fshape(revert(as), fshape(as, (6,8))) == (6,8)
         end
 
         @testset "Swap shapes" begin
@@ -183,14 +166,14 @@
 
             @test shapequery(trait(cv1), cv1, ShapeTraceV0(cv1)).trace == tuple()
             @testset "shape for $(name(cvn))" for cvn in (cv2,cv3,cv4,cv5)
-                s = AggΔShape(cvn(ShapeTraceV0(cvn)).trace)
+                s = cvn(ShapeTraceV0(cvn)).trace
                 @test fshape(s, (10,9)) == size(cvn(ones(Float32, 10,9, nout(vi), 1)))[1:2]
             end
 
             @testset "shapetrace" begin
                 g = CompGraph(vi, cv5)
-                sg = AggΔShape(g(ShapeTraceV0(vi)).trace)
-                sv = AggΔShape(shapetrace(cv5; trfun = v -> ShapeTraceV0(v)).trace)
+                sg = g(ShapeTraceV0(vi)).trace
+                sv = shapetrace(cv5; trfun = v -> ShapeTraceV0(v)).trace
                 @test fshape(sg, (30,31)) == fshape(sv, (30,31))== size(g(ones(Float32, 30,31, nout(vi), 1)))[1:2]
             end
         end
@@ -206,7 +189,6 @@
             cv2 = cv(mv, "cv2"; ks=(3,3))
 
             tr = shapetrace(cv2)
-            @show shapepaths(tr)
             # @show name(tr.origin)
             # for tt in  tr.trace
             #     @show tt

@@ -24,11 +24,6 @@ end
 ShapeAdd(Δshape::Integer...) = ShapeAdd(Δshape)
 fshape(s::ShapeAdd{N}, shape::NTuple{N, <:Integer}) where N = shape .+ shapeΔ(s)
 
-struct AggΔShape{N, M, K} <: ΔShape{N,M}
-    Δshape::NTuple{K, ΔShape}
-    AggΔShape(Δshapes::NTuple{K, ΔShape}) where K = new{indims(first(Δshapes)), outdims(last(Δshapes)), K}(Δshapes)
-end
-fshape(s::AggΔShape{N}, shape::NTuple{N, <:Integer}) where N = fshape(shapeΔ(s), shape)
 
 fshape(s::Tuple{ΔShape{N}, Vararg{ΔShape}}, shape::NTuple{N, <:Integer}) where N = foldr(fshape, reverse(s); init=shape)
 
@@ -36,40 +31,17 @@ fshape(s::Tuple{ΔShape{N}, Vararg{ΔShape}}, shape::NTuple{N, <:Integer}) where
 revert(s::ShapeAdd) = ShapeAdd(.-shapeΔ(s))
 revert(s::ShapeMul) = ShapeDiv(shapeΔ(s))
 revert(s::ShapeDiv) = ShapeMul(shapeΔ(s))
-revert(s::AggΔShape) = AggΔShape(revert(shapeΔ(s)))
 revert(s::NTuple{N, ΔShape}) where N = reverse(revert.(s))
 
-combine(s1::ShapeAdd{N}, s2::ShapeAdd{N}) where N = ShapeAdd(shapeΔ(s1) .+ shapeΔ(s2))
-combine(s1::ShapeDiv{N}, s2::ShapeMul{N}) where N = ShapeDiv(shapeΔ(s1) .÷ shapeΔ(s2))
-combine(s1::ShapeMul{N}, s2::ShapeDiv{N}) where N = ShapeMul(shapeΔ(s1) .÷ shapeΔ(s2))
-combine(s1::T, s2::T) where T <: Union{ShapeDiv{N}, ShapeMul{N}} where N = T(shapeΔ(s1) .* shapeΔ(s2))
-
-combine(s1::T, s2::V) where {T<:ΔShape, V<:ΔShape} = AggΔShape((s1,s2))
-combine(s1::AggΔShape, s2::ΔShape) = AggΔShape(combine_same(shapeΔ(s1), s2))
-combine(s1::ΔShape, s2::AggΔShape) = AggΔShape(combine_same(s1, shapeΔ(s2)))
-combine(s1::AggΔShape, s2::AggΔShape) = AggΔShape(combine_same(shapeΔ(s1), shapeΔ(s2)))
-
-combine_same(s1,s2) = s1,s2
-combine_same(s1::Tuple, s2) = (s1[1:end-1]..., combine_same(last(s1), s2)...)
-combine_same(s1::ΔShape, s2::Tuple) = (combine_same(s1, first(s2))..., s2[2:end]...)
-combine_same(s1::T, s2::T) where T <: ΔShape = tuple(combine(s1,s2))
-
-# Note: combining ShapeDiv and ShapeMul must be done with care due to trunction in division
-# function combine_same(s1::ShapeDiv{N}, s2::ShapeMul{N}) where N
-#     #all(shapeΔ(s1) .< shapeΔ(s2)) && isdiv(s2, s1) && return combine_same(s2,s1)
-#     # any(shapeΔ(s1) .== shapeΔ(s2)) && return s1,s2
-#     # isdiv(s1, s2) || return s1,s2
-#     # tuple(combine(s1,s2))
-#     return s1,s2
-# end
-function combine_same(s1::ShapeMul{N}, s2::ShapeDiv{N}) where N
-    #all(shapeΔ(s1) .< shapeΔ(s2)) && isdiv(s2, s1) && return combine_same(s2,s1)
-    isdiv(s1, s2) || return s1,s2
-    tuple(combine(s1,s2))
-end
+combine(s1,s2) = s1,s2
+combine(s1::Tuple{Vararg{ΔShape}}, s2) = (s1[1:end-1]..., combine(last(s1), s2)...)
+combine(s1::ΔShape, s2::Tuple{Vararg{ΔShape}}) = (combine(s1, first(s2))..., s2[2:end]...)
+combine(s1::ShapeAdd{N}, s2::ShapeAdd{N}) where N = tuple(ShapeAdd(shapeΔ(s1) .+ shapeΔ(s2)))
+combine(s1::T, s2::T) where T <: Union{ShapeDiv{N}, ShapeMul{N}} where N = tuple(T(shapeΔ(s1) .* shapeΔ(s2)))
+# Note: Combining ShapeDiv and ShapeMul not safe due to truncation when dividing
+combine(s1::ShapeMul{N}, s2::ShapeDiv{N}) where N = isdiv(s1, s2) ? tuple(ShapeMul(shapeΔ(s1) .÷ shapeΔ(s2))) : (s1,s2)
 
 isdiv(s1::ΔShape{N,N},s2::ΔShape{N,N}) where N = all(iszero, shapeΔ(s1) .% shapeΔ(s2))
-
 
 
 swapΔshape(s1, s2) = s1,s2
@@ -82,12 +54,8 @@ swapΔshape(s1::ShapeAdd{N}, s2::ShapeDiv{N}) where N = isdiv(s1, s2) ? (s2, Sha
 swapΔshape(s1::ShapeDiv{N}, s2::ShapeAdd{N}) where N = ShapeAdd(shapeΔ(s1) .* shapeΔ(s2)), s1
 
 
-filter_noops(ss::ΔShape...) = mapreduce(filter_noops, (s1,s2) -> (s1...,s2...), ss)
-function filter_noops(s::AggΔShape)
-    filtered =  filter_noops(shapeΔ(s)...)
-    length(filtered) < 2 && return filtered
-    return tuple(AggΔShape(filtered))
-end
+filter_noops(ss::ΔShape...) = filter_noops(ss)
+filter_noops(ss::Tuple{Vararg{ΔShape}}) = mapreduce(filter_noops, (s1,s2) -> (s1...,s2...), ss)
 filter_noops(s::Union{ShapeMul, ShapeDiv}) = all(x -> x == 1, shapeΔ(s)) ? tuple() : tuple(s)
 filter_noops(s::ShapeAdd) = all(x -> x == 0, shapeΔ(s)) ? tuple() : tuple(s)
 
@@ -117,9 +85,8 @@ squashshapes(s::Tuple{Vararg{ΔShape}}) where N = _squashshapes(orderΔshapes(s)
 
 _squashshapes(s::ΔShape) = tuple(s)
 _squashshapes(s::Tuple{ΔShape}) = s
-_squashshapes(s::AggΔShape) = squashshapes(shapeΔ(s)...)
 function _squashshapes(s::Tuple{Vararg{ΔShape}})
-    squashed = filter_noops(foldr(combine_same, s)...)
+    squashed = filter_noops(foldr(combine, s)...)
     squashed == s && return s
     isempty(squashed) && return squashed
     return _squashshapes(squashed)
