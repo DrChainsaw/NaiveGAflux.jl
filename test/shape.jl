@@ -1,5 +1,5 @@
 @testset "Shape" begin
-    import NaiveGAflux: ΔShape, ShapeAdd, ShapeMul, ShapeDiv, fshape, revert, combine, combine, filter_noops, ShapeTraceV0, shapetrace, shapequery, squashshapes, orderΔshapes
+    import NaiveGAflux: ΔShape, ShapeAdd, ShapeMul, ShapeDiv, fshape, revert, combine, combine, filter_noops, ShapeTraceV0, shapetrace, Δshapes, squashshapes, orderΔshapes
 
     @testset "ΔShapes" begin
 
@@ -164,7 +164,7 @@
             v4 = vf(v3, "v4"; ks=(3,3), stride=(1, 2))
             v5 = vf(v4, "v5"; ks=(4,5), pad=(2,3,4,5), stride=(3,4))
 
-            @test shapequery(trait(v1), v1, ShapeTraceV0(v1)).trace == tuple()
+            @test filter_noops(Δshapes(v1)) == tuple()
             @testset "shape for $(name(vn))" for vn in (v2,v3,v4,v5)
                 s = vn(ShapeTraceV0(vn)).trace
                 @test fshape(s, (10,9)) == size(vn(ones(Float32, 10,9, nout(vi), 1)))[1:2]
@@ -200,7 +200,7 @@
             v3 = cv(v2, "v3"; ks=(3,4), dilation=(4,5), pad=(1,2,3,4))
             v4 = cv(v3, "v4"; ks=(1,2), dilation=(2,3), pad=(4,5), stride=(6,7))
 
-            @test v1(ShapeTraceV0(vi)) == ShapeTraceV0(vi, v1, tuple())
+            @test filter_noops(Δshapes(v1)) == tuple()
             @testset "shape for $(name(vn))" for vn in (v2,v3,v4)
                 s = vn(ShapeTraceV0(vn)).trace
                 @test fshape(s, (20,19)) == size(vn(ones(Float32, 20,19, nout(vi), 1)))[1:2]
@@ -261,7 +261,7 @@
 
             @test sv2[1][1] == sva2
             @test sv2[1][2] == svb3
-            @test sv2[2] == v2(ShapeTraceV0(v2)).trace
+            @test sv2[2] == filter_noops(Δshapes(v2))
 
             @test fshape((sva2...,sv2[2]...), (13,14)) == (3,3)
             @test fshape((svb3...,sv2[2]...), (13,14)) == (3,3)

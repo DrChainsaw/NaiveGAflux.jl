@@ -102,31 +102,28 @@ struct ShapeTraceV0{T,V1,V2} <: AbstractShapeTraceX
 end
 ShapeTraceV0(v) = ShapeTraceV0(v, v, tuple())
 
-function add_op(tr::ShapeTraceV0, v, Δshapes...)
-    Δshapes_valid = filter_noops(Δshapes...)
-    return ShapeTraceV0(tr.origin, v, (tr.trace..., Δshapes_valid...))
-end
-
-Base.merge(v, tr::ShapeTraceV0) = tr
-Base.merge(v, trs::ShapeTraceV0...) = ShapeTraceV0(v, v, tuple(tuple((ShapeTraceV0(t.origin, v, t.trace) for t in trs)...)))
-
-shapepaths(t::ShapeTraceV0) = t.origin => shapepaths.(t.trace)
-shapepaths(x) = x
+ppr(t::ShapeTraceV0) = "ShapeTrace($(name(t.origin)), $(name(t.dest)), $(ppr(t.trace))"
+ppr(s::Tuple{Vararg{ΔShape}}) = s
+ppr(t::Tuple) = ppr.(t)
 
 squashshapes(t::ShapeTraceV0) = squashshapes(t.trace)
-squashshapes(t::Tuple) = mapfoldl(squashshapes, squashshapes, t)
+# TODO: One can probably do better here when parallel paths can't be squashed
+# Now the first instance of such a path will basically prevent squashing of any subsequent paths, even if they are not parallel
+squashshapes(t::Tuple) = mapfoldr(squashshapes, squashshapes, t)
 function squashshapes(t::Tuple{Vararg{ShapeTraceV0}})
      squashed = unique(map(squashshapes, t))
      length(squashed) == 1 && return first(squashed)
      return Tuple(squashed) # Danger danger! Graph probably only works for one single input shape
 end
-squashshapes(t1, t2) = t1,t2
-squashshapes(t::ShapeTraceV0, s::Tuple{Vararg{ΔShape}}) = squashshapes(t.trace, s)
-squashshapes(s::Tuple{Vararg{ΔShape}}, t::ShapeTraceV0) = squashshapes(s, t.trace)
-squashshapes(s::Tuple{Vararg{ΔShape}}, t::Tuple{Vararg{ShapeTraceV0}}) = s,t # Danger danger! Graph probably only works for one single input shape
-squashshapes(t::Tuple{Vararg{ShapeTraceV0}}, s::Tuple{Vararg{ΔShape}}) = t,s # Danger danger! Graph probably only works for one single input shape
+# This is the reason for "TODO: One can probably do better here when parallel paths can't be squashed" above
+squashshapes(s1, s2) = s1, s2
 squashshapes(s1::Tuple{Vararg{ΔShape}}, s2::Tuple{Vararg{ΔShape}}) = squashshapes((s1...,s2...))
 
+
+visitvertex(tr::ShapeTraceV0, v) = ShapeTraceV0(tr.origin, v, (tr.trace..., Δshapes(v)...))
+
+Base.merge(v, tr::ShapeTraceV0) = tr
+Base.merge(v, trs::ShapeTraceV0...) = ShapeTraceV0(v, v, tuple(tuple((ShapeTraceV0(t.origin, v, (t.trace..., Δshapes(v)...)) for t in trs)...)))
 
 function shapetrace(v::AbstractVertex; trfun = v -> ShapeTraceV0(v))
     ins = filter(v -> isempty(inputs(v)), NaiveNASlib.flatten(v))
@@ -139,31 +136,27 @@ function shapetrace(v::AbstractVertex, vs::AbstractVertex...; trfun = v -> Shape
     return output!(memo, v)
 end
 
+(v::NaiveNASlib.MutationVertex)(trs::AbstractShapeTraceX...) = merge(v, trs...)
+(v::NaiveNASlib.MutationVertex)(tr::AbstractShapeTraceX) = visitvertex(tr, v)
 
-(v::NaiveNASlib.AbstractVertex)(trs::AbstractShapeTraceX...) = base(v)(trs...)
-(v::NaiveNASlib.MutationVertex)(trs::AbstractShapeTraceX...) = shapequery(trait(v), v, trs...)
+Δshapes(v::AbstractVertex) = Δshapes(trait(v), v)
+Δshapes(t::DecoratingTrait, v) = Δshapes(base(t), v)
+Δshapes(::MutationSizeTrait, v) = _Δshapes(layertype(v), v)
 
-shapequery(t::DecoratingTrait, v, trs...) = shapequery(base(t), v, trs...)
-shapequery(::MutationSizeTrait, v, trs...) = shapequery(layertype(v), v, trs...)
-shapequery(lt, v, trs...) = merge(v, trs...)
-shapequery(::SizeInvariant, v, tr) = shapequery(layertype(v), v, tr)
+_Δshapes(::Any, v) = tuple()
 
-function shapequery(::FluxConv{N}, v, tr) where N
+function _Δshapes(::FluxConv{N}, v) where N
     c = layer(v)
     ks = size(NaiveNASflux.weights(c))[1:N]
     Δwindow = Δshape_from_window(ks, c.dilation, c.pad)
     Δstride = ShapeDiv(c.stride)
-    return add_op(tr, v, Δwindow, Δstride)
+    return Δwindow, Δstride
 end
 
-shapequery(::FluxNoParLayer, v, tr) = shapequery(layer(v), v, tr)
-function shapequery(p::Union{MeanPool, MaxPool}, v, tr)
-    Δwindow = Δshape_from_window(p.k, 1, p.pad)
-    Δstride = ShapeDiv(p.stride)
-    return add_op(tr, v, Δwindow, Δstride)
-end
+_Δshapes(::FluxNoParLayer, v) = _Δshapes(layer(v), v)
+_Δshapes(p::Union{MeanPool, MaxPool}, v) = Δshape_from_window(p.k, 1, p.pad), ShapeDiv(p.stride)
 
- Δshape_from_window(ws::NTuple{N}, dilation::Integer, pad) where N = Δshape_from_window(ws, ntuple(i -> dilation, N), pad)
+Δshape_from_window(ws::NTuple{N}, dilation::Integer, pad) where N = Δshape_from_window(ws, ntuple(i -> dilation, N), pad)
 function Δshape_from_window(ws::NTuple{N}, dilation, pad) where N
     padact = length(pad) == N ? 2 .* pad : ntuple(i -> pad[2(i-1)+1] + pad[2(i-1)+2], N)
     padref = ntuple(i -> sum(SamePad()(ws[i], dilation[i])), N)
