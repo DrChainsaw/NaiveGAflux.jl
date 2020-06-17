@@ -120,7 +120,7 @@ function squashshapes(t::Tuple{Vararg{ShapeTraceV0}})
      length(squashed) == 1 && return first(squashed)
      return Tuple(squashed) # Danger danger! Graph probably only works for one single input shape
 end
-squashshapes(t1::ShapeTraceV0, t2::ShapeTraceV0) = t1,t2 # Can squash?
+squashshapes(t1, t2) = t1,t2
 squashshapes(t::ShapeTraceV0, s::Tuple{Vararg{ΔShape}}) = squashshapes(t.trace, s)
 squashshapes(s::Tuple{Vararg{ΔShape}}, t::ShapeTraceV0) = squashshapes(s, t.trace)
 squashshapes(s::Tuple{Vararg{ΔShape}}, t::Tuple{Vararg{ShapeTraceV0}}) = s,t # Danger danger! Graph probably only works for one single input shape

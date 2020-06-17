@@ -235,5 +235,66 @@
                 @test fshape(s, (17,11,20)) == size(vn(ones(Float32, 17, 11, 20, nout(vi), 1)))[1:3]
             end
         end
+
+        @testset "Squash misaligned branches" begin
+            vi = iv()
+            v1 = pv(vi, "v1"; ks=(2,2))
+            va1 = pv(v1, "va1"; ks=(1,1), stride=(2,2))
+            va2 = pv(va1, "va2"; ks=(3,3))
+            vb1 = pv(v1, "vb1"; ks=(3,3), pad=(2,2))
+            vb2 = pv(vb1, "vb2"; ks=(9,9))
+            vb3 = pv(vb2, "vb3"; ks=(3,3))
+            av = "add" >> va2 + vb3
+            v2 = pv(av, "v2"; ks=(2,3))
+
+            g = CompGraph(vi ,v2)
+            @test size(g(ones(Float32, 13,14, nout(vi), 1)))[1:2] == (3,3)
+
+            trv2 = shapetrace(v2)
+            sv2 = squashshapes(trv2)
+
+            trva2 = shapetrace(va2)
+            sva2 = squashshapes(trva2)
+
+            trvb3 = shapetrace(vb3)
+            svb3 = squashshapes(trvb3)
+
+            @test sv2[1][1] == sva2
+            @test sv2[1][2] == svb3
+            @test sv2[2] == v2(ShapeTraceV0(v2)).trace
+
+            @test fshape((sva2...,sv2[2]...), (13,14)) == (3,3)
+            @test fshape((svb3...,sv2[2]...), (13,14)) == (3,3)
+
+            @test fshape((sva2...,sv2[2]...), (16,17)) == (5,4)
+            @test fshape((svb3...,sv2[2]...), (16,17)) == (6,6)
+        end
+
+        @testset "Squash nested branches" begin
+
+            # The fact that I could use the shapetrace to align this monstrosity is perhaps a sign that it is not completely useless...
+            vi = iv()
+            v1 = pv(vi, "v1"; ks=(3,3))
+
+            va1 = pv(v1, "va1"; ks=(2,2), stride=(2,2))
+            va2 = pv(va1, "va2"; ks=(5,5))
+
+            vaa1 = pv(va2, "vaa1"; ks=(1,1), stride=(3,3))
+            vaa2 = pv(vaa1, "vaa2"; ks=(3,3))
+            vab1 = pv(va2, "vab1"; ks=(7,7), stride=(3,3))
+
+            mva1 = "mva1" >> vaa2 + vab1
+            va3 = pv(mva1, "va3"; ks=(5,5))
+
+            vb1 = pv(v1, "vb1"; ks=(4,4), stride=(3,3))
+            vb2 = pv(vb1, "vb2"; ks=(3,3), stride=(2,2))
+            vb3 = pv(vb2, "vb3"; ks=(2,2))
+            vb4 = pv(vb3, "vb4"; ks=(6,6))
+
+            mv1 = "mv1" >> va3 + vb4
+            v2 = pv(mv1, "v2"; ks=(3,3))
+
+            @test squashshapes(shapetrace(v2)) == (ShapeAdd{2}((-59, -59)), ShapeDiv{2}((6, 6)))
+        end
     end
 end
