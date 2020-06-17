@@ -1,5 +1,5 @@
 @testset "Shape" begin
-    import NaiveGAflux: ΔShape, ShapeAdd, ShapeMul, ShapeDiv, AggΔShape, fshape, revert, combine, combine, filter_noops, ShapeTraceV0, shapetrace, shapequery, squashshapes, orderΔshapes
+    import NaiveGAflux: ΔShape, ShapeAdd, ShapeMul, ShapeDiv, fshape, revert, combine, combine, filter_noops, ShapeTraceV0, shapetrace, shapequery, squashshapes, orderΔshapes
 
     @testset "ΔShapes" begin
 
@@ -153,44 +153,87 @@
     @testset "ShapeTrace" begin
         iv(N=2) = inputvertex("in", 1, FluxConv{N}())
         bv(in, name) = mutable(name, BatchNorm(nout(in)), in)
-        pv(in, name; ks = (3,3), kwargs...) = mutable(name, MaxPool(ks; kwargs...), in)
+        pv(in, name; ks=(3,3), stride=ntuple(i->1, length(ks)), kwargs...) = mutable(name, MaxPool(ks; stride=stride, kwargs...), in)
         cv(in, name; ks=(3,3), kwargs...) = mutable(name, Conv(ks, nout(in) => nout(in); kwargs...), in)
 
-        @testset "Trace conv" begin
+        @testset "Trace $vf" for vf in (cv,pv)
             vi = iv()
-            cv1 = cv(vi, "cv1"; ks=(1,1))
-            cv2 = cv(cv1, "cv2"; ks=(3,3))
-            cv3 = cv(cv2, "cv3"; ks=(2,4), pad=(5,7))
-            cv4 = cv(cv3, "cv4"; ks=(3,3), stride=(1, 2))
-            cv5 = cv(cv4, "cv5"; ks=(4,5), pad=(2,3,4,5), stride=(3,4))
+            v1 = vf(vi, "v1"; ks=(1,1))
+            v2 = vf(v1, "v2"; ks=(3,3))
+            v3 = vf(v2, "v3"; ks=(2,4), pad=(5,7))
+            v4 = vf(v3, "v4"; ks=(3,3), stride=(1, 2))
+            v5 = vf(v4, "v5"; ks=(4,5), pad=(2,3,4,5), stride=(3,4))
 
-            @test shapequery(trait(cv1), cv1, ShapeTraceV0(cv1)).trace == tuple()
-            @testset "shape for $(name(cvn))" for cvn in (cv2,cv3,cv4,cv5)
-                s = cvn(ShapeTraceV0(cvn)).trace
-                @test fshape(s, (10,9)) == size(cvn(ones(Float32, 10,9, nout(vi), 1)))[1:2]
+            @test shapequery(trait(v1), v1, ShapeTraceV0(v1)).trace == tuple()
+            @testset "shape for $(name(vn))" for vn in (v2,v3,v4,v5)
+                s = vn(ShapeTraceV0(vn)).trace
+                @test fshape(s, (10,9)) == size(vn(ones(Float32, 10,9, nout(vi), 1)))[1:2]
             end
 
-            @testset "shapetrace" begin
-                g = CompGraph(vi, cv5)
+            @testset "shapetrace graph" begin
+                g = CompGraph(vi, v5)
                 sg = g(ShapeTraceV0(vi)).trace
-                sv = shapetrace(cv5; trfun = v -> ShapeTraceV0(v)).trace
+                sv = shapetrace(v5; trfun = v -> ShapeTraceV0(v)).trace
                 @test fshape(sg, (30,31)) == fshape(sv, (30,31))== size(g(ones(Float32, 30,31, nout(vi), 1)))[1:2]
             end
         end
 
-        @testset "Trace conv merge" begin
+        @testset "Trace $vf merge" for vf in (cv, pv)
             vi = iv()
-            cv1 = cv(vi, "cv1"; ks=(2,5))
-            cva1 = cv(cv1, "cva1"; ks=(1,1), stride=(2,2))
-            cva2 = cv(cva1, "cva2"; ks=(2,2))
-            cvb1 = cv(cv1, "cvb1"; ks=(3,3))
-            cvb2 = cv(cvb1, "cvb2";ks=(1,1), stride=(2,2))
-            mv = concat("concat", cva2,cvb2)
-            cv2 = cv(mv, "cv2"; ks=(3,3))
+            v1 = vf(vi, "v1"; ks=(2,5))
+            va1 = vf(v1, "va1"; ks=(1,1), stride=(2,2))
+            va2 = vf(va1, "va2"; ks=(2,2))
+            vb1 = vf(v1, "vb1"; ks=(3,3))
+            vb2 = vf(vb1, "vb2";ks=(1,1), stride=(2,2))
+            mv = concat("concat", va2,vb2)
+            v2 = vf(mv, "v2"; ks=(3,3))
 
-            tr = shapetrace(cv2)
+            tr = shapetrace(v2)
 
-            @test fshape(squashshapes(tr), (13,17)) == size(CompGraph(vi,cv2)(ones(Float32, 13,17,1,1)))[1:2]
+            @test fshape(squashshapes(tr), (13,17)) == size(CompGraph(vi,v2)(ones(Float32, 13,17,1,1)))[1:2]
+        end
+
+        @testset "Conv dilation" begin
+            vi = iv()
+            v1 = cv(vi, "v1"; ks=(1,1), dilation=2)
+            v2 = cv(v1, "v2"; ks=(2,2), dilation=2)
+            v3 = cv(v2, "v3"; ks=(3,4), dilation=(4,5), pad=(1,2,3,4))
+            v4 = cv(v3, "v4"; ks=(1,2), dilation=(2,3), pad=(4,5), stride=(6,7))
+
+            @test v1(ShapeTraceV0(vi)) == ShapeTraceV0(vi, v1, tuple())
+            @testset "shape for $(name(vn))" for vn in (v2,v3,v4)
+                s = vn(ShapeTraceV0(vn)).trace
+                @test fshape(s, (20,19)) == size(vn(ones(Float32, 20,19, nout(vi), 1)))[1:2]
+            end
+
+            @testset "shapetrace graph" begin
+                g = CompGraph(vi, v4)
+                sg = g(ShapeTraceV0(vi)).trace
+                sv = shapetrace(v4; trfun = v -> ShapeTraceV0(v)).trace
+                @test fshape(sg, (30,31)) == fshape(sv, (30,31))== size(g(ones(Float32, 30,31, nout(vi), 1)))[1:2]
+            end
+        end
+
+        @testset "1D  $vf" for vf in (cv,pv)
+            vi = iv(1)
+            v1 = vf(vi, "v1"; ks=(1,), pad=1)
+            v2 = vf(v1, "v2", ks=(3,), stride=(2,), pad=(1,1))
+
+            @testset "shape for $(name(vn))" for vn in (v1, v2)
+                s = vn(ShapeTraceV0(vn)).trace
+                @test fshape(s, (7,)) == size(vn(ones(Float32, 7, nout(vi), 1)))[1:1]
+            end
+        end
+
+        @testset "3D  $vf" for vf in (cv,pv)
+            vi = iv(3)
+            v1 = vf(vi, "v1"; ks=(1,2,3), pad=1)
+            v2 = vf(v1, "v2", ks=(3,3,3), stride=(2,1,3), pad=(1,2,3,4,5,6))
+
+            @testset "shape for $(name(vn))" for vn in (v1, v2)
+                s = vn(ShapeTraceV0(vn)).trace
+                @test fshape(s, (17,11,20)) == size(vn(ones(Float32, 17, 11, 20, nout(vi), 1)))[1:3]
+            end
         end
     end
 end

@@ -107,6 +107,7 @@ function add_op(tr::ShapeTraceV0, v, Δshapes...)
     return ShapeTraceV0(tr.origin, v, (tr.trace..., Δshapes_valid...))
 end
 
+Base.merge(v, tr::ShapeTraceV0) = tr
 Base.merge(v, trs::ShapeTraceV0...) = ShapeTraceV0(v, v, tuple(tuple((ShapeTraceV0(t.origin, v, t.trace) for t in trs)...)))
 
 shapepaths(t::ShapeTraceV0) = t.origin => shapepaths.(t.trace)
@@ -127,8 +128,6 @@ squashshapes(t::Tuple{Vararg{ShapeTraceV0}}, s::Tuple{Vararg{ΔShape}}) = t,s # 
 squashshapes(s1::Tuple{Vararg{ΔShape}}, s2::Tuple{Vararg{ΔShape}}) = squashshapes((s1...,s2...))
 
 
-
-
 function shapetrace(v::AbstractVertex; trfun = v -> ShapeTraceV0(v))
     ins = filter(v -> isempty(inputs(v)), NaiveNASlib.flatten(v))
     memo = Dict{AbstractVertex, Any}(ins .=> trfun.(ins))
@@ -145,19 +144,26 @@ end
 (v::NaiveNASlib.MutationVertex)(trs::AbstractShapeTraceX...) = shapequery(trait(v), v, trs...)
 
 shapequery(t::DecoratingTrait, v, trs...) = shapequery(base(t), v, trs...)
-# TODO: Not correct in general cases. Just a temp thing until I can get a picture of whether this is whole thing works out or not
-shapequery(::NaiveNASlib.SizeTransparent, v, trs...) = merge(v, trs...)
+shapequery(::MutationSizeTrait, v, trs...) = shapequery(layertype(v), v, trs...)
+shapequery(lt, v, trs...) = merge(v, trs...)
+shapequery(::SizeInvariant, v, tr) = shapequery(layertype(v), v, tr)
 
-shapequery(::SizeAbsorb, v, trs...) = shapequery(layertype(v), v, trs...)
-shapequery(lt, v, trs...) = first(trs)
 function shapequery(::FluxConv{N}, v, tr) where N
     c = layer(v)
     ks = size(NaiveNASflux.weights(c))[1:N]
     Δwindow = Δshape_from_window(ks, c.dilation, c.pad)
     Δstride = ShapeDiv(c.stride)
-    add_op(tr, v, Δwindow, Δstride)
+    return add_op(tr, v, Δwindow, Δstride)
 end
 
+shapequery(::FluxNoParLayer, v, tr) = shapequery(layer(v), v, tr)
+function shapequery(p::Union{MeanPool, MaxPool}, v, tr)
+    Δwindow = Δshape_from_window(p.k, 1, p.pad)
+    Δstride = ShapeDiv(p.stride)
+    return add_op(tr, v, Δwindow, Δstride)
+end
+
+ Δshape_from_window(ws::NTuple{N}, dilation::Integer, pad) where N = Δshape_from_window(ws, ntuple(i -> dilation, N), pad)
 function Δshape_from_window(ws::NTuple{N}, dilation, pad) where N
     padact = length(pad) == N ? 2 .* pad : ntuple(i -> pad[2(i-1)+1] + pad[2(i-1)+2], N)
     padref = ntuple(i -> sum(SamePad()(ws[i], dilation[i])), N)
