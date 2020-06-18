@@ -24,7 +24,6 @@ end
 ShapeAdd(Δshape::Integer...) = ShapeAdd(Δshape)
 fshape(s::ShapeAdd{N}, shape::NTuple{N, <:Integer}) where N = shape .+ shapeΔ(s)
 
-
 fshape(s::Tuple{ΔShape{N}, Vararg{ΔShape}}, shape::NTuple{N, <:Integer}) where N = foldr(fshape, reverse(s); init=shape)
 
 
@@ -79,9 +78,12 @@ function orderΔshapes(s::Tuple{Vararg{ΔShape}}; order=unique(typeof.(s))) wher
     return snew
 end
 
-squashshapes(s::ΔShape) = tuple(s)
-squashshapes(s::ΔShape...) = squashshapes(s)
-squashshapes(s::Tuple{Vararg{ΔShape}}) where N = _squashshapes(orderΔshapes(s))
+allΔshapetypes(s::T) where T <: ΔShape = T
+allΔshapetypes(s::Tuple{Vararg{ΔShape}}) = unique(allΔshapetypes.(s))
+
+squashshapes(s::ΔShape; order=nothing) = tuple(s)
+squashshapes(s::ΔShape...; order=allΔshapetypes(s)) = squashshapes(s; order = order)
+squashshapes(s::Tuple{Vararg{ΔShape}}; order=allΔshapetypes(s)) where N = _squashshapes(orderΔshapes(s; order=order))
 
 _squashshapes(s::ΔShape) = tuple(s)
 _squashshapes(s::Tuple{ΔShape}) = s
@@ -100,24 +102,23 @@ struct ShapeTraceV0{T,V1,V2} <: AbstractShapeTraceX
     dest::V2
     trace::T
 end
-ShapeTraceV0(v) = ShapeTraceV0(v, v, tuple())
+ShapeTraceV0(v) = ShapeTraceV0(v, v, Δshapes(v))
 
-ppr(t::ShapeTraceV0) = "ShapeTrace($(name(t.origin)), $(name(t.dest)), $(ppr(t.trace))"
-ppr(s::Tuple{Vararg{ΔShape}}) = s
-ppr(t::Tuple) = ppr.(t)
+allΔshapetypes(t::ShapeTraceV0) = allΔshapetypes(t.trace)
+allΔshapetypes(t::Tuple) = unique(mapreduce(allΔshapetypes, vcat, t))
 
-squashshapes(t::ShapeTraceV0) = squashshapes(t.trace)
+squashshapes(t::ShapeTraceV0; order=allΔshapetypes(t)) = squashshapes(t.trace;order=order)
 # TODO: One can probably do better here when parallel paths can't be squashed
 # Now the first instance of such a path will basically prevent squashing of any subsequent paths, even if they are not parallel
-squashshapes(t::Tuple) = mapfoldr(squashshapes, squashshapes, t)
-function squashshapes(t::Tuple{Vararg{ShapeTraceV0}})
-     squashed = unique(map(squashshapes, t))
+squashshapes(t::Tuple; order=allΔshapetypes(t)) = mapfoldr(tt -> squashshapes(tt;order=order), (t1,t2) -> squashshapes(t1,t2; order=order), t)
+function squashshapes(t::Tuple{Vararg{ShapeTraceV0}}; order=allΔshapetypes(t))
+     squashed = unique(map(tt -> squashshapes(tt;order=order), t))
      length(squashed) == 1 && return first(squashed)
      return Tuple(squashed) # Danger danger! Graph probably only works for one single input shape
 end
 # This is the reason for "TODO: One can probably do better here when parallel paths can't be squashed" above
-squashshapes(s1, s2) = s1, s2
-squashshapes(s1::Tuple{Vararg{ΔShape}}, s2::Tuple{Vararg{ΔShape}}) = squashshapes((s1...,s2...))
+squashshapes(s1, s2; order=missing) = s1, s2
+squashshapes(s1::Tuple{Vararg{ΔShape}}, s2::Tuple{Vararg{ΔShape}}; order=allΔshapetypes((s1,s2))) = squashshapes((s1...,s2...); order=order)
 
 
 visitvertex(tr::ShapeTraceV0, v) = ShapeTraceV0(tr.origin, v, (tr.trace..., Δshapes(v)...))
@@ -139,7 +140,9 @@ end
 (v::NaiveNASlib.MutationVertex)(trs::AbstractShapeTraceX...) = merge(v, trs...)
 (v::NaiveNASlib.MutationVertex)(tr::AbstractShapeTraceX) = visitvertex(tr, v)
 
-Δshapes(v::AbstractVertex) = Δshapes(trait(v), v)
+Δshapes(v::AbstractVertex) = Δshapes(base(v))
+Δshapes(v::InputVertex) = tuple()
+Δshapes(v::MutationVertex) = Δshapes(trait(v), v)
 Δshapes(t::DecoratingTrait, v) = Δshapes(base(t), v)
 Δshapes(::MutationSizeTrait, v) = _Δshapes(layertype(v), v)
 

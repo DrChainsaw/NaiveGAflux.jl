@@ -166,7 +166,7 @@
 
             @test filter_noops(Δshapes(v1)) == tuple()
             @testset "shape for $(name(vn))" for vn in (v2,v3,v4,v5)
-                s = vn(ShapeTraceV0(vn)).trace
+                s = ShapeTraceV0(vn).trace
                 @test fshape(s, (10,9)) == size(vn(ones(Float32, 10,9, nout(vi), 1)))[1:2]
             end
 
@@ -202,7 +202,7 @@
 
             @test filter_noops(Δshapes(v1)) == tuple()
             @testset "shape for $(name(vn))" for vn in (v2,v3,v4)
-                s = vn(ShapeTraceV0(vn)).trace
+                s = ShapeTraceV0(vn).trace
                 @test fshape(s, (20,19)) == size(vn(ones(Float32, 20,19, nout(vi), 1)))[1:2]
             end
 
@@ -220,7 +220,7 @@
             v2 = vf(v1, "v2", ks=(3,), stride=(2,), pad=(1,1))
 
             @testset "shape for $(name(vn))" for vn in (v1, v2)
-                s = vn(ShapeTraceV0(vn)).trace
+                s = ShapeTraceV0(vn).trace
                 @test fshape(s, (7,)) == size(vn(ones(Float32, 7, nout(vi), 1)))[1:1]
             end
         end
@@ -231,7 +231,7 @@
             v2 = vf(v1, "v2", ks=(3,3,3), stride=(2,1,3), pad=(1,2,3,4,5,6))
 
             @testset "shape for $(name(vn))" for vn in (v1, v2)
-                s = vn(ShapeTraceV0(vn)).trace
+                s = ShapeTraceV0(vn).trace
                 @test fshape(s, (17,11,20)) == size(vn(ones(Float32, 17, 11, 20, nout(vi), 1)))[1:3]
             end
         end
@@ -294,7 +294,28 @@
             mv1 = "mv1" >> va3 + vb4
             v2 = pv(mv1, "v2"; ks=(3,3))
 
-            @test squashshapes(shapetrace(v2)) == (ShapeAdd{2}((-59, -59)), ShapeDiv{2}((6, 6)))
+            @test squashshapes(shapetrace(v2)) == squashshapes(shapetrace(v2, v1)) == (ShapeAdd(-59, -59), ShapeDiv(6, 6))
+        end
+
+        @testset "Squash with different start types" begin
+            import Setfield: @set
+            import NaiveGAflux: allΔshapetypes
+            vi = iv()
+
+            va1 = pv(vi, "va1"; ks=(3,3), stride=(2,2), pad=(1,1))
+            va2 = pv(va1, "va2"; ks = (3,3))
+
+            vb1 = pv(vi, "vb1"; ks=(5,5))
+            vb2 = pv(vb1,"vb1"; ks=(3,3), stride=(2,2), pad=(1,1))
+            mv = "add" >> va2 + vb2
+
+            st = shapetrace(mv);
+            # All vertices insert ΔShapes in the same order, so we need to do this to make them have different order
+            st = @set st.trace[1][1].trace = filter_noops(st.trace[1][1].trace)
+
+            @test allΔshapetypes(st) == [ShapeDiv{2}, ShapeAdd{2}]
+
+            @test squashshapes(st) == (ShapeDiv(2, 2), ShapeAdd(-2,-2))
         end
     end
 end
