@@ -148,6 +148,46 @@
                 end
             end
         end
+
+        @testset "Diff shapes" begin
+            import NaiveGAflux: Δshapediff
+
+            @testset "Primitives" begin
+                @test Δshapediff(ShapeAdd(2,2), ShapeAdd(2,2)) == tuple()
+                @test Δshapediff(ShapeAdd(2,3), ShapeAdd(3,4)) == tuple(ShapeAdd(-1,-1))
+
+                @test Δshapediff(ShapeMul(2,2), ShapeMul(2,2)) == tuple()
+                @test Δshapediff(ShapeMul(2,3), ShapeMul(3,4)) == (ShapeDiv(3,4), ShapeMul(2,3))
+                @test Δshapediff(ShapeMul(4,6), ShapeMul(2,3)) == tuple(ShapeMul(2,2))
+                @test Δshapediff(ShapeMul(2,3), ShapeMul(4,6)) == tuple(ShapeDiv(2,2))
+
+                @test Δshapediff(ShapeDiv(2,2), ShapeDiv(2,2)) == tuple()
+                @test Δshapediff(ShapeDiv(2,3), ShapeDiv(3,4)) == (ShapeMul(3,4), ShapeDiv(2,3))
+                @test Δshapediff(ShapeDiv(4,6), ShapeDiv(2,3)) == tuple(ShapeDiv(2,2))
+                @test Δshapediff(ShapeDiv(2,3), ShapeDiv(4,6)) == tuple(ShapeMul(2,2))
+
+                @test Δshapediff(ShapeAdd(1,2), ShapeAdd(1,2,3)) == (ShapeAdd(1,2), ShapeAdd(1,2,3))
+            end
+
+            @testset "Tuples" begin
+                @testset "Basic" begin
+                    s1 = (ShapeAdd(2,2), ShapeDiv(2,2), ShapeMul(4,2))
+                    @test Δshapediff(s1, s1) == tuple()
+
+                    @test Δshapediff(s1, s1[1:2]) == tuple(ShapeMul(4,2))
+                    @test Δshapediff(s1, s1[2:3]) == tuple(ShapeAdd(4,2))
+                    @test Δshapediff(s1, s1[[1,3]]) == (ShapeDiv(8, 4), ShapeMul(4, 2))
+
+                    @test Δshapediff(s1[1:2], s1) == tuple(ShapeDiv(4,2))
+                    @test Δshapediff(s1[2:3], s1) == tuple(ShapeAdd(-4,-2))
+                    @test Δshapediff(s1[[1,3]], s1) == (ShapeDiv(4, 2), ShapeMul(8, 4))
+
+                    s2 = (ShapeDiv(4,4), ShapeAdd(3,5), ShapeMul(8,4), ShapeDiv(2,2))
+                    # TODO: This can't be right!
+                    @test Δshapediff(s1,s2) == (ShapeAdd(-10,-18), ShapeMul(2,2))
+                end
+            end
+        end
     end
 
     @testset "ShapeTrace" begin

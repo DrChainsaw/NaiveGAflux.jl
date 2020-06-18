@@ -54,7 +54,7 @@ swapΔshape(s1::ShapeDiv{N}, s2::ShapeAdd{N}) where N = ShapeAdd(shapeΔ(s1) .* 
 
 
 filter_noops(ss::ΔShape...) = filter_noops(ss)
-filter_noops(ss::Tuple{Vararg{ΔShape}}) = mapreduce(filter_noops, (s1,s2) -> (s1...,s2...), ss)
+filter_noops(ss::Tuple{Vararg{ΔShape}}) = mapreduce(filter_noops, (s1,s2) -> (s1...,s2...), ss; init=tuple())
 filter_noops(s::Union{ShapeMul, ShapeDiv}) = all(x -> x == 1, shapeΔ(s)) ? tuple() : tuple(s)
 filter_noops(s::ShapeAdd) = all(x -> x == 0, shapeΔ(s)) ? tuple() : tuple(s)
 
@@ -94,6 +94,28 @@ function _squashshapes(s::Tuple{Vararg{ΔShape}})
     return _squashshapes(squashed)
 end
 
+Δshapediff(s1,s2) = filter_noops(_Δshapediff(s1,s2))
+_Δshapediff(s1::ΔShape{N}, s2::ΔShape{M}) where {N,M} = N == M ? (revert(s2), s1) : (s1,s2)
+_Δshapediff(s1::ShapeAdd{N}, s2::ShapeAdd{N}) where N = tuple(ShapeAdd(shapeΔ(s1) .- shapeΔ(s2)))
+function _Δshapediff(s1::T, s2::T) where T<:Union{ShapeMul, ShapeDiv}
+    (all(shapeΔ(s1) .< shapeΔ(s2)) && isdiv(s2,s1)) && return tuple(revert(T(shapeΔ(s2) .÷ shapeΔ(s1))))
+    isdiv(s1,s2) || return (revert(s2), s1)
+    tuple(T(shapeΔ(s1) .÷ shapeΔ(s2)))
+end
+function _Δshapediff(s1::Tuple{Vararg{ΔShape}}, s2::Tuple{Vararg{ΔShape}})
+    ts1 = allΔshapetypes(s1)
+    ts2 = allΔshapetypes(s2)
+    front = intersect(ts1,ts2)
+    back = symdiff(ts1, ts2)
+
+    so1 = squashshapes(s1; order=vcat(front, back))
+    so2 = squashshapes(s2; order=vcat(front, back))
+
+    maxlen = min(length(so1), length(so2))
+    diffed = mapreduce(_Δshapediff, (t1,t2) -> (t1...,t2...), so1, so2)
+
+    return squashshapes((revert.(so2[maxlen+1:end])..., diffed..., so1[maxlen+1:end]...))
+end
 
 abstract type AbstractShapeTraceX end
 
