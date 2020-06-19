@@ -58,7 +58,7 @@ filter_noops(ss::Tuple{Vararg{ΔShape}}) = mapreduce(filter_noops, (s1,s2) -> (s
 filter_noops(s::Union{ShapeMul, ShapeDiv}) = all(x -> x == 1, shapeΔ(s)) ? tuple() : tuple(s)
 filter_noops(s::ShapeAdd) = all(x -> x == 0, shapeΔ(s)) ? tuple() : tuple(s)
 
-function orderΔshapes(s::Tuple{Vararg{ΔShape}}; order=unique(typeof.(s))) where N
+function orderΔshapes(s::Tuple{Vararg{ΔShape}}; order=allΔshapetypes(s)) where N
     # Yeah, this is bubble sort :/ Given the constraint that ΔShapes can't always swap places along with the fact that swapping generally changes the swapped elements I couldn't think up and other sorting algo that works
     sprev = tuple()
     snew = s
@@ -81,6 +81,7 @@ end
 allΔshapetypes(s::T) where T <: ΔShape = T
 allΔshapetypes(s::Tuple{Vararg{ΔShape}}) = unique(allΔshapetypes.(s))
 
+squashshapes(s::Tuple{}; order=nothing) = s
 squashshapes(s::ΔShape; order=nothing) = tuple(s)
 squashshapes(s::ΔShape...; order=allΔshapetypes(s)) = squashshapes(s; order = order)
 squashshapes(s::Tuple{Vararg{ΔShape}}; order=allΔshapetypes(s)) where N = _squashshapes(orderΔshapes(s; order=order))
@@ -94,27 +95,32 @@ function _squashshapes(s::Tuple{Vararg{ΔShape}})
     return _squashshapes(squashed)
 end
 
-Δshapediff(s1,s2) = filter_noops(_Δshapediff(s1,s2))
+Δshapediff(s1,s2) = filter_noops(squashshapes(_Δshapediff(s1,s2)))
 _Δshapediff(s1::ΔShape{N}, s2::ΔShape{M}) where {N,M} = N == M ? (revert(s2), s1) : (s1,s2)
-_Δshapediff(s1::ShapeAdd{N}, s2::ShapeAdd{N}) where N = tuple(ShapeAdd(shapeΔ(s1) .- shapeΔ(s2)))
-function _Δshapediff(s1::T, s2::T) where T<:Union{ShapeMul, ShapeDiv}
-    (all(shapeΔ(s1) .< shapeΔ(s2)) && isdiv(s2,s1)) && return tuple(revert(T(shapeΔ(s2) .÷ shapeΔ(s1))))
-    isdiv(s1,s2) || return (revert(s2), s1)
-    tuple(T(shapeΔ(s1) .÷ shapeΔ(s2)))
-end
+_Δshapediff(s1::ΔShape{N}, s2::ΔShape{N}) where N = s1 == s2 ? tuple() : (revert(s2), s1)
 function _Δshapediff(s1::Tuple{Vararg{ΔShape}}, s2::Tuple{Vararg{ΔShape}})
-    ts1 = allΔshapetypes(s1)
-    ts2 = allΔshapetypes(s2)
+    # Pretty crappy heurisic tbh, but I couldn't think of anything better:
+    # Step 1: Remove all identical ΔShapes
+    # Step 2: Squash shapes and try again
+    # Step 3: revert s2 and concat s1
+
+    firstdiff = findfirst(((ss1,ss2)::Tuple) -> ss1 != ss2, collect(zip(s1,s2)))
+    firstdiff = isnothing(firstdiff) ? min(length(s1), length(s2))+1 : firstdiff
+    sd1 = s1[firstdiff:end]
+    sd2 = s2[firstdiff:end]
+
+    isempty(sd1) && isempty(sd2) && return tuple()
+
+    ts1 = allΔshapetypes(sd1)
+    ts2 = allΔshapetypes(sd2)
     front = intersect(ts1,ts2)
     back = symdiff(ts1, ts2)
 
-    so1 = squashshapes(s1; order=vcat(front, back))
-    so2 = squashshapes(s2; order=vcat(front, back))
+    so1 = squashshapes(sd1; order=vcat(front, back))
+    so2 = squashshapes(sd2; order=vcat(front, back))
 
-    maxlen = min(length(so1), length(so2))
-    diffed = mapreduce(_Δshapediff, (t1,t2) -> (t1...,t2...), so1, so2)
-
-    return squashshapes((revert.(so2[maxlen+1:end])..., diffed..., so1[maxlen+1:end]...))
+    (so1 != s1 || so2 != s2) && return _Δshapediff(so1, so2)
+    return (revert(so2)..., so1...)
 end
 
 abstract type AbstractShapeTraceX end
