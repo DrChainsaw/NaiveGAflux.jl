@@ -704,16 +704,7 @@
                     @test name.(vs1) == ["a.cva1", "a.cva2"]
                     @test name(first(vs2)) == "b.cv1"
                     @test name(last(vs2)) == "b.cv3"
-
-                    cfun = (vin1, vin2) -> NaiveGAflux.sameactdims(vin1,vin2) && sameoutshape(vin1, last(vs1), vin2, last(vs2))
-
-                    default_pairgen(vs1, vs2, 10; ind1=2, rng=selectlast, compatiblefun=cfun)
-                end
-
-                function sameoutshape(vin1, vout1, vin2, vout2)
-                    tr1 = squashshapes(shapetrace(vout1, vin1))
-                    tr2 = squashshapes(shapetrace(vout2, vin2))
-                    return isempty(Δshapediff(tr1,tr2))
+                    return NaiveGAflux.default_inputs_pairgen(vs1, vs2, 10; ind1=2, rng=selectlast)
                 end
 
                 c = VertexCrossover(CrossoverSwap(;pairgen=pairgen_inner); pairgen=pairgen_outer)
@@ -722,7 +713,6 @@
 
                 @test size(ga(ones(Float32, 10,10,3,1))) == size(ga_new(ones(Float32, 10,10,3,1)))
                 @test size(gb(ones(Float32, 10,10,3,1))) == (2,2,4,1)
-
             end
         end
     end

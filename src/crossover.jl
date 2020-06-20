@@ -45,8 +45,8 @@ struct CrossoverSwap{F1, F2, S} <: AbstractCrossover{AbstractVertex}
     mergefun::F2
     selection::S
 end
-CrossoverSwap(;pairgen=default_pairgen, mergefun=default_mergefun, selection=FilterMutationAllowed()) = CrossoverSwap(pairgen, mergefun, selection)
-CrossoverSwap(deviation::Number; mergefun=default_mergefun, selection=FilterMutationAllowed()) = CrossoverSwap((vs1,vs2) -> default_pairgen(vs1, vs2, deviation), mergefun, selection)
+CrossoverSwap(;pairgen=default_inputs_pairgen, mergefun=default_mergefun, selection=FilterMutationAllowed()) = CrossoverSwap(pairgen, mergefun, selection)
+CrossoverSwap(deviation::Number; mergefun=default_mergefun, selection=FilterMutationAllowed()) = CrossoverSwap((v1,v2,vs1,vs2) -> default_inputs_pairgen(v1, v2, vs1, vs2, deviation), mergefun, selection)
 
 (c::CrossoverSwap)((v1,v2)::Tuple) = crossoverswap(v1, v2; pairgen = c.pairgen, mergefun=c.mergefun, selection=c.selection)
 
@@ -128,11 +128,40 @@ function default_pairgen(vs1, vs2, deviation = 0.0; rng=rng_default, compatiblef
     return ind1, ind2
 end
 
+"""
+    default_inputs_pairgen(vs1, vs2, args...;kwargs...)
+
+Same as [´default_pairgen`](@Ref) except it also ensures that shape changes of feature maps are consistent between the pairs.
+
+Feature map here refers to the shape of inputs to convolutional-type layers (Conv, Pooling) in dimensions other than the batch dimension or the channel dimension.
+
+For example, for 2D convolutions, the arrays may have the shape WxHxCxB where C and B are the channel and batch dimensions respectively. The shape of the feature map in this case is then WxH.
+
+More concretely, if `x` is the shape of a feature maps input to `vin1` and `f1(x)` is the shape of the feature maps output from `vout1` and `f2` describes the same relation between `vin2` and `vout2` then only vertices `vin2'` for which `f1(x) == f2(x) ∀ x` for a selected vertex `vin1` may be returned.
+
+This function assumes that the last vertex in `vs1` and `vs2` are `vout1` and `vout2` respectively.
+
+This prevents issues where graphs become inconsistent due to
+1) Feature maps become zero sized
+2) Feature maps of different sizes are merged (e.g. concatenated or element wise added)
+
+Note that this is more strict than needed as a change in the feature maps size does not necessarily result in 1) or 2).
+"""
+function default_inputs_pairgen(vs1, vs2, args...;kwargs...)
+    samedimsandshapes(vin1, vin2) = NaiveGAflux.sameactdims(vin1,vin2) && sameoutshape(vin1, last(vs1), vin2, last(vs2))
+    return default_pairgen(vs1,vs2, args...;compatiblefun = samedimsandshapes, kwargs...)
+end
 # We also check all size terminating outputs (perhaps sufficient with one) since transparent layers (incorrectly in this case) just report their inputs dims, meaning that a flattening global pool will seem to have conv output dims
 sameactdims(v1, v2) =  _sameactdims(v1, v2) && all(Iterators.product(findterminating(v1, outputs), findterminating(v2, outputs))) do (v1o, v2o)
     _sameactdims(v1o, v2o)
 end
 _sameactdims(v1, v2) = NaiveNASflux.actdim(v1) == NaiveNASflux.actdim(v2) && NaiveNASflux.actrank(v1) == NaiveNASflux.actrank(v2)
+
+function sameoutshape(vin1, vout1, vin2, vout2)
+    tr1 = squashshapes(shapetrace(vout1, vin1))
+    tr2 = squashshapes(shapetrace(vout2, vin2))
+    return isempty(Δshapediff(tr1,tr2))
+end
 
 relative_positions(arr) = collect(eachindex(arr) / length(arr))
 
@@ -146,7 +175,7 @@ Inputs are selected from the feasible set (as determined by `separablefrom` and 
 Inputs `v1` and `v2` along with their entire graph are copied before operation is performed and originals are returned if operation is not successful.
 """
 crossoverswap((v1, v2)::Tuple; kwargs...) = crossoverswap(v1, v2; kwargs...)
-function crossoverswap(v1, v2; pairgen=default_pairgen, mergefun=default_mergefun, selection=FilterMutationAllowed())
+function crossoverswap(v1, v2; pairgen=default_inputs_pairgen, mergefun=default_mergefun, selection=FilterMutationAllowed())
     # This is highly annoying: crossoverswap! does multiple remove/create_edge! and is therefore very hard to revert should something go wrong with one of the steps.
     # To mitigate this a backup copy is used. It is however not easy to backup a single vertex as it is connected to all other vertices in the graph, meaning that the whole graph must be copied. Sigh...
     function copyvertex(v)
@@ -165,7 +194,7 @@ function crossoverswap(v1, v2; pairgen=default_pairgen, mergefun=default_mergefu
 
     # From the two sets of separable vertices, find two matching pairs to use as endpoints in input direction
     # Endpoint in output direction is already determined by sel1 and sel2 and is returned by separablefrom as the first element
-    inds = pairgen(vs1,vs2)
+    inds = pairgen(vs1, vs2)
 
     isnothing(inds) && return v1, v2
 
