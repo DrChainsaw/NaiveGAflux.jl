@@ -160,8 +160,8 @@ function crossoverswap(v1, v2; pairgen=default_pairgen, mergefun=default_mergefu
     v1c, ivs1 = copyvertex(v1)
     v2c, ivs2 = copyvertex(v2)
 
-    vs1 = select(selection, separablefrom(v1c, ivs1))
-    vs2 = select(selection, separablefrom(v2c, ivs2))
+    vs1 = reverse!(select(selection, separablefrom(v1c, ivs1)))
+    vs2 = reverse!(select(selection, separablefrom(v2c, ivs2)))
 
     # From the two sets of separable vertices, find two matching pairs to use as endpoints in input direction
     # Endpoint in output direction is already determined by sel1 and sel2 and is returned by separablefrom as the first element
@@ -171,7 +171,7 @@ function crossoverswap(v1, v2; pairgen=default_pairgen, mergefun=default_mergefu
 
     ind1, ind2 = inds
 
-    success1, success2 = crossoverswap!(vs1[ind1], vs1[1], vs2[ind2], vs2[1]; mergefun=mergefun)
+    success1, success2 = crossoverswap!(vs1[ind1], vs1[end], vs2[ind2], vs2[end]; mergefun=mergefun)
 
     # Note: Success 1 and 2 are mapped to v2 and v1 respectively as success1 means we successfully inserted v1c into the graph which held v2c and vice versa
     v1ret = success2 ? v1c : v1

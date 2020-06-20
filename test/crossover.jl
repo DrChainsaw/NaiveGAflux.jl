@@ -529,21 +529,22 @@
                 ga = g("a", 3:4, 5:6)
                 gb = g("b", 2:4, 5:7)
 
-                pairgen(vs1,vs2; ind1=1) = ind1 > 3 ? nothing : default_pairgen(vs1, vs2; ind1=min(2*ind1, length(vs1)))
+                pairgen_outer(vs1,vs2; ind1=1) = ind1 > 3 ? nothing : default_pairgen(vs1, vs2; ind1=min(2*ind1, length(vs1)))
+                pairgen_inner(vs1,vs2) = default_pairgen(vs1, vs2; ind1 = length(vs1)-1)
 
-                crossfun(args...) = crossoverswap(args...;pairgen = pairgen)
+                crossfun(args...) = crossoverswap(args...;pairgen = pairgen_inner)
 
                 anames = name.(vertices(ga))
                 bnames = name.(vertices(gb))
 
-                ga_new, gb_new = crossover(ga, gb; pairgen=pairgen, crossoverfun=crossfun)
+                ga_new, gb_new = crossover(ga, gb; pairgen=pairgen_outer, crossoverfun=crossfun)
 
                 # Originals not impacted
                 @test anames == name.(vertices(ga))
                 @test bnames == name.(vertices(gb))
 
-                @test name.(vertices(ga_new)) == ["a.in", "b.cv1", "b.cv2", "b.cv3", "a.pv1", "b.dv2", "b.dv3"]
-                @test name.(vertices(gb_new)) == ["b.in", "a.cv1", "a.cv2", "b.pv1", "b.dv1", "a.dv1", "a.dv2"]
+                @test name.(vertices(ga_new)) == ["a.in", "b.cv2", "b.cv3", "a.pv1", "b.dv2", "b.dv3"]
+                @test name.(vertices(gb_new)) == ["b.in", "b.cv1", "a.cv1", "a.cv2", "b.pv1", "b.dv1", "a.dv1", "a.dv2"]
 
                 selapply(ga_new,gb_new)
 
@@ -556,7 +557,7 @@
                 import NaiveGAflux: select_neurons, default_neuronselect, default_pairgen
 
                 pairgen_outer(vs1,vs2; ind1=1) = default_pairgen(vs1, vs2; ind1=2ind1)
-                pairgen_inner(vs1, vs2) = default_pairgen(vs1, vs2; ind1=1)
+                pairgen_inner(vs1, vs2) = default_pairgen(vs1, vs2; ind1=length(vs1))
 
                 c = VertexCrossover(PostMutation(NeuronSelectMutation(v -> ones(nout_org(v)), CrossoverSwap(;pairgen=pairgen_inner)), neuronselect); pairgen=pairgen_outer)
 
@@ -700,11 +701,11 @@
                 Random.randn(rng::typeof(selectlast), nr) = selectlast(nr)
                 function pairgen_inner(vs1, vs2)
                     # Test that the testcase is working :)
-                    @test name.(vs1) == ["a.cva2", "a.cva1"]
-                    @test name(first(vs2)) == "b.cv3"
-                    @test name(last(vs2)) == "b.cv1"
+                    @test name.(vs1) == ["a.cva1", "a.cva2"]
+                    @test name(first(vs2)) == "b.cv1"
+                    @test name(last(vs2)) == "b.cv3"
 
-                    cfun = (vin1, vin2) -> NaiveGAflux.sameactdims(vin1,vin2) && sameoutshape(vin1, first(vs1), vin2, first(vs2))
+                    cfun = (vin1, vin2) -> NaiveGAflux.sameactdims(vin1,vin2) && sameoutshape(vin1, last(vs1), vin2, last(vs2))
 
                     default_pairgen(vs1, vs2, 10; ind1=2, rng=selectlast, compatiblefun=cfun)
                 end
