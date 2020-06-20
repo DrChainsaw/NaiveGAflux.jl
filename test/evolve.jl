@@ -51,9 +51,10 @@
     end
 
     @testset "EvolutionChain" begin
-        doublefitness = EvolveCandidates(mc -> MockCand(2 * fitness(mc)))
+        dfitness = EvolveCandidates(mc -> MockCand(2 * fitness(mc)))
+        sqrfitness = EvolveCandidates(mc -> MockCand(fitness(mc)^2))
         @test evolve!(EvolutionChain(), MockCand.(1:5)) == MockCand.(1:5)
-        @test evolve!(EvolutionChain(doublefitness, doublefitness, doublefitness), MockCand.(1:10)) == MockCand.(8:8:80)
+        @test evolve!(EvolutionChain(dfitness, dfitness, sqrfitness), MockCand.(1:10)) == MockCand.((4:4:40).^2)
     end
 
     @testset "PairCandidates" begin
@@ -69,6 +70,9 @@
         pop = MockCand.(1:9)
         @test evolve!(PairCandidates(PairConsumer()), pop) == pop
         @test nseen == 5
+        pop = MockCand.(1:4)
+        @test evolve!(PairCandidates(PairConsumer()), pop) == pop
+        @test nseen == 2
     end
 
     @testset "EvolveCandidates" begin

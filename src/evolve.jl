@@ -154,7 +154,7 @@ struct EvolutionChain{E<:AbstractArray} <: AbstractEvolution
     evos::E
 end
 EvolutionChain(evos...) = EvolutionChain(collect(evos))
-_evolve!(e::EvolutionChain, pop) = foldr(evolve!, e.evos; init=pop)
+_evolve!(e::EvolutionChain, pop) = foldr(evolve!, reverse(e.evos); init=pop)
 
 """
     PairCandidates <: AbstractEvolution
@@ -169,7 +169,7 @@ function _evolve!(e::PairCandidates, pop)
     padpop = iseven(length(pop)) ? pop : vcat(pop, pop[1])
     pairs = collect(zip(padpop[1:2:end], padpop[2:2:end]))
     return foldl(evolve!(e.evo, pairs), init=[]) do popout, (c1,c2)::Tuple
-        length(popout) < length(pop) - 2 ? vcat(popout, c1, c2) : vcat(popout, c1)
+        length(popout) < length(pop) - 1 ? vcat(popout, c1, c2) : vcat(popout, c1)
     end
 end
 

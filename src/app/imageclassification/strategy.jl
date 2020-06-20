@@ -210,8 +210,8 @@ end
 
 """
     struct EliteAndSusSelection <: AbstractEvolutionStrategy
-    EliteAndSusSelection(popsize, nelites)
-    EliteAndSusSelection(;popsize=50, nelites=2)
+    EliteAndSusSelection(popsize, nelites, evolve)
+    EliteAndSusSelection(;popsize=50, nelites=2, evolve = crossovermutate())
 
 Standard evolution strategy.
 
@@ -223,17 +223,17 @@ Mutation operations are both applied to the model itself (change sizes, add/remo
 
 Finally, models are renamed so that the name of each vertex of the model of candidate `i` is prefixed with "model`i`".
 """
-struct EliteAndSusSelection <: AbstractEvolutionStrategy
+struct EliteAndSusSelection{F} <: AbstractEvolutionStrategy
     popsize::Int
     nelites::Int
+    evolve::F
 end
-EliteAndSusSelection(;popsize=50, nelites=2) = EliteAndSusSelection(popsize, nelites)
+EliteAndSusSelection(;popsize=50, nelites=2, evolve=crossovermutate()) = EliteAndSusSelection(popsize, nelites, evolve)
 
 function evostrategy_internal(s::EliteAndSusSelection, inshape)
     elite = EliteSelection(s.nelites)
 
-    mutate = EvolveCandidates(evolvecandidate(inshape))
-    evolve = SusSelection(s.popsize - s.nelites, mutate)
+    evolve = SusSelection(s.popsize - s.nelites, s.evolve(inshape))
 
     combine = CombinedEvolution(elite, evolve)
     return AfterEvolution(combine, rename_models ∘ clear_redundant_vertices)
@@ -241,8 +241,8 @@ end
 
 """
     struct EliteAndTournamentSelection <: AbstractEvolutionStrategy
-    EliteAndTournamentSelection(popsize, nelites, k, p)
-    EliteAndTournamentSelection(;popsize=50, nelites=2; k=2, p=1.0)
+    EliteAndTournamentSelection(popsize, nelites, k, p, evolve)
+    EliteAndTournamentSelection(;popsize=50, nelites=2; k=2, p=1.0, evolve = crossovermutate())
 
 Standard evolution strategy.
 
@@ -250,29 +250,51 @@ Selects `nelites` candidates to move on to the next generation without any mutat
 
 Also selects `popsize - nelites` candidates out of the whole population using [`TournamentSelection`](@ref) to evolve by applying random mutation.
 
-Mutation operations are both applied to the model itself (change sizes, add/remove vertices/edges) as well as to the optimizer (change learning rate and optimizer algorithm).
+Mutation operations are determined by `evolve` both applied to the model itself (change sizes, add/remove vertices/edges) as well as to the optimizer (change learning rate and optimizer algorithm).
 
 Finally, models are renamed so that the name of each vertex of the model of candidate `i` is prefixed with "model`i`".
 """
-struct EliteAndTournamentSelection <: AbstractEvolutionStrategy
+struct EliteAndTournamentSelection{R,F} <: AbstractEvolutionStrategy
     popsize::Int
     nelites::Int
     k::Int
-    p::Real
+    p::R
+    evolve::F
 end
-EliteAndTournamentSelection(;popsize=50, nelites=2, k=2, p=1.0) = EliteAndTournamentSelection(popsize, nelites, k, p)
+EliteAndTournamentSelection(;popsize=50, nelites=2, k=2, p=1.0, evolve = crossovermutate()) = EliteAndTournamentSelection(popsize, nelites, k, p, evolve)
 
 function evostrategy_internal(s::EliteAndTournamentSelection, inshape)
     elite = EliteSelection(s.nelites)
 
-    mutate = EvolveCandidates(evolvecandidate(inshape))
-    evolve = TournamentSelection(s.popsize - s.nelites, s.k, s.p, mutate)
+    evolve = TournamentSelection(s.popsize - s.nelites, s.k, s.p, s.evolve(inshape))
 
     combine = CombinedEvolution(elite, evolve)
     return AfterEvolution(combine, rename_models ∘ clear_redundant_vertices)
 end
 
-evolvecandidate(inshape) = evolvemodel(graphmutation(inshape), optmutation())
+"""
+    crossovermutate(;pcrossover=0.5, pmutate=0.5)
+
+Return a function which creates an [`EvolutionChain`](@ref) when called with an inputshape.
+
+Crossover will be applied with a probability of `pcrossover` while mutation will be applied with a probability of `pmutate`.
+
+Crossover is done using [`CrossoverSwap`](@ref) whic is only applies to the models.
+
+Mutation is applied both to the model itself (change sizes, add/remove vertices/edges) as well as to the optimizer (change learning rate and optimizer algorithm).
+"""
+crossovermutate(;pcrossover=0.5, pmutate=0.5) = function(inshape)
+    cross = candidatecrossover(pcrossover)
+    crossoverevo = PairCandidates(EvolveCandidates(cross))
+
+    mutate = candidatemutation(pmutate, inshape)
+    mutationevo = EvolveCandidates(mutate)
+
+    return EvolutionChain(crossoverevo, mutationevo)
+end
+
+candidatemutation(p, inshape) = evolvemodel(MutationProbability(graphmutation(inshape), p), optmutation())
+candidatecrossover(p) = evolvemodel(MutationProbability(graphcrossover(), p))
 
 function clear_redundant_vertices(pop)
     foreach(cand -> NaiveGAflux.graph(cand, check_apply), pop)
@@ -299,6 +321,11 @@ function optmutation(p=0.05)
     return MutationList(lrm, om)
 end
 
+function graphcrossover()
+    vertexswap = LogMutation(((v1,v2)::Tuple) -> "\tCrossover swap between $(name(v1)) and $(name(v2))", CrossoverSwap(0.05))
+    crossoverop = VertexCrossover(MutationProbability(vertexswap, 0.2), 0.05)
+    return LogMutation(((g1,g2)::Tuple) -> "Crossover between $(modelname(g1)) and $(modelname(g2))", crossoverop)
+end
 
 function graphmutation(inshape)
     acts = [identity, relu, elu, selu]
