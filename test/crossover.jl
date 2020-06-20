@@ -665,5 +665,64 @@
                 @test size(gb_new(ones(Float32, 4,4,3,2))) == (10,2)
             end
         end
+
+        @testset "Crossover conv size mismatch" begin
+            pv(in, name) = mutable(name, MaxPool((2,2); stride=(2,2)), in)
+            function g(np)
+                vi = iv(np)
+                cv1 = cv(vi, 4, "$np.cv1")
+                pv1 = pv(cv1, "$np.pv1")
+                cv2 = cv(pv1, 2, "$np.cv2")
+
+                cva1 = cv(cv2, 3, "$np.cva1")
+                cva2 = cv(cva1, 2, "$np.cva2")
+
+                cvb1 = cv(cv2, 4, "$np.cvb1")
+                cvb2 = cv(cvb1, 2, "$np.cvb2")
+
+                mv = "$np.mv" >> cva2 + cvb2
+                cv3 = cv(mv, 3, "$np.cv3")
+                pv2 = pv(cv3, "$np.pv2")
+                cv4 = cv(pv2, 4, "$np.cv4")
+
+                return CompGraph(vi, cv4)
+            end
+
+            @testset "Swap branch for graph" begin
+
+                ga = g("a")
+                gb = g("b")
+
+                # Anonymous type to avoid name collisions with other tests (e.g. structs named DummyRng, DummyRng1, etc..)
+                pairgen_outer(vs1, vs2; ind1=1) = ind1 == 1 ? (5, 9) : nothing
+
+                selectlast = nr -> nr : -1 : 1
+                Random.randn(rng::typeof(selectlast), nr) = selectlast(nr)
+                function pairgen_inner(vs1, vs2)
+                    # Test that the testcase is working :)
+                    @test name.(vs1) == ["a.cva2", "a.cva1"]
+                    @test name(first(vs2)) == "b.cv3"
+                    @test name(last(vs2)) == "b.cv1"
+
+                    cfun = (vin1, vin2) -> NaiveGAflux.sameactdims(vin1,vin2) && sameoutshape(vin1, first(vs1), vin2, first(vs2))
+
+                    default_pairgen(vs1, vs2, 10; ind1=2, rng=selectlast, compatiblefun=cfun)
+                end
+
+                function sameoutshape(vin1, vout1, vin2, vout2)
+                    tr1 = squashshapes(shapetrace(vout1, vin1))
+                    tr2 = squashshapes(shapetrace(vout2, vin2))
+                    return isempty(Δshapediff(tr1,tr2))
+                end
+
+                c = VertexCrossover(CrossoverSwap(;pairgen=pairgen_inner); pairgen=pairgen_outer)
+
+                ga_new, gb_new = c((ga,gb))
+
+                @test size(ga(ones(Float32, 10,10,3,1))) == size(ga_new(ones(Float32, 10,10,3,1)))
+                @test size(gb(ones(Float32, 10,10,3,1))) == (2,2,4,1)
+
+            end
+        end
     end
 end
