@@ -310,8 +310,8 @@ end
 # TODO: All dummyvertices can be invariantvertex?
 dummyvertex(v) = dummyvertex(v, trait(v))
 dummyvertex(v, t::DecoratingTrait) = dummyvertex(v, base(t))
-dummyvertex(v, t) = invariantvertex(identity, v; traitdecoration = t -> NamedTrait(t, "$(name(v)).dummy"))
-dummyvertex(v, t::SizeAbsorb) = conc(v; dims=1, traitdecoration = t -> NamedTrait(t, "$(name(v)).dummy"))
+dummyvertex(v, t) = invariantvertex(ActivationContribution(identity), v; traitdecoration = named("$(name(v)).dummy"))
+dummyvertex(v, t::SizeAbsorb) = conc(v; dims=1, traitdecoration = named("$(name(v)).dummy"), outwrap = ActivationContribution)
 
 function addinedges!(v, ins, strat = default_crossoverswap_strategy)
     dummies = copy(inputs(v))
