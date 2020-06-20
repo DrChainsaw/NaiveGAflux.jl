@@ -134,13 +134,27 @@ end
     CombinedEvolution(evos::AbstractArray)
     CombinedEvolution(evos...)
 
-Combines the evolved populations from several evolutions into one population.
+Combines the evolved populations from several `AbstractEvolution`s into one population.
 """
 struct CombinedEvolution{E<:AbstractArray} <: AbstractEvolution
     evos::E
 end
 CombinedEvolution(evos...) = CombinedEvolution(collect(evos))
 _evolve!(e::CombinedEvolution, pop) = mapfoldl(evo -> evolve!(evo, pop), vcat, e.evos)
+
+"""
+    EvolutionChain <: AbstractEvolution
+    EvolutionChain(evos::AbstractArray)
+    EvolutionChain(evos...)
+
+
+Chains multiple `AbstractEvolution`s in a sequence so that output from the first is input to the next and so on.
+"""
+struct EvolutionChain{E<:AbstractArray} <: AbstractEvolution
+    evos::E
+end
+EvolutionChain(evos...) = EvolutionChain(collect(evos))
+_evolve!(e::EvolutionChain, pop) = foldr(evolve!, e.evos; init=pop)
 
 """
     PairCandidates <: AbstractEvolution

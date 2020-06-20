@@ -50,6 +50,12 @@
         @test evolve!(CombinedEvolution(NoOpEvolution(), NoOpEvolution()), pop) == vcat(pop,pop)
     end
 
+    @testset "EvolutionChain" begin
+        doublefitness = EvolveCandidates(mc -> MockCand(2 * fitness(mc)))
+        @test evolve!(EvolutionChain(), MockCand.(1:5)) == MockCand.(1:5)
+        @test evolve!(EvolutionChain(doublefitness, doublefitness, doublefitness), MockCand.(1:10)) == MockCand.(8:8:80)
+    end
+
     @testset "PairCandidates" begin
         struct PairConsumer <: AbstractEvolution end
         nseen = 0

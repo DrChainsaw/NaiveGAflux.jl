@@ -24,7 +24,7 @@ export fitness, instrument, reset!, AbstractFitness, AccuracyFitness, TrainAccur
 export evolvemodel, AbstractCandidate, CandidateModel, HostCandidate, CacheCandidate
 
 # Evolution
-export evolve!, AbstractEvolution, NoOpEvolution, AfterEvolution, ResetAfterEvolution, EliteSelection, SusSelection, TournamentSelection, CombinedEvolution, PairCandidates, EvolveCandidates
+export evolve!, AbstractEvolution, NoOpEvolution, AfterEvolution, ResetAfterEvolution, EliteSelection, SusSelection, TournamentSelection, CombinedEvolution, EvolutionChain, PairCandidates, EvolveCandidates
 
 # Population
 export Population, generation
