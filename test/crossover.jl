@@ -685,8 +685,9 @@
                 cv3 = cv(mv, 3, "$np.cv3")
                 pv2 = pv(cv3, "$np.pv2")
                 cv4 = cv(pv2, 4, "$np.cv4")
+                cv5 = cv(cv4, 3, "$np.cv5")
 
-                return CompGraph(vi, cv4)
+                return CompGraph(vi, cv5)
             end
 
             @testset "Swap branch for graph" begin
@@ -694,25 +695,57 @@
                 ga = g("a")
                 gb = g("b")
 
-                # Anonymous type to avoid name collisions with other tests (e.g. structs named DummyRng, DummyRng1, etc..)
+
                 pairgen_outer(vs1, vs2; ind1=1) = ind1 == 1 ? (5, 9) : nothing
 
-                selectlast = nr -> nr : -1 : 1
-                Random.randn(rng::typeof(selectlast), nr) = selectlast(nr)
+                # Anonymous type to avoid name collisions with other tests (e.g. structs named DummyRng, DummyRng1, etc..)
+                selectfirst = nr -> 1:nr
+                Random.randn(rng::typeof(selectfirst), nr) = selectfirst(nr)
                 function pairgen_inner(vs1, vs2)
                     # Test that the testcase is working :)
                     @test name.(vs1) == ["a.cva1", "a.cva2"]
                     @test name(first(vs2)) == "b.cv1"
                     @test name(last(vs2)) == "b.cv3"
-                    return NaiveGAflux.default_inputs_pairgen(vs1, vs2, 10; ind1=2, rng=selectlast)
+                    return NaiveGAflux.default_inputs_pairgen(vs1, vs2, 10; ind1=2, rng=selectfirst)
                 end
 
                 c = VertexCrossover(CrossoverSwap(;pairgen=pairgen_inner); pairgen=pairgen_outer)
 
                 ga_new, gb_new = c((ga,gb))
 
+                @test name.(vertices(ga_new)) == ["a.in", "a.cv1", "a.pv1", "a.cv2", "a.cva1", "b.cv2", "b.cva1", "b.cva2", "b.cvb1", "b.cvb2", "b.mv", "b.cv3", "a.cvb1", "a.cvb2", "a.mv", "a.cv3", "a.pv2", "a.cv4", "a.cv5"]
+                @test name.(vertices(gb_new)) ==  ["b.in", "b.cv1", "b.pv1", "a.cva2", "b.pv2", "b.cv4", "b.cv5"]
+
                 @test size(ga(ones(Float32, 10,10,3,1))) == size(ga_new(ones(Float32, 10,10,3,1)))
-                @test size(gb(ones(Float32, 10,10,3,1))) == (2,2,4,1)
+                @test size(gb(ones(Float32, 10,10,3,1))) == size(gb_new(ones(Float32, 10,10,3,1)))
+            end
+
+            @testset "Swap branch with single vertex" begin
+
+                ga = g("a")
+                gb = g("b")
+
+                pairgen_outer(vs1, vs2; ind1=1) = ind1 == 1 ? (5, 11) : nothing
+
+                # Anonymous type to avoid name collisions with other tests (e.g. structs named DummyRng, DummyRng1, etc..)
+                selectfirst = nr -> 1:nr
+                Random.randn(rng::typeof(selectfirst), nr) = selectfirst(nr)
+                function pairgen_inner(vs1, vs2)
+                    # Test that the testcase is working :)
+                    @test name.(vs1) == ["a.cva1", "a.cva2"]
+                    @test name(first(vs2)) == "b.cv1"
+                    @test name(last(vs2)) == "b.cv4"
+                    return NaiveGAflux.default_inputs_pairgen(vs1, vs2, 10; ind1=2, rng=selectfirst)
+                end
+                c = VertexCrossover(CrossoverSwap(;pairgen=pairgen_inner); pairgen=pairgen_outer)
+
+                ga_new, gb_new = c((ga,gb))
+
+                @test name.(vertices(ga_new)) == ["a.in", "a.cv1", "a.pv1", "a.cv2", "a.cva1", "b.cv4", "a.cvb1", "a.cvb2", "a.mv", "a.cv3", "a.pv2", "a.cv4", "a.cv5"]
+                @test name.(vertices(gb_new)) == ["b.in", "b.cv1", "b.pv1", "b.cv2", "b.cva1", "b.cva2", "b.cvb1", "b.cvb2", "b.mv", "b.cv3", "b.pv2", "a.cva2", "b.cv5"]
+
+                @test size(ga(ones(Float32, 10,10,3,1))) == size(ga_new(ones(Float32, 10,10,3,1)))
+                @test size(gb(ones(Float32, 10,10,3,1))) == size(gb_new(ones(Float32, 10,10,3,1)))
             end
         end
     end
