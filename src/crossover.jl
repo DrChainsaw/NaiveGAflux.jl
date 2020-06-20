@@ -5,11 +5,11 @@
 
 Applies `crossover` to each pair of selected vertices from two `CompGraph`s.
 
-Vertices to select from the first graph is determined by `selection` (default [`FilterMutationAllowed`](@Ref) while `pairgen` (default [`default_pairgen`](@Ref)) determines how to pair the selected vertices with vertices in the second graph.
+Vertices to select from the first graph is determined by `selection` (default [`FilterMutationAllowed`](@ref) while `pairgen` (default [`default_pairgen`](@ref)) determines how to pair the selected vertices with vertices in the second graph.
 
 The default pairing function will try to pair vertices which have similar relative topologial order within their graphs. For instance, if the first graph has 5 vertices and the second has 10, it will pair vertex 2 from the first graph with vertex 4 from the second (assuming they are of compatible type). The parameter `deviation` can be used to inject noise in this process so that the pairing will randomly deviate where the magnitude of `deviation` sets how much and how often.
 
-See also [`crossover`](@Ref).
+See also [`crossover`](@ref).
 """
 struct VertexCrossover{S, PF, CF} <: AbstractCrossover{CompGraph}
     selection::S
@@ -17,38 +17,39 @@ struct VertexCrossover{S, PF, CF} <: AbstractCrossover{CompGraph}
     crossover::CF
 end
 VertexCrossover(crossover ;selection=FilterMutationAllowed(), pairgen=default_pairgen) = VertexCrossover(selection, pairgen, crossover)
-VertexCrossover(crossover, deviation::Number; selection=FilterMutationAllowed()) = VertexCrossover(selection, (vs1,vs2) -> default_pairgen(vs1, vs2, deviation), crossover)
+VertexCrossover(crossover, deviation::Number; selection=FilterMutationAllowed()) = VertexCrossover(selection, (vs1,vs2;ind1=1) -> default_pairgen(vs1, vs2, deviation;ind1=ind1), crossover)
 
 (c::VertexCrossover)((g1,g2)::Tuple) = crossover(g1, g2; selection=c.selection, pairgen=c.pairgen, crossoverfun=c.crossover)
 
 
 """
-    CrossoverSwap{F, S} <: AbstractCrossover{<:AbstractVertex}
-    CrossoverSwap(pairgen, mergefun, selection)
-    CrossoverSwap(;pairgen=default_pairgen, mergefun=default_mergefun, selection=FilterMutationAllowed())
-    CrossoverSwap(deviation::Number; mergefun=default_mergefun, selection=FilterMutationAllowed())
+    CrossoverSwap{F1, F2, F3, S} <: AbstractCrossover{<:AbstractVertex}
+    CrossoverSwap(pairgen, mergefun, strategy, selection)
+    CrossoverSwap(;pairgen=default_inputs_pairgen, mergefun=default_mergefun, strategy=default_crossoverswap_strategy, selection=FilterMutationAllowed()) = CrossoverSwap(pairgen, mergefun, selection)
+    CrossoverSwap(deviation::Number; mergefun=default_mergefun, strategy=default_crossoverswap_strategy, selection=FilterMutationAllowed()) = CrossoverSwap((vs1,vs2) -> default_inputs_pairgen(vs1, vs2, deviation), mergefun, strategy, selection)
 
 Swap out a part of one graph with a part of another graph, making sure that the graphs do not become connected in the process.
 
 More concretely, swaps a set of consecutive vertices `vs1` set of consecutive vertices `vs2` returning the swapped `v1` and `v2` respectively if successful or `v1` and `v2` if not.
 
-The last vertex in `vs1` is `v1` and the last output of `vs2` is `v2`. The other members of `vs1` and `vs2` are determined by `pairgen` (default [`default_pairgen`](@Ref)) and `selection` (default [`FilterMutationAllowed`](@Ref)).
+The last vertex in `vs1` is `v1` and the last output of `vs2` is `v2`. The other members of `vs1` and `vs2` are determined by `pairgen` (default [`default_pairgen`](@ref)) and `selection` (default [`FilterMutationAllowed`](@ref)).
 
 If a vertex `v` is not capable of having multiple inputs (determined by `singleinput(v) == true`), `vm = mergefun(vi)` where `vi` is the input to `v` will be used instead of `v` and `v` will be added as the output of `vm` if necessary.
 
-See also [`crossoverswap`](@Ref)
+See also [`crossoverswap`](@ref)
 
 Note: High likelyhood of large accuracy degradation after applying this mutation.
 """
-struct CrossoverSwap{F1, F2, S} <: AbstractCrossover{AbstractVertex}
+struct CrossoverSwap{F1, F2, F3, S} <: AbstractCrossover{AbstractVertex}
     pairgen::F1
     mergefun::F2
+    strategy::F3
     selection::S
 end
-CrossoverSwap(;pairgen=default_inputs_pairgen, mergefun=default_mergefun, selection=FilterMutationAllowed()) = CrossoverSwap(pairgen, mergefun, selection)
-CrossoverSwap(deviation::Number; mergefun=default_mergefun, selection=FilterMutationAllowed()) = CrossoverSwap((v1,v2,vs1,vs2) -> default_inputs_pairgen(v1, v2, vs1, vs2, deviation), mergefun, selection)
+CrossoverSwap(;pairgen=default_inputs_pairgen, mergefun=default_mergefun, strategy=default_crossoverswap_strategy, selection=FilterMutationAllowed()) = CrossoverSwap(pairgen, mergefun, strategy, selection)
+CrossoverSwap(deviation::Number; mergefun=default_mergefun, strategy=default_crossoverswap_strategy, selection=FilterMutationAllowed()) = CrossoverSwap((vs1,vs2) -> default_inputs_pairgen(vs1, vs2, deviation), mergefun, strategy, selection)
 
-(c::CrossoverSwap)((v1,v2)::Tuple) = crossoverswap(v1, v2; pairgen = c.pairgen, mergefun=c.mergefun, selection=c.selection)
+(c::CrossoverSwap)((v1,v2)::Tuple) = crossoverswap(v1, v2; pairgen = c.pairgen, mergefun=c.mergefun, selection=c.selection, strategy=c.strategy)
 
 
 """
@@ -131,7 +132,7 @@ end
 """
     default_inputs_pairgen(vs1, vs2, args...;kwargs...)
 
-Same as [´default_pairgen`](@Ref) except it also ensures that shape changes of feature maps are consistent between the pairs.
+Same as [´default_pairgen`](@ref) except it also ensures that shape changes of feature maps are consistent between the pairs.
 
 Feature map here refers to the shape of inputs to convolutional-type layers (Conv, Pooling) in dimensions other than the batch dimension or the channel dimension.
 
@@ -166,16 +167,18 @@ end
 relative_positions(arr) = collect(eachindex(arr) / length(arr))
 
 """
-    crossoverswap((v1,v2)::Tuple; pairgen=default_pairgen, selection=FilterMutationAllowed())
+    crossoverswap((v1,v2)::Tuple; pairgen=default_inputs_pairgen, selection=FilterMutationAllowed(), kwargs...)
 
-Perform [`crossoverswap!`](@Ref) with `v1` and `v2` as output crossover points.
+Perform [`crossoverswap!`](@ref) with `v1` and `v2` as output crossover points.
 
 Inputs are selected from the feasible set (as determined by `separablefrom` and `selection`) through the supplied `pairgen` function.
 
 Inputs `v1` and `v2` along with their entire graph are copied before operation is performed and originals are returned if operation is not successful.
+
+Additional keyword arguments will be passed on to [`crossoverswap!`](@ref).
 """
 crossoverswap((v1, v2)::Tuple; kwargs...) = crossoverswap(v1, v2; kwargs...)
-function crossoverswap(v1, v2; pairgen=default_inputs_pairgen, mergefun=default_mergefun, selection=FilterMutationAllowed())
+function crossoverswap(v1, v2; pairgen=default_inputs_pairgen, selection=FilterMutationAllowed(), kwargs...)
     # This is highly annoying: crossoverswap! does multiple remove/create_edge! and is therefore very hard to revert should something go wrong with one of the steps.
     # To mitigate this a backup copy is used. It is however not easy to backup a single vertex as it is connected to all other vertices in the graph, meaning that the whole graph must be copied. Sigh...
     function copyvertex(v)
@@ -200,7 +203,7 @@ function crossoverswap(v1, v2; pairgen=default_inputs_pairgen, mergefun=default_
 
     ind1, ind2 = inds
 
-    success1, success2 = crossoverswap!(vs1[ind1], vs1[end], vs2[ind2], vs2[end]; mergefun=mergefun)
+    success1, success2 = crossoverswap!(vs1[ind1], vs1[end], vs2[ind2], vs2[end]; kwargs...)
 
     # Note: Success 1 and 2 are mapped to v2 and v1 respectively as success1 means we successfully inserted v1c into the graph which held v2c and vice versa
     v1ret = success2 ? v1c : v1
@@ -272,8 +275,7 @@ struct FailAlignSizeNoOp <: AbstractAlignSizeStrategy end
 NaiveNASlib.postalignsizes(s::FailAlignSizeNoOp, vin, vout, pos) = false
 NaiveNASlib.prealignsizes(s::FailAlignSizeNoOp, vin, vout, will_rm) = false
 
-# TODO: Change valuefun!!
-function default_crossoverswap_strategy(valuefun = v -> ones(nout_org(v)))
+function default_crossoverswap_strategy(valuefun = default_neuronselect)
     alignstrat = PostAlignJuMP(DefaultJuMPΔSizeStrategy(), fallback=FailAlignSizeWarn(msgfun = (vin,vout) -> "Failed to align sizes when adding edge between $(name(vin)) and $(name(vout)) for crossover. Reverting..."))
 
     selectstrat = OutSelect{Exact}(OutSelect{Relaxed}(LogSelectionFallback("Reverting...", NoutRevert())))

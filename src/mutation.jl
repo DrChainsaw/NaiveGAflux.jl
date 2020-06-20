@@ -571,11 +571,11 @@ function select_neurons(strategy::NeuronSelectOut, vs::AbstractArray{<:AbstractV
     Δoutputs(strategy.s, vall, rankfun)
 end
 
-default_neuronselect(v) = neuron_value(trait(v), v)
+default_neuronselect(v) = neuron_value_safe(trait(v), v)
 
-NaiveNASflux.neuron_value(t::DecoratingTrait, v) = neuron_value(base(t), v)
-NaiveNASflux.neuron_value(::Immutable, v) = ones(nout(v))
-NaiveNASflux.neuron_value(::MutationSizeTrait, v) = clean_values(cpu(neuron_value(v)),v)
+neuron_value_safe(t::DecoratingTrait, v) = neuron_value_safe(base(t), v)
+neuron_value_safe(::Immutable, v) = ones(nout(v))
+neuron_value_safe(::MutationSizeTrait, v) = clean_values(cpu(neuron_value(v)),v)
 clean_values(::Missing, v) = ones(nout_org(v))
 # NaN should perhaps be < 0, but since SelectDirection is used, this might lead to inconsistent results as a subset of neurons for a vertex v whose output vertices are not part of the selection (typically because only v's inputs are touched) are selected. As the output vertices are not changed this will lead to a size inconsistency. Cleanest fix might be to separate "touch output" from "touch input" when formulating the output selection problem.
 clean_values(a::AbstractArray{T}, v, repval=eps(T)) where T <: AbstractFloat = replace(a, NaN => repval, 0.0 => repval, Inf => repval, -Inf => repval)

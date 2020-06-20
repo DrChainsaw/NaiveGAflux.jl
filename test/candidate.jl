@@ -67,7 +67,8 @@
             Flux.train!(cand, data(cand))
             Flux.train!(newcand, data(newcand))
 
-            graphcrossover = VertexCrossover(CrossoverSwap(;pairgen = (v1,v2) -> (1,1)); pairgen = (v1,v2;ind1) -> ind1==1 ? (1,1) : nothing)
+            teststrat() = NaiveGAflux.default_crossoverswap_strategy(v -> ones(nout_org(v)))
+            graphcrossover = VertexCrossover(CrossoverSwap(;pairgen = (v1,v2) -> (1,1), strategy=teststrat); pairgen = (v1,v2;ind1) -> ind1==1 ? (1,1) : nothing)
             crossfun = evolvemodel(graphcrossover)
 
             newcand1, newcand2 = crossfun((cand, cand))
