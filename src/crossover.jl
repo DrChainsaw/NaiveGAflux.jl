@@ -342,7 +342,8 @@ function stripoutedges!(v)
 end
 
 function addoutedges!(v, dummy, strat = default_crossoverswap_strategy)
-    #TODO: Try to avoid large negative size changes here, e.g. by doing a Δnout/Δnin before creating the edge?
+    # Perhaps try to avoid large negative size changes here, e.g. by doing a Δnout/Δnin before creating the edge?
+    # Should perhaps be baked into strat, but then one probably can't use the same strat for addinedges!
     success = create_edge!(v, dummy, strategy = strat())
     return success && remove!(dummy, RemoveStrategy(NoSizeChange()))
 end
