@@ -45,7 +45,7 @@
     addlayer = mp(AddVertexMutation(layerspace), 0.4)
     remlayer = mp(RemoveVertexMutation(), 0.4)
 
-    mutation = MutationList(remlayer, addlayer)
+    mutation = MutationChain(remlayer, addlayer)
 
     # Selection
     elites = EliteSelection(2)
@@ -243,7 +243,7 @@ end
 
     # Chaining mutations is also useful:
     noutmut = NeuronSelectMutation(NoutMutation(-0.8, 0.8))
-    mutation = VertexMutation(MutationList(addmut, noutmut))
+    mutation = VertexMutation(MutationChain(addmut, noutmut))
     # For deeply composed blobs like this, it can be cumbersome to "dig up" the NeuronSelectMutation.
     # neuronselect helps finding NeuronSelectMutations in the compositional hierarchy
 

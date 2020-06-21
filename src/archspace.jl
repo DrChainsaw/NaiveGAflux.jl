@@ -421,7 +421,7 @@ repeatinitW(wi::PartialIdentityWeightInit, invertex, ::Missing) = wi
 
 Chains multiple `AbstractArchSpace`s after each other.
 
-Input vertex will be used to generate an output vertex from the first `AbstractArchSpace` in the chain which is then used to generate a next output vertex from the next `AbstractArchSpace` in the chain and so on.
+Input vertex will be used to generate an output vertex from the first `AbstractArchSpace` in the chain which is then used to generate a next output vertex from the next `AbstractArchSpace` in the chain and so on. The output from the last `AbstractArchSpace` is returned.
 """
 struct ArchSpaceChain{S<:AbstractVector{<:AbstractArchSpace}} <:AbstractArchSpace
     s::S

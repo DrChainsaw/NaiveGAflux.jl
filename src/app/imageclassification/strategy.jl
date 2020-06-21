@@ -318,7 +318,7 @@ end
 function optmutation(p=0.05)
     lrm = LearningRateMutation()
     om = MutationProbability(OptimizerMutation([Descent, Momentum, Nesterov, ADAM, NADAM, ADAGrad]), p)
-    return MutationList(lrm, om)
+    return MutationChain(lrm, om)
 end
 
 function graphcrossover()
@@ -362,9 +362,9 @@ function graphmutation(inshape)
     mremv = MutationFilter(g -> nv(g) > 5, mremv)
 
     # Create two possible mutations: One which is guaranteed to not increase the size:
-    dsize = MutationList(mremv, PostMutation(dnout, neuronselect), dkern, mreme, maddm)
+    dsize = MutationChain(mremv, PostMutation(dnout, neuronselect), dkern, mreme, maddm)
     # ...and another which can (and typically does) increase the size:
-    isize = MutationList(PostMutation(inout, neuronselect), ikern, madde, maddm, maddv)
+    isize = MutationChain(PostMutation(inout, neuronselect), ikern, madde, maddm, maddv)
     # Add mutation last as new vertices with neuron_value == 0 screws up outputs selection as per https://github.com/DrChainsaw/NaiveNASlib.jl/issues/39
 
     mgp = VertexMutation(MutationProbability(LogMutation(v -> "\tMutate global pool type for $(name(v))", MutateGlobalPool()), 0.1), SelectGlobalPool())
@@ -382,7 +382,7 @@ function graphmutation(inshape)
         decr = isbig(g) || rand() > 0.5 # Perhaps this can be determined somehow...
         return decr
     end
-    mall = MutationList(MutationFilter(decrease_size, dsize), MutationFilter(!decrease_size, isize), mactf, mgp)
+    mall = MutationChain(MutationFilter(decrease_size, dsize), MutationFilter(!decrease_size, isize), mactf, mgp)
 
     return LogMutation(g -> "Mutate model $(modelname(g))", mall)
 end
@@ -430,7 +430,7 @@ function add_vertex_mutation(acts)
     add_conv = wrapitup(convspace(default_layerconf(),2 .^(4:9), 1:2:5, acts,loglevel=Logging.Info))
     add_dense = wrapitup(LoggingArchSpace(Logging.Info, VertexSpace(default_layerconf(), NamedLayerSpace("dense", DenseSpace(2 .^(4:9), acts)))))
 
-    return MutationList(MutationFilter(is_convtype, add_conv), MutationFilter(!is_convtype, add_dense))
+    return MutationChain(MutationFilter(is_convtype, add_conv), MutationFilter(!is_convtype, add_dense))
 end
 
 is_convtype(v::AbstractVertex) = any(is_globpool.(outputs(v))) || any(is_convtype.(outputs(v)))

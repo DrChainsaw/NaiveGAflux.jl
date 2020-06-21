@@ -81,9 +81,9 @@
         end
     end
 
-    @testset "MutationList" begin
+    @testset "MutationChain" begin
         probes = ProbeMutation.(repeat([Int], 3))
-        m = MutationList(probes...)
+        m = MutationChain(probes...)
         @test m(1) == 1
         @test getfield.(probes, :mutated) == [[1],[1],[1]]
     end
@@ -288,7 +288,7 @@
         @testset "neuronselect" begin
             m1 = MutationProbability(NeuronSelectMutation(oddfirst, noutselect, NoutMutation(0.5, MockRng([1]))), Probability(0.2, MockRng([0.1, 0.3])))
             m2 = MutationProbability(NeuronSelectMutation(oddfirst, noutselect, NoutMutation(-0.5, MockRng([0]))), Probability(0.2, MockRng([0.3, 0.1])))
-            m = VertexMutation(MutationList(m1, m2))
+            m = VertexMutation(MutationChain(m1, m2))
 
             inpt = inputvertex("in", 2, FluxDense())
             v3 = dense(inpt, 3,5,7)

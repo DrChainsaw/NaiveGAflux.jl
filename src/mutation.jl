@@ -87,16 +87,18 @@ end
 
 
 """
-    MutationList{T} <: AbstractMutation{T}
-    MutationList(m::AbstractMutation{T}...)
+    MutationChain{T} <: AbstractMutation{T}
+    MutationChain(m::AbstractMutation{T}...)
 
-Applies all wrapped `AbstractMutation{T}`s to each entity of type `T`.
+Chains multiple `AbstractMutation{T}`s after each other.
+
+Input entities will be mutated by the first `AbstractMutation{T}` in the chain and the output will be fed into the next `AbstractMutation{T}` in the chain and so on. The output from the last `AbstractMutation{T}` is returned.
 """
-struct MutationList{T} <: AbstractMutation{T}
+struct MutationChain{T} <: AbstractMutation{T}
     m::AbstractVector{<:AbstractMutation{T}}
 end
-MutationList(m::AbstractMutation{T}...) where T = MutationList(collect(m))
-(m::MutationList)(e) = foldl((ei, mi) -> mi(ei), m.m; init=e)
+MutationChain(m::AbstractMutation{T}...) where T = MutationChain(collect(m))
+(m::MutationChain)(e) = foldl((ei, mi) -> mi(ei), m.m; init=e)
 
 """
     RecordMutation{T} <:AbstractMutation{T}
