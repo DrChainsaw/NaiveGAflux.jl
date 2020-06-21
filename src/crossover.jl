@@ -32,11 +32,11 @@ Swap out a part of one graph with a part of another graph, making sure that the 
 
 More concretely, swaps a set of consecutive vertices `vs1` set of consecutive vertices `vs2` returning the swapped `v1` and `v2` respectively if successful or `v1` and `v2` if not.
 
-The last vertex in `vs1` is `v1` and the last output of `vs2` is `v2`. The other members of `vs1` and `vs2` are determined by `pairgen` (default [`default_pairgen`](@ref)) and `selection` (default [`FilterMutationAllowed`](@ref)).
+The last vertex in `vs1` is `v1` and the last vertex of `vs2` is `v2`. The other members of `vs1` and `vs2` are determined by `pairgen` (default [`default_inputs_pairgen`](@ref)) and `selection` (default [`FilterMutationAllowed`](@ref)).
 
 If a vertex `v` is not capable of having multiple inputs (determined by `singleinput(v) == true`), `vm = mergefun(vi)` where `vi` is the input to `v` will be used instead of `v` and `v` will be added as the output of `vm` if necessary.
 
-See also [`crossoverswap`](@ref)
+See also [`crossoverswap`](@ref).
 
 Note: High likelyhood of large accuracy degradation after applying this mutation.
 """
@@ -183,9 +183,7 @@ function crossoverswap(v1, v2; pairgen=default_inputs_pairgen, selection=FilterM
     # To mitigate this a backup copy is used. It is however not easy to backup a single vertex as it is connected to all other vertices in the graph, meaning that the whole graph must be copied. Sigh...
     function copyvertex(v)
         g = regraph(v)
-        # TODO: Shallow-copy the graph, i.e. copy the metadata but leave things like NN weights the same instance.
-        # This should speed up the operation and reduce memory consumption.
-        # Someone else most likely wants the graph copied, but in the general case this happens before the crossover operation is even initiated. Lets see how things play out before we try it...
+        # Would like to just shallow-copy the graph (i.e copy mutation metadata, but not actual weights), but crossoverswap! needs to apply the mutation after each step in order to increase chances of success, meaning that we risk corrupting the input vertices if operation fails.
         vs = vertices(copy(g))
         return vs[indexin([v], vertices(g))][], filter(vv -> isempty(inputs(vv)), vs)
     end
@@ -233,12 +231,14 @@ function crossoverswap!(vin1::AbstractVertex, vout1::AbstractVertex, vin2::Abstr
     # If vin1 can only take a single input while vin2 has multiple inputs (or vice versa) we need to add a vertex before which merges the inputs
     vin1, vin2 = check_singleinput!(vin1, vin2, mergefun)
 
-    # Beware: ix and ox are not the same thing!! Check the strip function
+    # Beware: ix and ox are not the same type of thing!! Check the strip functions!
     i1, o1 = stripedges!(vin1, vout1)
     i2, o2 = stripedges!(vin2, vout2)
 
     # success1 mapped to vin2 and vout2 looks backwards, but remember that vin2 and vout2 are the new guys being inserted in everything connected to i1 and o1
     # Returning success status instead of acting as a noop at failure is not very nice, but I could not come up with a way which was 100% to revert a botched attempt and making a backup of vertices before doing any changes is not easy to deal with for the receiver either
+    # Would have liked to merge those apply_mutation into the strategy, but for one reason or the other things kept failing when I tried it. Maybe worth trying again...
+
     success1 = addinedges!(vin2, i1, strategy)
     # o1 ends up in Δsize graph when vin2 is right before a skip connection and vout2 is a size transparent vertex right before the connection is merged (!)
     success1 && apply_mutation.(filter(v -> v != o1, all_in_Δsize_graph(vin2, Input())))
@@ -269,11 +269,6 @@ function check_singleinput!(v1, v2, mergefun)
     v2 = needmerge2 ? addmerge!(v2) : v2
     return v1, v2
 end
-
-#TODO: Add in NaiveNASlib?
-struct FailAlignSizeNoOp <: AbstractAlignSizeStrategy end
-NaiveNASlib.postalignsizes(s::FailAlignSizeNoOp, vin, vout, pos) = false
-NaiveNASlib.prealignsizes(s::FailAlignSizeNoOp, vin, vout, will_rm) = false
 
 function default_crossoverswap_strategy(valuefun = default_neuronselect)
     alignstrat = PostAlignJuMP(DefaultJuMPΔSizeStrategy(), fallback=FailAlignSizeWarn(msgfun = (vin,vout) -> "Failed to align sizes when adding edge between $(name(vin)) and $(name(vout)) for crossover. Reverting..."))
