@@ -256,6 +256,77 @@ end
     @test nout.(vertices(graph)) == nout_org.(vertices(graph)) == [3,2,4,10]
 end
 
+@testset "Crossover examples" begin
+    using NaiveGAflux, Random
+    import NaiveGAflux: regraph
+    Random.seed!(NaiveGAflux.rng_default, 0)
+
+    invertex = inputvertex("A.in", 3, FluxDense())
+    layer1 = mutable("A.layer1", Dense(nout(invertex), 4), invertex; layerfun=ActivationContribution)
+    layer2 = mutable("A.layer2", Dense(nout(layer1), 5), layer1; layerfun=ActivationContribution)
+    layer3 = mutable("A.layer3", Dense(nout(layer2), 3), layer2; layerfun=ActivationContribution)
+    layer4 = mutable("A.layer4", Dense(nout(layer3), 2), layer3; layerfun=ActivationContribution)
+    modelA = CompGraph(invertex, layer4)
+
+    # Create an exact copy to show how parameter alignment is preserved
+    # Prefix names with B so we can show that something actually happened
+    changeprefix(str::String; cf) = replace(str, r"^A.\.*" => "B.")
+    changeprefix(x...;cf=clone) = clone(x...; cf=cf)
+    modelB = copy(modelA, changeprefix)
+
+    indata = reshape(collect(Float32, 1:3*2), 3,2)
+    @test modelA(indata) == modelB(indata)
+
+    @test name.(vertices(modelA)) == ["A.in", "A.layer1", "A.layer2", "A.layer3", "A.layer4"]
+    @test name.(vertices(modelB)) == ["B.in", "B.layer1", "B.layer2", "B.layer3", "B.layer4"]
+
+    # CrossoverSwap takes ones vertex from each graph as input and swaps a random segment from each graph
+    # By default it tries to make segments as similar as possible
+    swapsame = CrossoverSwap()
+
+    swapA = vertices(modelA)[4]
+    swapB = vertices(modelB)[4]
+    newA, newB = swapsame((swapA, swapB))
+
+    # It returns vertices of a new graph in order to be compatible with mutation utilities
+    # Parent models are not modified
+    @test newA ∉ vertices(modelA)
+    @test newB ∉ vertices(modelB)
+
+    # This is an internal utility which should not be needed in normal use cases.
+    modelAnew = regraph(newA)
+    modelBnew = regraph(newB)
+
+    @test name.(vertices(modelAnew)) == ["A.in", "B.layer1", "B.layer2", "B.layer3", "A.layer4"]
+    @test name.(vertices(modelBnew)) == ["B.in", "A.layer1", "A.layer2", "A.layer3", "B.layer4"]
+
+    @test modelA(indata) == modelB(indata) == modelAnew(indata) == modelBnew(indata)
+
+    # Deviation parameter will randomly make segments unequal
+    swapdeviation = CrossoverSwap(0.5)
+    modelAnew2, modelBnew2 = regraph.(swapdeviation((swapA, swapB)))
+
+    @test name.(vertices(modelAnew2)) == ["A.in", "B.layer2", "B.layer3", "A.layer4"]
+    @test name.(vertices(modelBnew2)) == ["B.in", "B.layer1", "A.layer1", "A.layer2", "A.layer3", "B.layer4"]
+
+    # VertexCrossover applies the wrapped crossover operation to all vertices in a CompGraph
+    # It in addtion, it selects compatible pairs for us (i.e swapA and swapB).
+    # It also takes an optional deviation parameter which is used when pairing
+    crossoverall = VertexCrossover(swapdeviation, 0.5)
+
+    modelAnew3, modelBnew3 = crossoverall((modelA, modelB))
+
+    # I guess things got swapped back and forth so many times not much changed in the end
+    @test name.(vertices(modelAnew3)) == ["A.in", "A.layer2", "A.layer3", "A.layer4"]
+    @test name.(vertices(modelBnew3)) == ["B.in", "B.layer1", "A.layer1", "B.layer2", "B.layer3", "B.layer4"]
+
+    # As advertised above, crossovers interop with most mutation utilities, just remember that input is a tuple
+    # Perform the swapping operation with a 30% probability for each valid vertex pair.
+    crossoversome = VertexCrossover(MutationProbability(LogMutation(((v1,v2)::Tuple) -> "Swap $(name(v1)) and $(name(v2))", swapdeviation), 0.3))
+
+    @test_logs (:info, "Swap A.layer2 and B.layer2") crossoversome((modelA, modelB))
+end
+
 @testset "Fitness functions" begin
     # Function to compute fitness for does not have to be a CompGraph, or even a neural network
     candidate1 = x -> 3:-1:1

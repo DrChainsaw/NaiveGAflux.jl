@@ -304,10 +304,9 @@ end
 
 dummyvertex(v) = dummyvertex(v, trait(v))
 dummyvertex(v, t::DecoratingTrait) = dummyvertex(v, base(t))
-# Invariant vertex is needed to make swapping succeed more often with multiple inputs. When I wrote this code I knew why, but at the time of writing this comment I didn't :(
+# Invariant vertex needed to not wipe out neurons. When I wrote this code I understood why that was, but at the time of writing this comment I dont :(
 dummyvertex(v, t) = invariantvertex(ActivationContribution(identity), v; traitdecoration = named("$(name(v)).dummy"))
-# Not sure why, but using single input conc here appears to have less drastic effects on sizes when swapping
-dummyvertex(v, t::SizeAbsorb) = conc(v; dims=1, traitdecoration = named("$(name(v)).dummy"), outwrap = ActivationContribution)
+
 
 function addinedges!(v, ins, strat = default_crossoverswap_strategy)
     dummies = copy(inputs(v))
