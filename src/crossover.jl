@@ -311,7 +311,6 @@ dummyvertex(v, t::SizeAbsorb) = conc(v; dims=1, traitdecoration = named("$(name(
 function addinedges!(v, ins, strat = default_crossoverswap_strategy)
     dummies = copy(inputs(v))
     outs = copy(dummies)
-    connectstrat = AbstractConnectStrategy[ConnectAll() for i in eachindex(dummies)]
     create_edge_strat = [i == length(ins) ? strat() : NoSizeChange() for i in eachindex(ins)]
 
     #More outs than ins: We want to connect every input so lets just pad outs with v as this is what we want in the end
@@ -321,16 +320,14 @@ function addinedges!(v, ins, strat = default_crossoverswap_strategy)
     # More outs than ins: This means that v had more inputs in its old graph compared to the vertex it was swapped with.
     # No problem really as we only care about connecting the ins and extra dummies can be left hanging with no input before removal. However, this might leave v with larger nout than it really has if not removed before adding inputs.
     while length(ins) < length(dummies)
-        #connectstrat[length(outs)] = ConnectNone()
-        # TODO: Cleanup patched legacy design!!
+        # If we end up here outs and dummies are just copies of each other so we just pop the same element from both.
         pop!(outs)
         vrm = pop!(dummies)
-        pop!(connectstrat)
         remove!(vrm, RemoveStrategy(ConnectNone(), NoSizeChange()))
     end
 
     success = map((iv, ov, s) -> create_edge!(iv, ov; strategy = s), ins, outs, create_edge_strat) |> all
-    return success && map((dv, cs) -> remove!(dv, RemoveStrategy(cs, NoSizeChange())), dummies, connectstrat) |> all
+    return success && map(dv -> remove!(dv, RemoveStrategy(NoSizeChange())), dummies) |> all
 end
 
 function stripoutedges!(v)
