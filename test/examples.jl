@@ -11,7 +11,7 @@
     initial_hidden = RepeatArchSpace(layerspace, 1:3)
     # Output layer has fixed size and is shielded from mutation
     outlayer = VertexSpace(Shielded(), DenseSpace(nlabels, identity))
-    initial_searchspace = ListArchSpace(initial_hidden, outlayer)
+    initial_searchspace = ArchSpaceChain(initial_hidden, outlayer)
 
     # Sample 5 models from the initial search space
     models = [CompGraph(inshape, initial_searchspace(inshape)) for _ in 1:5]
@@ -107,8 +107,8 @@ end
 
     # Block of conv->bn and bn-conv respectively.
     # Need to make sure there is always at least one SizeAbsorb layer to make fork and res below play nice
-    csbs = ListArchSpace(cs ,bs)
-    bscs = ListArchSpace(bs, cs)
+    csbs = ArchSpaceChain(cs ,bs)
+    bscs = ArchSpaceChain(bs, cs)
 
     # Randomly generates a conv->block:
     cblock = ArchSpace(ParSpace1D(cs, csbs, bscs))
@@ -133,7 +133,7 @@ end
 
     # End each block with subsamping through maxpooling
     ms = VertexSpace(MaxPoolSpace(PoolSpace2D([2])))
-    reduction = ListArchSpace(blocks, ms)
+    reduction = ArchSpaceChain(blocks, ms)
 
     # And lets do 2 to 4 reductions
     featureextract = RepeatArchSpace(reduction, 2:4)
@@ -143,10 +143,10 @@ end
     drep = RepeatArchSpace(dense, 0:2)
     # Last layer has fixed output size (number of labels)
     dout=VertexSpace(Shielded(), DenseSpace(10, identity))
-    output = ListArchSpace(drep, dout)
+    output = ArchSpaceChain(drep, dout)
 
     # Aaaand lets glue it together: Feature extracting conv+bn layers -> global pooling -> dense layers
-    archspace = ListArchSpace(featureextract, GlobalPoolSpace(), output)
+    archspace = ArchSpaceChain(featureextract, GlobalPoolSpace(), output)
 
     # Input is 3 channel image
     inputshape = inputvertex("input", 3, FluxConv{2}())

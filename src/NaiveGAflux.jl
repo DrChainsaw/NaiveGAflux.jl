@@ -48,7 +48,7 @@ export AbstractCrossover, VertexCrossover, CrossoverSwap
 export neuronselect, RemoveZeroNout
 
 # architecture spaces
-export AbstractArchSpace, LoggingArchSpace, VertexSpace, ArchSpace, RepeatArchSpace, ListArchSpace, ForkArchSpace, ResidualArchSpace, FunctionSpace, GlobalPoolSpace
+export AbstractArchSpace, LoggingArchSpace, VertexSpace, ArchSpace, RepeatArchSpace, ArchSpaceChain, ForkArchSpace, ResidualArchSpace, FunctionSpace, GlobalPoolSpace
 
 #  Other search space types
 export BaseLayerSpace, AbstractParSpace, SingletonParSpace, Singleton2DParSpace, ParSpace, ParSpace1D, ParSpace2D, CoupledParSpace, AbstractPadSpace, SamePad, NamedLayerSpace, LoggingLayerSpace, DenseSpace, ConvSpace, ConvSpace2D, BatchNormSpace, PoolSpace, PoolSpace2D, MaxPoolSpace, LayerVertexConf, Shielded, ConcConf

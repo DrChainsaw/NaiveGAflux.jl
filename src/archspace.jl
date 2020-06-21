@@ -417,18 +417,18 @@ repeatinitW(wi::PartialIdentityWeightInit, invertex, outsize) = nout(invertex) =
 repeatinitW(wi::PartialIdentityWeightInit, invertex, ::Missing) = wi
 
 """
-    ListArchSpace <:AbstractArchSpace
+    ArchSpaceChain <:AbstractArchSpace
 
-Search space composed of a list of search spaces.
+Chains multiple `AbstractArchSpace`s after each other.
 
-Basically a more deterministic version of RepeatArchSpace.
+Input vertex will be used to generate an output vertex from the first `AbstractArchSpace` in the chain which is then used to generate a next output vertex from the next `AbstractArchSpace` in the chain and so on.
 """
-struct ListArchSpace <:AbstractArchSpace
-    s::AbstractVector{<:AbstractArchSpace}
+struct ArchSpaceChain{S<:AbstractVector{<:AbstractArchSpace}} <:AbstractArchSpace
+    s::S
 end
-ListArchSpace(s::AbstractArchSpace...) = ListArchSpace(collect(s))
-(s::ListArchSpace)(in::AbstractVertex, rng=rng_default; outsize=missing, wi=DefaultWeightInit()) = foldl((next, ss) -> ss(next, rng, outsize=outsize, wi=repeatinitW(wi, next, outsize)), s.s, init=in)
-(s::ListArchSpace)(name::String, in::AbstractVertex, rng=rng_default; outsize=missing, wi=DefaultWeightInit()) = foldl((next, i) -> s.s[i](join([name,".", i]), next, rng, outsize=outsize, wi=repeatinitW(wi, next, outsize)), eachindex(s.s), init=in)
+ArchSpaceChain(s::AbstractArchSpace...) = ArchSpaceChain(collect(s))
+(s::ArchSpaceChain)(in::AbstractVertex, rng=rng_default; outsize=missing, wi=DefaultWeightInit()) = foldl((next, ss) -> ss(next, rng, outsize=outsize, wi=repeatinitW(wi, next, outsize)), s.s, init=in)
+(s::ArchSpaceChain)(name::String, in::AbstractVertex, rng=rng_default; outsize=missing, wi=DefaultWeightInit()) = foldl((next, i) -> s.s[i](join([name,".", i]), next, rng, outsize=outsize, wi=repeatinitW(wi, next, outsize)), eachindex(s.s), init=in)
 
 
 """

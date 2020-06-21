@@ -22,8 +22,8 @@ function initial_archspace(inshape, outsize)
 
     # Each "block" is finished with a maxpool to downsample
     maxpoolvertex = VertexSpace(layerconf, NamedLayerSpace("maxpool", MaxPoolSpace(PoolSpace2D([2]))))
-    red1 = ListArchSpace(rfr1, maxpoolvertex)
-    red2 = ListArchSpace(rfr2, maxpoolvertex)
+    red1 = ArchSpaceChain(rfr1, maxpoolvertex)
+    red2 = ArchSpaceChain(rfr2, maxpoolvertex)
 
     # How many times can shape be reduced by a factor 2
     maxreps = min(6, floor(Int, log2(minimum(inshape))))
@@ -38,19 +38,19 @@ function initial_archspace(inshape, outsize)
     # Option 1: Just a global pooling layer
     # For this to work we need to ensure that the layer before the global pool has exactly 10 outputs, that is what this is all about (or else we could just have allowed 0 dense layers in the search space for option 2).
     convout = convspace(outconf, outsize, 1:2:5, identity)
-    blockcout = ListArchSpace(convout, GlobalPoolSpace())
+    blockcout = ArchSpaceChain(convout, GlobalPoolSpace())
 
     # Option 2: 1-3 Dense layers after the global pool
     dense = VertexSpace(layerconf, NamedLayerSpace("dense", DenseSpace(2 .^(4:9), acts)))
     drep = RepeatArchSpace(dense, 0:2)
     dout=VertexSpace(outconf, NamedLayerSpace("dense", DenseSpace(outsize, identity)))
-    blockdout = ListArchSpace(GlobalPoolSpace(), drep, dout)
+    blockdout = ArchSpaceChain(GlobalPoolSpace(), drep, dout)
 
     blockout = ArchSpace(ParSpace([blockdout, blockcout]))
 
     # Remember that each "block" here is a random and pretty big search space.
     # Basically the only constraint is to not randomly run out of GPU memory...
-    return ListArchSpace(block1, block2, blockout)
+    return ArchSpaceChain(block1, block2, blockout)
 end
 
 function rep_fork_res(s, n, min_rp=1;loglevel=Logging.Debug)
@@ -77,8 +77,8 @@ function convspace(conf, outsizes, kernelsizes, acts; loglevel=Logging.Debug)
 
     # Make sure that each alternative has the option to change output size
     # This is important to make fork and res play nice together
-    convbn = ListArchSpace(conv2d, bn)
-    bnconv = ListArchSpace(bn, conv2d)
+    convbn = ArchSpaceChain(conv2d, bn)
+    bnconv = ArchSpaceChain(bn, conv2d)
 
     return ArchSpace(ParSpace([conv2d, convbn, bnconv]))
 end
