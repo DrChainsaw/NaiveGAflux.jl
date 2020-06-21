@@ -323,7 +323,7 @@ end
 
 function graphcrossover()
     vertexswap = LogMutation(((v1,v2)::Tuple) -> "\tCrossover swap between $(name(v1)) and $(name(v2))", CrossoverSwap(0.05))
-    crossoverop = VertexCrossover(MutationProbability(vertexswap, 0.2), 0.05)
+    crossoverop = VertexCrossover(MutationProbability(vertexswap, 0.05), 0.05)
     return LogMutation(((g1,g2)::Tuple) -> "Crossover between $(modelname(g1)) and $(modelname(g2))", crossoverop)
 end
 
