@@ -1,5 +1,5 @@
 @testset "Shape" begin
-    import NaiveGAflux: ΔShape, ShapeAdd, ShapeMul, ShapeDiv, fshape, revert, combine, combine, filter_noops, ShapeTraceV0, shapetrace, Δshapes, squashshapes, orderΔshapes
+    import NaiveGAflux: ΔShape, ShapeAdd, ShapeMul, ShapeDiv, fshape, revert, combine, combine, filter_noops, ShapeTrace, shapetrace, Δshapes, squashshapes, orderΔshapes
 
     @testset "ΔShapes" begin
 
@@ -200,14 +200,14 @@
 
             @test filter_noops(Δshapes(v1)) == tuple()
             @testset "shape for $(name(vn))" for vn in (v2,v3,v4,v5)
-                s = ShapeTraceV0(vn).trace
+                s = ShapeTrace(vn).trace
                 @test fshape(s, (10,9)) == size(vn(ones(Float32, 10,9, nout(vi), 1)))[1:2]
             end
 
             @testset "shapetrace graph" begin
                 g = CompGraph(vi, v5)
-                sg = g(ShapeTraceV0(vi)).trace
-                sv = shapetrace(v5; trfun = v -> ShapeTraceV0(v)).trace
+                sg = g(ShapeTrace(vi)).trace
+                sv = shapetrace(v5; trfun = v -> ShapeTrace(v)).trace
                 @test fshape(sg, (30,31)) == fshape(sv, (30,31))== size(g(ones(Float32, 30,31, nout(vi), 1)))[1:2]
             end
         end
@@ -236,14 +236,14 @@
 
             @test filter_noops(Δshapes(v1)) == tuple()
             @testset "shape for $(name(vn))" for vn in (v2,v3,v4)
-                s = ShapeTraceV0(vn).trace
+                s = ShapeTrace(vn).trace
                 @test fshape(s, (20,19)) == size(vn(ones(Float32, 20,19, nout(vi), 1)))[1:2]
             end
 
             @testset "shapetrace graph" begin
                 g = CompGraph(vi, v4)
-                sg = g(ShapeTraceV0(vi)).trace
-                sv = shapetrace(v4; trfun = v -> ShapeTraceV0(v)).trace
+                sg = g(ShapeTrace(vi)).trace
+                sv = shapetrace(v4; trfun = v -> ShapeTrace(v)).trace
                 @test fshape(sg, (30,31)) == fshape(sv, (30,31))== size(g(ones(Float32, 30,31, nout(vi), 1)))[1:2]
             end
         end
@@ -254,7 +254,7 @@
             v2 = vf(v1, "v2", ks=(3,), stride=(2,), pad=(1,1))
 
             @testset "shape for $(name(vn))" for vn in (v1, v2)
-                s = ShapeTraceV0(vn).trace
+                s = ShapeTrace(vn).trace
                 @test fshape(s, (7,)) == size(vn(ones(Float32, 7, nout(vi), 1)))[1:1]
             end
         end
@@ -265,7 +265,7 @@
             v2 = vf(v1, "v2", ks=(3,3,3), stride=(2,1,3), pad=(1,2,3,4,5,6))
 
             @testset "shape for $(name(vn))" for vn in (v1, v2)
-                s = ShapeTraceV0(vn).trace
+                s = ShapeTrace(vn).trace
                 @test fshape(s, (17,11,20)) == size(vn(ones(Float32, 17, 11, 20, nout(vi), 1)))[1:3]
             end
         end
