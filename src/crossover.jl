@@ -240,16 +240,10 @@ function crossoverswap!(vin1::AbstractVertex, vout1::AbstractVertex, vin2::Abstr
     # Would have liked to merge those apply_mutation into the strategy, but for one reason or the other things kept failing when I tried it. Maybe worth trying again...
 
     success1 = addinedges!(vin2, i1, strategy)
-    # o1 ends up in Δsize graph when vin2 is right before a skip connection and vout2 is a size transparent vertex right before the connection is merged (!)
-    success1 && apply_mutation.(filter(v -> v != o1, all_in_Δsize_graph(vin2, Input())))
     success1 &= success1 && addoutedges!(vout2, o1, strategy)
-    success1 && apply_mutation.(all_in_Δsize_graph(vout2, Output()))
 
     success2 = addinedges!(vin1, i2, strategy)
-    # o2 ends up in Δsize graph when vin1 is right before a skip connection and vout1 is a size transparent vertex right before the connection is merged (!)
-    success2 && apply_mutation.(filter(v -> v != o2, all_in_Δsize_graph(vin1, Input())))
     success2 &= success2 && addoutedges!(vout1, o2, strategy)
-    success2 && apply_mutation.(all_in_Δsize_graph(vout1, Output()))
 
     return success1, success2
 end
@@ -283,7 +277,7 @@ end
 # Needed because mutate_inputs SOs if any vertex does not have any inputs
 function NaiveNASlib.postalignsizes(s::PostApplyMutationValid, vin, vout, pos)
     if NaiveNASlib.postalignsizes(s.strategy, vin, vout, pos)
-        apply_mutation.(filter(v -> !isempty(inputs(v)) && !isempty(outputs(v)), all_in_Δsize_graph(vout, Input())))
+        apply_mutation.(filter(v -> !isempty(inputs(v)), all_in_Δsize_graph(vin, Output())))
         return true
     end
     return false
