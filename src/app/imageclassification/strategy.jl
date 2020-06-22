@@ -285,7 +285,7 @@ Mutation is applied both to the model itself (change sizes, add/remove vertices/
 """
 crossovermutate(;pcrossover=0.5, pmutate=0.5) = function(inshape)
     cross = candidatecrossover(pcrossover)
-    crossoverevo = PairCandidates(EvolveCandidates(cross))
+    crossoverevo = AfterEvolution(PairCandidates(EvolveCandidates(cross)), align_vertex_names)
 
     mutate = candidatemutation(pmutate, inshape)
     mutationevo = EvolveCandidates(mutate)
@@ -298,6 +298,16 @@ candidatecrossover(p) = evolvemodel(MutationProbability(graphcrossover(), p))
 
 function clear_redundant_vertices(pop)
     foreach(cand -> NaiveGAflux.graph(cand, check_apply), pop)
+    return pop
+end
+
+function align_vertex_names(pop)
+    for i in eachindex(pop)
+        m = match(r"model(\d+).\.*", modelname(pop[i]))
+        if !isnothing(m)
+            pop[i] = rename_model(m.captures[1], pop[i])
+        end
+    end
     return pop
 end
 
@@ -384,7 +394,7 @@ function graphmutation(inshape)
     end
     mall = MutationChain(MutationFilter(decrease_size, dsize), MutationFilter(!decrease_size, isize), mactf, mgp)
 
-    return LogMutation(g -> "Mutate model $(modelname(g))", mall)
+    return LogMutation(g -> "Mutate $(modelname(g))", mall)
 end
 
 isbig(g) = nparams(g) > 20e7
