@@ -30,8 +30,8 @@
                 @test name.(vertices(ga)) == ["a.in", "a.dv1", "b.dv2", "a.dv3"]
                 @test name.(vertices(gb)) == ["b.in", "b.dv1", "a.dv2", "b.dv3"]
 
-                @test nout.(vertices(ga)) == [3,1,3,6]
-                @test nout.(vertices(gb)) == [3,1,3,3]
+                @test nout.(vertices(ga)) == [3,4,2,6]
+                @test nout.(vertices(gb)) == [3,1,5,3]
 
                 @test size(ga(ones(3, 2))) == (6, 2)
                 @test size(gb(ones(3, 2))) == (3, 2)
@@ -43,11 +43,32 @@
 
                 @test crossoverswap!(vertices(ga)[2], vertices(ga)[5], vertices(gb)[3], vertices(gb)[4]; strategy=teststrat) == (true,true)
 
-                @test nout.(vertices(ga)) == [3,2,4,8]
-                @test nout.(vertices(gb)) == [3,1,4,5,6,4,4,5]
+                @test nout.(vertices(ga)) == [3,2,3,8]
+                @test nout.(vertices(gb)) == [3,1,4,5,6,7,4,5]
 
                 @test size(ga(ones(3, 2))) == (8, 2)
                 @test size(gb(ones(3, 2))) == (5, 2)
+            end
+
+            @testset "Swap same graph is noop" begin
+                ga = g(4:7, "a")
+
+                ren(str::String;cf=ren) = "b" * str[2:end]
+                ren(x...;cf=ren) = clone(x...;cf=cf)
+                gb = copy(ga, ren)
+
+                indata = reshape(collect(Float32, 1:3*2),3,:)
+                orgout = ga(indata)
+                @test orgout == gb(indata)
+
+                @test name.(vertices(ga)) == ["a.in", "a.dv1", "a.dv2", "a.dv3", "a.dv4"]
+                @test name.(vertices(gb)) == ["b.in", "b.dv1", "b.dv2", "b.dv3", "b.dv4"]
+
+                vsa = vertices(ga)
+                vsb = vertices(gb)
+                @test crossoverswap!(vsa[2], vsa[4], vsb[2], vsb[4]) == (true,true)
+
+                @test orgout == ga(indata) == gb(indata)
             end
         end
 
@@ -326,7 +347,7 @@
                 ga = g("a", 3, (vname, vs...) -> +(vname >> vs[1], vs[2:end]...))
                 gb = g("b", 5, concat)
 
-                @test @test_logs (:warn, "Failed to align sizes when adding edge between b.dv2 and a.dv2.dummy for crossover. Reverting...") crossoverswap!(vertices(ga)[end-1], vertices(gb)[end-1]; strategy=teststrat) == (true, false)
+                @test @test_logs (:warn, "Failed to align sizes for vertices b.dv2 and a.dv2.dummy for crossover. Reverting...") crossoverswap!(vertices(ga)[end-1], vertices(gb)[end-1]; strategy=teststrat) == (true, false)
 
                 @test name.(vertices(ga)) == ["a.in", "a.dv1", "a.dv2", "b.m1", "a.dv3"]
                 @test size(ga(ones(3,2))) == (5,2)
@@ -336,7 +357,7 @@
                 ga = g("a", 5, concat)
                 gb = g("b", 3, (vname, vs...) -> +(vname >> vs[1], vs[2:end]...))
 
-                @test @test_logs (:warn, "Failed to align sizes when adding edge between a.dv2 and b.dv2.dummy for crossover. Reverting...") crossoverswap!(vertices(ga)[end-1], vertices(gb)[end-1]; strategy=teststrat) == (false, true)
+                @test @test_logs (:warn, "Failed to align sizes for vertices a.dv2 and b.dv2.dummy for crossover. Reverting...") crossoverswap!(vertices(ga)[end-1], vertices(gb)[end-1]; strategy=teststrat) == (false, true)
 
                 @test name.(vertices(gb)) == ["b.in", "b.dv1", "b.dv2", "a.m1", "b.dv3"]
                 @test size(gb(ones(3,2))) == (5,2)
@@ -530,7 +551,7 @@
                 @test name.(vertices(ga_new)) == ["a.in", "b.cv2", "b.cv3", "a.pv1", "b.dv2", "b.dv3"]
                 @test name.(vertices(gb_new)) == ["b.in", "b.cv1", "a.cv1", "a.cv2", "b.pv1", "b.dv1", "a.dv1", "a.dv2"]
 
-                @test size(ga_new(ones(Float32, 4,4,3,2))) == (6, 2)
+                @test size(ga_new(ones(Float32, 4,4,3,2))) == (7, 2)
                 @test size(gb_new(ones(Float32, 4,4,3,2))) == (6, 2)
             end
 

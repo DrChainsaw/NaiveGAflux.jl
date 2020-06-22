@@ -270,12 +270,31 @@ function check_singleinput!(v1, v2, mergefun)
     return v1, v2
 end
 
+#TODO: Add in NaiveNASlib?
+struct FailAlignSizeNoOp <: AbstractAlignSizeStrategy end
+NaiveNASlib.postalignsizes(s::FailAlignSizeNoOp, vin, vout, pos) = false
+NaiveNASlib.prealignsizes(s::FailAlignSizeNoOp, vin, vout, will_rm) = false
+
+struct PostApplyMutationValid{S<:AbstractAlignSizeStrategy} <: AbstractAlignSizeStrategy
+    strategy::S
+end
+
+# TODO: Add to NaiveNASlib as bugfix?
+# Needed because mutate_inputs SOs if any vertex does not have any inputs
+function NaiveNASlib.postalignsizes(s::PostApplyMutationValid, vin, vout, pos)
+    if NaiveNASlib.postalignsizes(s.strategy, vin, vout, pos)
+        apply_mutation.(filter(v -> !isempty(inputs(v)) && !isempty(outputs(v)), all_in_Δsize_graph(vout, Input())))
+        return true
+    end
+    return false
+end
+
 function default_crossoverswap_strategy(valuefun = default_neuronselect)
-    alignstrat = PostAlignJuMP(DefaultJuMPΔSizeStrategy(), fallback=FailAlignSizeWarn(msgfun = (vin,vout) -> "Failed to align sizes when adding edge between $(name(vin)) and $(name(vout)) for crossover. Reverting..."))
+    alignstrat = PostAlignJuMP(DefaultJuMPΔSizeStrategy(), fallback=FailAlignSizeWarn(FailAlignSizeNoOp(), (vin,vout) -> "Failed to align sizes for vertices $(name(vin)) and $(name(vout)) for crossover. Reverting..."))
 
     selectstrat = OutSelect{Exact}(OutSelect{Relaxed}(LogSelectionFallback("Reverting...", NoutRevert())))
 
-    return PostSelectOutputs(selectstrat, alignstrat, valuefun, FailAlignSizeRevert())
+    return PostSelectOutputs(selectstrat, alignstrat, valuefun, FailAlignSizeNoOp()) |> PostApplyMutationValid
 end
 
 stripedges!(vin, vout) = stripinedges!(vin) ,stripoutedges!(vout)
@@ -306,12 +325,11 @@ dummyvertex(v) = dummyvertex(v, trait(v))
 dummyvertex(v, t::DecoratingTrait) = dummyvertex(v, base(t))
 # Invariant vertex needed to not wipe out neurons. When I wrote this code I understood why that was, but at the time of writing this comment I dont :(
 dummyvertex(v, t) = invariantvertex(ActivationContribution(identity), v; traitdecoration = named("$(name(v)).dummy"))
-
+dummyvertex(v, t::SizeAbsorb) = absorbvertex(ActivationContribution(identity), nout(v), v; traitdecoration = named("$(name(v)).dummy"))
 
 function addinedges!(v, ins, strat = default_crossoverswap_strategy)
     dummies = copy(inputs(v))
     outs = copy(dummies)
-    create_edge_strat = [i == length(ins) ? strat() : NoSizeChange() for i in eachindex(ins)]
 
     #More outs than ins: We want to connect every input so lets just pad outs with v as this is what we want in the end
     while length(outs) < length(ins)
@@ -326,8 +344,10 @@ function addinedges!(v, ins, strat = default_crossoverswap_strategy)
         remove!(vrm, RemoveStrategy(ConnectNone(), NoSizeChange()))
     end
 
+    create_edge_strat = (i == length(ins) ? strat() : NoSizeChange() for i in eachindex(ins))
     success = map((iv, ov, s) -> create_edge!(iv, ov; strategy = s), ins, outs, create_edge_strat) |> all
-    return success && map(dv -> remove!(dv, RemoveStrategy(NoSizeChange())), dummies) |> all
+    remove_dummy_strat = (i == length(dummies) ? strat() : NoSizeChange() for i in eachindex(dummies))
+    return success && map((dv,  s)-> remove!(dv, RemoveStrategy(s)), dummies, remove_dummy_strat) |> all
 end
 
 function stripoutedges!(v)
@@ -344,7 +364,7 @@ function addoutedges!(v, dummy, strat = default_crossoverswap_strategy)
     # Perhaps try to avoid large negative size changes here, e.g. by doing a Δnout/Δnin before creating the edge?
     # Should perhaps be baked into strat, but then one probably can't use the same strat for addinedges!
     success = create_edge!(v, dummy, strategy = strat())
-    return success && remove!(dummy, RemoveStrategy(NoSizeChange()))
+    return success && remove!(dummy, RemoveStrategy(strat()))
 end
 
 """
