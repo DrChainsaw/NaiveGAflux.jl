@@ -302,7 +302,7 @@ function stripinedges!(v)
     for (ind, vi) in enumerate(i)
 
         # We do this instead of insert! as it is a bit too smart and recreates all edges if any vi == vj for i != j where vi and vj are input vertices to v and this throws addinedges! off.
-        dummy = dummyvertex(vi, trait(v))
+        dummy = dummyvertex(vi)
 
         # Manually replace v with dummy as output for vi
         inputs(v)[ind] = dummy
@@ -314,12 +314,10 @@ function stripinedges!(v)
     return i
 end
 
-
-dummyvertex(v) = dummyvertex(v, trait(v))
-dummyvertex(v, t::DecoratingTrait) = dummyvertex(v, base(t))
-# Invariant vertex needed to not wipe out neurons. When I wrote this code I understood why that was, but at the time of writing this comment I dont :(
-dummyvertex(v, t) = invariantvertex(ActivationContribution(identity), v; traitdecoration = named("$(name(v)).dummy"))
-dummyvertex(v, t::SizeAbsorb) = absorbvertex(ActivationContribution(identity), nout(v), v; traitdecoration = named("$(name(v)).dummy"))
+# Invariant vertex so that removal is trivial.
+# Using size absorbing dummies leads to selection of input neurons which dont exist (e.g. take input nr 243 from a layer with 16 inputs).
+# Using size stacking dummies leads to neurons being whiped out (e.g. when connecting a 16 neuron output to a 8 neuron input then all 8 are replaced with new neurons).
+dummyvertex(v) = invariantvertex(ActivationContribution(identity), v; traitdecoration = named("$(name(v)).dummy"))
 
 function addinedges!(v, ins, strat = default_crossoverswap_strategy)
     dummies = copy(inputs(v))
