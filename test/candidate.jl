@@ -70,7 +70,7 @@
 
             teststrat() = NaiveGAflux.default_crossoverswap_strategy(v -> ones(nout_org(v)))
             graphcrossover = VertexCrossover(CrossoverSwap(;pairgen = (v1,v2) -> (1,1), strategy=teststrat); pairgen = (v1,v2;ind1) -> ind1==1 ? (2,3) : nothing)
-            optcrossover = OptimizerCrossoverV0()
+            optcrossover = OptimizerCrossover()
             crossfun = evolvemodel(graphcrossover, optcrossover)
 
             newcand1, newcand2 = crossfun((cand, newcand))

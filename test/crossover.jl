@@ -765,8 +765,8 @@
             (ADAM(), Momentum()),
             (Optimiser(Descent(), WeightDecay()), Optimiser(Momentum(), Nesterov())),
             )
-            oc = OptimizerCrossoverV0()
-            ooc = OptimizerCrossoverV0(oc)
+            oc = OptimizerCrossover()
+            ooc = OptimizerCrossover(oc)
             @test prts.(oc((o1,o2))) == prts.(ooc((o1,o2))) == prts.((o2, o1))
             @test prts.(oc((o2,o1))) == prts.(ooc((o2,o1))) == prts.((o1, o2))
         end
@@ -774,18 +774,18 @@
         @testset "Don't swap shielded" begin
             o1 = ShieldedOpt(Descent())
             o2 = ShieldedOpt(Momentum())
-            @test OptimizerCrossoverV0()((o1,o2)) == (o1,o2)
+            @test OptimizerCrossover()((o1,o2)) == (o1,o2)
         end
 
         @testset "Cardinality difference" begin
 
             @testset "Single opt vs Optimiser" begin
-                oc = OptimizerCrossoverV0()
+                oc = OptimizerCrossover()
                 @test prts.(oc((Descent(), Optimiser(Momentum(), WeightDecay())))) == prts.((Momentum(), Optimiser(Descent(), WeightDecay())))
             end
 
             @testset "Different size Optimisers" begin
-                oc = OptimizerCrossoverV0()
+                oc = OptimizerCrossover()
                 o1 = Optimiser(Descent(), WeightDecay(), Momentum())
                 o2 = Optimiser(ADAM(), ADAMW(), NADAM(), RADAM())
 
@@ -798,7 +798,7 @@
 
         @testset "LogMutation and MutationProbability" begin
             mplm(c) = MutationProbability(LogMutation(((o1,o2)::Tuple) -> "Crossover between $(prts(o1)) and $(prts(o2))", c), Probability(0.2, MockRng([0.3, 0.1, 0.3])))
-            oc = OptimizerCrossoverV0() |> mplm |> OptimizerCrossoverV0
+            oc = OptimizerCrossover() |> mplm |> OptimizerCrossover
 
             o1 = Optimiser(Descent(), WeightDecay(), Momentum())
             o2 = Optimiser(ADAM(), ADAGrad(), AdaMax())

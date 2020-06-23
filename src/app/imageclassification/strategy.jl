@@ -326,8 +326,8 @@ function rename_model(i, cand)
 end
 
 function optcrossover(poptswap=0.3, plrswap=0.4)
-    lrc = MutationProbability(LearningRateCrossover(), plrswap) |> OptimizerCrossoverV0
-    oc = MutationProbability(OptimizerCrossoverV0(), poptswap) |> OptimizerCrossoverV0
+    lrc = MutationProbability(LearningRateCrossover(), plrswap) |> OptimizerCrossover
+    oc = MutationProbability(OptimizerCrossover(), poptswap) |> OptimizerCrossover
     return MutationChain(lrc, oc)
 end
 

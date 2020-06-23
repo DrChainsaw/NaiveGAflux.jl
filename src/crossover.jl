@@ -425,18 +425,18 @@ function separablefrom(v, forbidden, seen)
 end
 
 
-struct OptimizerCrossoverV0{C} <: AbstractCrossover{FluxOptimizer}
+struct OptimizerCrossover{C} <: AbstractCrossover{FluxOptimizer}
     crossover::C
 end
-OptimizerCrossoverV0() = OptimizerCrossoverV0(optimizerswap)
+OptimizerCrossover() = OptimizerCrossover(optimizerswap)
 
-LearningRateCrossover() = OptimizerCrossoverV0(learningrateswap)
+LearningRateCrossover() = OptimizerCrossover(learningrateswap)
 
 EitherIs{T} = Union{Tuple{T, Any}, Tuple{Any,T}}
 
-(oc::OptimizerCrossoverV0)(os) = oc.crossover(os)
-(oc::OptimizerCrossoverV0)(os::EitherIs{ShieldedOpt}) = os
-function (oc::OptimizerCrossoverV0)((o1,o2)::EitherIs{Flux.Optimiser})
+(oc::OptimizerCrossover)(os) = oc.crossover(os)
+(oc::OptimizerCrossover)(os::EitherIs{ShieldedOpt}) = os
+function (oc::OptimizerCrossover)((o1,o2)::EitherIs{Flux.Optimiser})
     os1,o1re = optiter(o1)
     os2,o2re = optiter(o2)
     res = oc.crossover.(zip(os1,os2))
