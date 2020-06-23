@@ -430,6 +430,8 @@ struct OptimizerCrossoverV0{C} <: AbstractCrossover{FluxOptimizer}
 end
 OptimizerCrossoverV0() = OptimizerCrossoverV0(optimizerswap)
 
+LearningRateCrossover() = OptimizerCrossoverV0(learningrateswap)
+
 EitherIs{T} = Union{Tuple{T, Any}, Tuple{Any,T}}
 
 (oc::OptimizerCrossoverV0)(os) = oc.crossover(os)
@@ -447,3 +449,7 @@ optiter(o) = (o,), (os...) -> os[1]
 optiter(o::Flux.Optimiser) = Tuple(o.os), (os...) -> Flux.Optimiser(os...)
 
 optimizerswap((o1, o2)::Tuple) = o2,o1
+
+learningrateswap((o1,o2)::Tuple) = (@set o1.eta = learningrate(o2)) , (@set o2.eta = learningrate(o1))
+learningrateswap(os::EitherIs{ShieldedOpt}) = os
+learningrateswap(os::EitherIs{WeightDecay}) = os
