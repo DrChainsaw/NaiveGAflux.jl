@@ -18,6 +18,8 @@ graph(c::AbstractCandidate) = graph(wrappedcand(c))
 # This is mainly for FileCandidate to allow for writing the graph back to disk after f is done
 graph(c::AbstractCandidate, f) = graph(wrappedcand(c), f)
 
+opt(c::AbstractCandidate) = opt(wrappedcand(c))
+
 """
     CandidateModel <: Candidate
     CandidateModel(model, optimizer, lossfunction, fitness)
@@ -47,6 +49,8 @@ fitness(model::CandidateModel) = fitness(model.fitness, instrument(Validate(), m
 reset!(model::CandidateModel) = reset!(model.fitness)
 
 graph(model::CandidateModel, f=identity) = f(model.graph)
+
+opt(c::CandidateModel) = c.opt
 
 wrappedcand(c::CandidateModel) = error("CandidateModel does not wrap any candidate! Check your base case!")
 
@@ -136,6 +140,7 @@ fitness(c::FileCandidate) = callcand(fitness, c)
 reset!(c::FileCandidate) = callcand(reset!, c)
 wrappedcand(c::FileCandidate) = MemPool.poolget(c.c[])
 graph(c::FileCandidate, f) = callcand(graph, c, f)
+opt(c::FileCandidate) = callcand(opt, c)
 
 """
     CacheCandidate <: AbstractCandidate
@@ -188,7 +193,17 @@ function evolvemodel(m::AbstractMutation{CompGraph}, mapothers=deepcopy)
 end
 evolvemodel(m::AbstractMutation{CompGraph}, om::AbstractMutation{FluxOptimizer}, mapothers=deepcopy) = evolvemodel(m, optmap(om, mapothers))
 
-evolvemodel(m::AbstractCrossover{CompGraph}, mapothers=deepcopy) = (c1, c2)::Tuple -> begin
+"""
+    evolvemodel(m::AbstractCrossover{CompGraph}, mapothers1=deepcopy, mapothers2=deepcopy)
+    evolvemodel(m::AbstractCrossover{CompGraph}, om::AbstractCrossover{FluxOptimizer}, mapothers1=deepcopy, mapothers2=deepcopy)
+
+Return a function which maps a tuple of `AbstractCandidate`s `(c1,c2)` to two new candidates `c1', c2'` where any `CompGraph`s `g1` and `g2` in `c1` and `c2` respectively will be `g1', g2' = m((copy(g1), copy(g2)))` in `c1'` and `c2'` respectively. Same principle applies to any optimisers if `om` is present.
+
+All other fields in `c1` will be mapped through the function `mapothers1` and likewise for `c2` and `mapothers2`.
+
+Intended use is together with [`PairCandidates`](@ref) and [`EvolveCandidates`](@ref).
+"""
+evolvemodel(m::AbstractCrossover{CompGraph}, mapothers1=deepcopy, mapothers2=deepcopy) = (c1, c2)::Tuple -> begin
     # This allows FileCandidate to write the graph back to disk as we don't want to mutate the orignal candidate.
     # Perhaps align single individual mutation to this pattern for consistency?
     g1 = graph(c1, identity)
@@ -196,7 +211,16 @@ evolvemodel(m::AbstractCrossover{CompGraph}, mapothers=deepcopy) = (c1, c2)::Tup
 
     g1, g2 = m((copy(g1), copy(g2)))
 
-    return mapcandidate(g -> g1, mapothers)(c1), mapcandidate(g -> g2, mapothers)(c2)
+    return mapcandidate(g -> g1, mapothers1)(c1), mapcandidate(g -> g2, mapothers2)(c2)
+end
+
+evolvemodel(m::AbstractCrossover{CompGraph}, om::AbstractCrossover{FluxOptimizer}, mapothers1=deepcopy, mapothers2=deepcopy) = (c1,c2)::Tuple -> begin
+    o1 = opt(c1)
+    o2 = opt(c2)
+
+    o1n, o2n = om((o1, o2))
+
+    return evolvemodel(m, optmap(o -> o1n, mapothers1), optmap(o -> o2n, mapothers2))((c1,c2))
 end
 
 
