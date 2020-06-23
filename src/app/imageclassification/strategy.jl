@@ -283,7 +283,7 @@ Crossover is done using [`CrossoverSwap`](@ref) whic is only applies to the mode
 
 Mutation is applied both to the model itself (change sizes, add/remove vertices/edges) as well as to the optimizer (change learning rate and optimizer algorithm).
 """
-crossovermutate(;pcrossover=0.5, pmutate=0.5) = function(inshape)
+crossovermutate(;pcrossover=0.75, pmutate=0.75) = function(inshape)
     cross = candidatecrossover(pcrossover)
     crossoverevo = AfterEvolution(PairCandidates(EvolveCandidates(cross)), align_vertex_names)
 
@@ -294,7 +294,7 @@ crossovermutate(;pcrossover=0.5, pmutate=0.5) = function(inshape)
 end
 
 candidatemutation(p, inshape) = evolvemodel(MutationProbability(graphmutation(inshape), p), optmutation())
-candidatecrossover(p) = evolvemodel(MutationProbability(graphcrossover(), p))
+candidatecrossover(p) = evolvemodel(MutationProbability(graphcrossover(), p), optcrossover())
 
 function clear_redundant_vertices(pop)
     foreach(cand -> NaiveGAflux.graph(cand, check_apply), pop)
@@ -323,6 +323,12 @@ function rename_model(i, cand)
     rename_model(x...;cf) = clone(x...; cf=cf)
     rename_model(m::AbstractMutableComp; cf) = m # No need to copy below this level
     return NaiveGAflux.mapcandidate(g -> copy(g, rename_model))(cand)
+end
+
+function optcrossover(poptswap=0.3, plrswap=0.4)
+    lrc = MutationProbability(LearningRateCrossover(), plrswap) |> OptimizerCrossoverV0
+    oc = MutationProbability(OptimizerCrossoverV0(), poptswap) |> OptimizerCrossoverV0
+    return MutationChain(lrc, oc)
 end
 
 function optmutation(p=0.05)
