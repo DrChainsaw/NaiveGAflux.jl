@@ -423,3 +423,27 @@ function separablefrom(v, forbidden, seen)
     swappable = mapreduce(vi -> separablefrom(vi, forbidden, seen), vcat, inputs(v), init=[])
     return ok ? vcat(v, swappable) : swappable
 end
+
+
+struct OptimizerCrossoverV0{C} <: AbstractCrossover{FluxOptimizer}
+    crossover::C
+end
+OptimizerCrossoverV0() = OptimizerCrossoverV0(optimizerswap)
+
+EitherIs{T} = Union{Tuple{T, Any}, Tuple{Any,T}}
+
+(oc::OptimizerCrossoverV0)(os) = oc.crossover(os)
+(oc::OptimizerCrossoverV0)(os::EitherIs{ShieldedOpt}) = os
+function (oc::OptimizerCrossoverV0)((o1,o2)::EitherIs{Flux.Optimiser})
+    os1,o1re = optiter(o1)
+    os2,o2re = optiter(o2)
+    res = oc.crossover.(zip(os1,os2))
+    os1n = (t[1] for t in res)
+    os2n = (t[2] for t in res)
+    return o1re(os1n..., os1[length(os2)+1:end]...), o2re(os2n..., os2[length(os1)+1:end]...)
+end
+
+optiter(o) = (o,), (os...) -> os[1]
+optiter(o::Flux.Optimiser) = Tuple(o.os), (os...) -> Flux.Optimiser(os...)
+
+optimizerswap((o1, o2)::Tuple) = o2,o1
