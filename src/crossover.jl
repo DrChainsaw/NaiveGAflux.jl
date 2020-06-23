@@ -283,10 +283,44 @@ function NaiveNASlib.postalignsizes(s::PostApplyMutationValid, vin, vout, pos)
     return false
 end
 
+# TODO: Add in NaiveNASlib
+struct TruncateInIndsToValid{S} <: AbstractSelectionStrategy
+    strategy::S
+end
+
+function NaiveNASlib.Δoutputs(s::TruncateInIndsToValid, vs::AbstractVector{<:AbstractVertex}, valuefun::Function)
+    success, ins, outs = NaiveNASlib.solve_outputs_selection(s.strategy, vs, valuefun)
+    if success
+        for (vv, ininds) in ins
+            for innr in eachindex(ininds)
+                ininds[innr] = aligntomax(nin_org(vv)[innr], ininds[innr])
+            end
+        end
+        Δoutputs(ins, outs, vs)
+    end
+    return success
+end
+
+aligntomax(maxval, ::Missing) = missing
+function aligntomax(maxval, arr)
+    arr = copy(arr)
+    maxind = argmax(arr)
+    while arr[maxind] > maxval
+        newval = maxval
+        while newval in arr && newval > -1
+            newval -= 1
+        end
+        arr[maxind] = newval == 0 ? -1 : newval
+        maxind = argmax(arr)
+    end
+    return arr
+end
+
+
 function default_crossoverswap_strategy(valuefun = default_neuronselect)
     alignstrat = PostAlignJuMP(DefaultJuMPΔSizeStrategy(), fallback=FailAlignSizeWarn(FailAlignSizeNoOp(), (vin,vout) -> "Failed to align sizes for vertices $(name(vin)) and $(name(vout)) for crossover. Reverting..."))
 
-    selectstrat = OutSelect{Exact}(OutSelect{Relaxed}(LogSelectionFallback("Reverting...", NoutRevert())))
+    selectstrat = OutSelect{Exact}(OutSelect{Relaxed}(LogSelectionFallback("Reverting...", NoutRevert()))) |> TruncateInIndsToValid
 
     return PostSelectOutputs(selectstrat, alignstrat, valuefun, FailAlignSizeNoOp()) |> PostApplyMutationValid
 end

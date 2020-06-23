@@ -3,7 +3,7 @@
     v4n(graph::CompGraph, want) = v4n(vertices(graph), want)
     v4n(vs, want) = vs[findfirst(v -> want == name(v), vs)]
 
-    teststrat() = NaiveGAflux.default_crossoverswap_strategy(v -> ones(nout_org(v)))
+    teststrat() = NaiveGAflux.default_crossoverswap_strategy(v -> 1:nout_org(v))
 
     @testset "CrossoverSwap" begin
         import NaiveGAflux: crossoverswap!, separablefrom
