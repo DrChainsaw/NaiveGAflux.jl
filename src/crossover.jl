@@ -295,6 +295,9 @@ function NaiveNASlib.Δoutputs(s::TruncateInIndsToValid, vs::AbstractVector{<:Ab
             for innr in eachindex(ininds)
                 ininds[innr] = aligntomax(nin_org(vv)[innr], ininds[innr])
             end
+            newins, newouts = align_outs_to_ins(vv, ins[vv], outs[vv])
+            ins[vv] = newins
+            outs[vv] = newouts
         end
         Δoutputs(ins, outs, vs)
     end
@@ -316,6 +319,16 @@ function aligntomax(maxval, arr)
     return arr
 end
 
+align_outs_to_ins(v, ins, outs) = align_outs_to_ins(trait(v), v, ins, outs)
+align_outs_to_ins(t::DecoratingTrait, v, ins, outs) = align_outs_to_ins(base(t), v, ins, outs)
+align_outs_to_ins(t, v, ins, outs) = ins,outs
+function align_outs_to_ins(::SizeInvariant, v, ins::AbstractArray, outs)
+    isempty(ins) && return ins, outs
+    inds = ins[1]
+    newins = repeat([inds], length(ins))
+    newouts = ismissing(outs) ? outs : inds
+    return newins, newouts
+end
 
 function default_crossoverswap_strategy(valuefun = default_neuronselect)
     alignstrat = PostAlignJuMP(DefaultJuMPΔSizeStrategy(), fallback=FailAlignSizeWarn(FailAlignSizeNoOp(), (vin,vout) -> "Failed to align sizes for vertices $(name(vin)) and $(name(vout)) for crossover. Reverting..."))
