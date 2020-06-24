@@ -438,11 +438,35 @@ function separablefrom(v, forbidden, seen)
 end
 
 
+"""
+    OptimizerCrossover{C} <: AbstractCrossover{FluxOptimizer}
+    OptimizerCrossover()
+    OptimizerCrossover(crossover)
+
+Apply crossover between optimizers.
+
+Type of crossover is determined by `crossover` (default `optimizerswap`) which when given a a tuple of two optimizers will return the result of the crossover operation as a tuple of optimizers.
+
+Designed to be composable with most utility `AbstractMutation`s as well as with itself. For instance, the following seemingly odd construct will swap components of a [`Flux.Optimiser`](@ref) with a probability of `0.2` per component:
+
+`OptimizerCrossover(MutationProbability(OptimizerCrossover(), 0.2))`
+
+Compare with the following which either swaps all components or none:
+
+`MutationProbability(OptimizerCrossover(), 0.2)`
+"""
 struct OptimizerCrossover{C} <: AbstractCrossover{FluxOptimizer}
     crossover::C
 end
 OptimizerCrossover() = OptimizerCrossover(optimizerswap)
 
+"""
+    LearningRateCrossover()
+
+Return an `OptimizerCrossover` which will swap learning rates between optimizers but not change anything else.
+
+Does not do anything if any of the optimizers don't have a learning rate (e.g. WeightDecay).
+"""
 LearningRateCrossover() = OptimizerCrossover(learningrateswap)
 
 EitherIs{T} = Union{Tuple{T, Any}, Tuple{Any,T}}
