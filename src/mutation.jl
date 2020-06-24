@@ -126,22 +126,27 @@ end
 
 """
     LogMutation{T} <:AbstractMutation{T}
-    LogMutation(strfun, m::AbstractMutation{T})
-    LogMutation(strfun, level::LogLevel, m::AbstractMutation{T})
+    LogMutation(strfun, m::AbstractMutation{T}; level = Logging.Info, nextlogfun=e -> PrefixLogger("   "))
+    LogMutation(strfun, level::LogLevel, nextlogfun, m::AbstractMutation{T})
 
 Logs all mutation operations.
 
 Argument `strfun` maps the mutated entity to the logged string.
+
+Calling `nextlogfun(e)` where `e` is the entity to mutate produces an `AbstractLogger` which will be used when applying `m(e)`.
+
+By default, this is used to add a level of indentation to subsequent logging calls which makes logs of hierarchical mutations (e.g. mutate a CompGraph by applying mutations to some of its vertices) easier to read. Set `nextlogfun = e -> current_logger()` to remove this behaviour.
 """
-struct LogMutation{T} <:AbstractMutation{T}
-    strfun
-    level::LogLevel
+struct LogMutation{F,L<:LogLevel,LF,T} <:AbstractMutation{T}
+    strfun::F
+    level::L
+    nextlogfun::LF
     m::AbstractMutation{T}
 end
-LogMutation(strfun, m::AbstractMutation{T}) where T = LogMutation(strfun, Logging.Info, m)
+LogMutation(strfun, m::AbstractMutation{T}; level = Logging.Info, nextlogfun=e -> PrefixLogger("   ")) where T = LogMutation(strfun, level, nextlogfun, m)
 function (m::LogMutation)(e)
     @logmsg m.level m.strfun(e)
-    m.m(e)
+    return with_logger(() -> m.m(e), m.nextlogfun(e))
 end
 
 """

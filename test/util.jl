@@ -208,3 +208,10 @@ end
         @test val(s1) === val(s2) === val(s)
     end
 end
+
+@testset "PrefixLogger" begin
+    import NaiveGAflux: PrefixLogger
+    testlog(msg) = @info msg
+
+    @test_logs (:info, "Prefix testmsg") with_logger(() -> testlog("testmsg"), PrefixLogger("Prefix "))
+end

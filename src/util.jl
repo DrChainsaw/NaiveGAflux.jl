@@ -278,3 +278,20 @@ Base.size(s::Singleton) = size(val(s))
 
 Base.IteratorEltype(s::Singleton) = Base.IteratorEltype(val(s))
 Base.IteratorSize(s::Singleton) = Base.IteratorSize(val(s))
+
+
+"""
+     PrefixLogger{L<:AbstractLogger, S} <: AbstractLogger
+     PrefixLogger(wrappedLogger::L, prefix::S)
+
+Add `prefix` to messages and forwards to `wrappedLogger`.
+"""
+struct PrefixLogger{L<:AbstractLogger, S} <: AbstractLogger
+      wrapped::L
+      prefix::S
+end
+PrefixLogger(prefix::String) = PrefixLogger(current_logger(), prefix)
+
+Logging.min_enabled_level(l::PrefixLogger) = Logging.min_enabled_level(l.wrapped)
+Logging.shouldlog(l::PrefixLogger, args...) =  Logging.shouldlog(l.wrapped, args...)
+Logging.handle_message(l::PrefixLogger, level, message, args...; kwargs...) = Logging.handle_message(l.wrapped, level, l.prefix * message, args...; kwargs...)

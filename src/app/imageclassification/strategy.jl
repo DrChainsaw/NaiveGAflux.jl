@@ -338,7 +338,7 @@ function optmutation(p=0.05)
 end
 
 function graphcrossover()
-    vertexswap = LogMutation(((v1,v2)::Tuple) -> "\tCrossover swap between $(name(v1)) and $(name(v2))", CrossoverSwap(0.05))
+    vertexswap = LogMutation(((v1,v2)::Tuple) -> "Crossover swap between $(name(v1)) and $(name(v2))", CrossoverSwap(0.05))
     crossoverop = VertexCrossover(MutationProbability(vertexswap, 0.05), 0.05)
     return LogMutation(((g1,g2)::Tuple) -> "Crossover between $(modelname(g1)) and $(modelname(g2))", crossoverop)
 end
@@ -364,16 +364,16 @@ function graphmutation(inshape)
     mph(m, p) = VertexMutation(HighValueMutationProbability(m, p))
     mpl(m, p) = VertexMutation(LowValueMutationProbability(m, p))
 
-    inout = mph(LogMutation(v -> "\tIncrease size of vertex $(name(v))", increase_nout), 0.05)
-    dnout = mpl(LogMutation(v -> "\tReduce size of vertex $(name(v))", decrease_nout), 0.05)
-    maddv = mph(LogMutation(v -> "\tAdd vertex after $(name(v))", add_vertex), 0.005)
-    maddm = mpn(MutationFilter(canaddmaxpool(inshape), LogMutation(v -> "\tAdd maxpool after $(name(v))", add_maxpool)), 0.01)
-    mremv = mpl(LogMutation(v -> "\tRemove vertex $(name(v))", rem_vertex), 0.01)
-    ikern = mpl(LogMutation(v -> "\tMutate kernel size of $(name(v))", increase_kernel), 0.005)
-    dkern = mpl(LogMutation(v -> "\tDecrease kernel size of $(name(v))", decrease_kernel), 0.005)
-    mactf = mpl(LogMutation(v -> "\tMutate activation function of $(name(v))", mutate_act), 0.005)
-    madde = mph(LogMutation(v -> "\tAdd edge from $(name(v))", add_edge), 0.02)
-    mreme = mpn(MutationFilter(v -> length(outputs(v)) > 1, LogMutation(v -> "\tRemove edge from $(name(v))", rem_edge)), 0.02)
+    inout = mph(LogMutation(v -> "Increase size of vertex $(name(v))", increase_nout), 0.05)
+    dnout = mpl(LogMutation(v -> "Reduce size of vertex $(name(v))", decrease_nout), 0.05)
+    maddv = mph(LogMutation(v -> "Add vertex after $(name(v))", add_vertex), 0.005)
+    maddm = mpn(MutationFilter(canaddmaxpool(inshape), LogMutation(v -> "Add maxpool after $(name(v))", add_maxpool)), 0.01)
+    mremv = mpl(LogMutation(v -> "Remove vertex $(name(v))", rem_vertex), 0.01)
+    ikern = mpl(LogMutation(v -> "Mutate kernel size of $(name(v))", increase_kernel), 0.005)
+    dkern = mpl(LogMutation(v -> "Decrease kernel size of $(name(v))", decrease_kernel), 0.005)
+    mactf = mpl(LogMutation(v -> "Mutate activation function of $(name(v))", mutate_act), 0.005)
+    madde = mph(LogMutation(v -> "Add edge from $(name(v))", add_edge), 0.02)
+    mreme = mpn(MutationFilter(v -> length(outputs(v)) > 1, LogMutation(v -> "Remove edge from $(name(v))", rem_edge)), 0.02)
 
     mremv = MutationFilter(g -> nv(g) > 5, mremv)
 
@@ -383,7 +383,7 @@ function graphmutation(inshape)
     isize = MutationChain(PostMutation(inout, neuronselect), ikern, madde, maddm, maddv)
     # Add mutation last as new vertices with neuron_value == 0 screws up outputs selection as per https://github.com/DrChainsaw/NaiveNASlib.jl/issues/39
 
-    mgp = VertexMutation(MutationProbability(LogMutation(v -> "\tMutate global pool type for $(name(v))", MutateGlobalPool()), 0.1), SelectGlobalPool())
+    mgp = VertexMutation(MutationProbability(LogMutation(v -> "Mutate global pool type for $(name(v))", MutateGlobalPool()), 0.1), SelectGlobalPool())
 
     # If isbig then perform the mutation operation which is guaranteed to not increase the size
     # This is done mostly to avoid OOM and time outs.
