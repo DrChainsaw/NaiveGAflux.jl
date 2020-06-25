@@ -237,7 +237,6 @@ function crossoverswap!(vin1::AbstractVertex, vout1::AbstractVertex, vin2::Abstr
 
     # success1 mapped to vin2 and vout2 looks backwards, but remember that vin2 and vout2 are the new guys being inserted in everything connected to i1 and o1
     # Returning success status instead of acting as a noop at failure is not very nice, but I could not come up with a way which was 100% to revert a botched attempt and making a backup of vertices before doing any changes is not easy to deal with for the receiver either
-    # Would have liked to merge those apply_mutation into the strategy, but for one reason or the other things kept failing when I tried it. Maybe worth trying again...
 
     success1 = addinedges!(vin2, i1, strategy)
     success1 &= success1 && addoutedges!(vout2, o1, strategy)
@@ -333,7 +332,10 @@ end
 function default_crossoverswap_strategy(valuefun = default_neuronselect)
     alignstrat = PostAlignJuMP(DefaultJuMPΔSizeStrategy(), fallback=FailAlignSizeWarn(FailAlignSizeNoOp(), (vin,vout) -> "Failed to align sizes for vertices $(name(vin)) and $(name(vout)) for crossover. Reverting..."))
 
-    selectstrat = OutSelect{Exact}(OutSelect{Relaxed}(LogSelectionFallback("Reverting...", NoutRevert()))) |> TruncateInIndsToValid
+    # Must have exact solution as OutSelect{Relaxed} is allowed to change the nout/nin and this leads to size mismatches when vertices whose outputs are not part of all_in_Δsize_graph are changed.
+
+    # This could perhaps be considered a bug in NaiveNASlib, maybe even the same as https://github.com/DrChainsaw/NaiveNASlib.jl/issues/39 as it also here is unclear why nout is changed when there is no constraint in place (or?) and neuron value is guaranteed to be positive.
+    selectstrat = OutSelect{Exact}(LogSelectionFallback("Reverting...", NoutRevert())) |> TruncateInIndsToValid
 
     return PostSelectOutputs(selectstrat, alignstrat, valuefun, FailAlignSizeNoOp()) |> PostApplyMutationValid
 end
