@@ -233,7 +233,7 @@ EliteAndSusSelection(;popsize=50, nelites=2, evolve=crossovermutate()) = EliteAn
 function evostrategy_internal(s::EliteAndSusSelection, inshape)
     elite = EliteSelection(s.nelites)
 
-    evolve = SusSelection(s.popsize - s.nelites, s.evolve(inshape))
+    evolve = SusSelection(s.popsize - s.nelites, EvolutionChain(ShuffleCandidates(), s.evolve(inshape)))
 
     combine = CombinedEvolution(elite, evolve)
     return AfterEvolution(combine, rename_models ∘ clear_redundant_vertices)

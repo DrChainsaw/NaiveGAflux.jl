@@ -75,6 +75,11 @@
         @test nseen == 2
     end
 
+    @testset "ShuffleCandidates" begin
+        pop = MockCand.(1:10)
+        @test evolve!(ShuffleCandidates(MersenneTwister(1)), pop) != pop
+    end
+
     @testset "EvolveCandidates" begin
         pop = MockCand.([2,3,5,9])
         @test fitness.(evolve!(EvolveCandidates(mc -> MockCand(2mc.val)), pop)) == 2fitness.(pop)

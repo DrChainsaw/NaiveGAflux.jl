@@ -174,6 +174,21 @@ function _evolve!(e::PairCandidates, pop)
 end
 
 """
+    ShuffleCandidates
+    ShuffleCandidates()
+    ShuffleCandidates(rng)
+
+Shuffles the population using `rng`.
+
+Useful with [`PairCandidates`](@ref) in case the prior selection does not shuffle the population.
+"""
+struct ShuffleCandidates{R} <: AbstractEvolution
+    rng::R
+end
+ShuffleCandidates() = ShuffleCandidates(rng_default)
+_evolve!(e::ShuffleCandidates, pop) = shuffle(e.rng, pop)
+
+"""
     EvolveCandidates <: AbstractEvolution
     EvolveCandidates(fun)
 
