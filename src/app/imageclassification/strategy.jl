@@ -444,7 +444,7 @@ function add_vertex_mutation(acts)
     wrapitup(as) = AddVertexMutation(rep_fork_res(as, 1,loglevel=Logging.Info), outselect)
 
     add_conv = wrapitup(convspace(default_layerconf(),2 .^(4:9), 1:2:5, acts,loglevel=Logging.Info))
-    add_dense = wrapitup(LoggingArchSpace(Logging.Info, VertexSpace(default_layerconf(), NamedLayerSpace("dense", DenseSpace(2 .^(4:9), acts)))))
+    add_dense = wrapitup(LoggingArchSpace(VertexSpace(default_layerconf(), NamedLayerSpace("dense", DenseSpace(2 .^(4:9), acts)));level = Logging.Info))
 
     return MutationChain(MutationFilter(is_convtype, add_conv), MutationFilter(!is_convtype, add_dense))
 end

@@ -59,21 +59,20 @@ function rep_fork_res(s, n, min_rp=1;loglevel=Logging.Debug)
     resconf = VertexConf(outwrap = ActivationContribution, traitdecoration = MutationShield ∘ NaiveGAflux.default_logging())
     concconf = ConcConf(ActivationContribution,  MutationShield ∘ NaiveGAflux.default_logging())
 
-    msgfun(v) = "\tCreated $(name(v)), nin: $(nin(v)), nout: $(nout(v))"
+    msgfun(v) = "Created $(name(v)), nin: $(nin(v)), nout: $(nout(v))"
 
-    rep = RepeatArchSpace(s, min_rp:2)
-    fork = LoggingArchSpace(loglevel, msgfun, ForkArchSpace(rep, min_rp:3, conf=concconf))
-    res = LoggingArchSpace(loglevel, msgfun, ResidualArchSpace(rep, resconf))
-    rep = LoggingArchSpace(loglevel, msgfun, rep)
+    rep = RepeatArchSpace(s, min_rp:2) # Does not need logging as layers log themselves
+    fork = LoggingArchSpace(msgfun, ForkArchSpace(rep, min_rp:3, conf=concconf); level = loglevel)
+    res = LoggingArchSpace(msgfun, ResidualArchSpace(rep, resconf); level = loglevel)
     # Manical cackling laughter...
     return rep_fork_res(ArchSpace(ParSpace([rep, fork, res])), n-1, 0, loglevel=loglevel)
 end
 
 function convspace(conf, outsizes, kernelsizes, acts; loglevel=Logging.Debug)
     # CoupledParSpace due to CuArrays issue# 356
-    msgfun(v) = "\tCreated $(name(v)), nin: $(nin(v)), nout: $(nout(v))"
-    conv2d = LoggingArchSpace(loglevel, msgfun, VertexSpace(conf, NamedLayerSpace("conv2d", ConvSpace2D(outsizes, acts, kernelsizes))))
-    bn = LoggingArchSpace(loglevel, msgfun, VertexSpace(conf, NamedLayerSpace("batchnorm", BatchNormSpace(acts))))
+    msgfun(v) = "Created $(name(v)), nin: $(nin(v)), nout: $(nout(v))"
+    conv2d = LoggingArchSpace(msgfun, VertexSpace(conf, NamedLayerSpace("conv2d", ConvSpace2D(outsizes, acts, kernelsizes))); level=loglevel)
+    bn = LoggingArchSpace(msgfun, VertexSpace(conf, NamedLayerSpace("batchnorm", BatchNormSpace(acts))); level=loglevel)
 
     # Make sure that each alternative has the option to change output size
     # This is important to make fork and res play nice together

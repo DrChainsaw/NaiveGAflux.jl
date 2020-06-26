@@ -173,22 +173,29 @@ end
 
 """
     LoggingLayerSpace <: AbstractLayerSpace
-    LoggingLayerSpace(s::AbstractLayerSpace)
-    LoggingLayerSpace(level::LogLevel, s::AbstractLayerSpace)
-    LoggingLayerSpace(level::LogLevel, msgfun::Function, s::AbstractLayerSpace)
+    LoggingLayerSpace(s::AbstractLayerSpace; level=Logging.Debug, nextlogfun=() -> PrefixLogger("   "))
+    LoggingLayerSpace(msgfun, s::AbstractLayerSpace; level = Logging.Debug, nextlogfun = () -> PrefixLogger("   "))
+    LoggingLayerSpace(level::LogLevel, msgfun, nextlogfun, s::AbstractLayerSpace)
 
 Logs `msgfun(layer)` at loglevel `level` after creating a `layer` from `s`.
+
+Calling `nextlogfun()` produces an `AbstractLogger` which will be used when creating `layer` from `s`.
+
+By default, this is used to add a level of indentation to subsequent logging calls which makes logs of hierarchical archspaces easier to read. Set `nextlogfun = () -> current_logger()` to remove this behaviour.
 """
-struct LoggingLayerSpace <: AbstractLayerSpace
-    level::LogLevel
-    msgfun::Function
-    s::AbstractLayerSpace
+struct LoggingLayerSpace{F,L<:LogLevel,LF,T <: AbstractLayerSpace}  <: AbstractLayerSpace
+    msgfun::F
+    level::L
+    nextlogfun::LF
+    s::T
 end
-LoggingLayerSpace(s::AbstractLayerSpace) = LoggingLayerSpace(Logging.Debug, s)
-LoggingLayerSpace(level::LogLevel, s::AbstractLayerSpace) = LoggingLayerSpace(level, l -> "Create $l from $(name(s))", s)
+LoggingLayerSpace(s::AbstractLayerSpace; level=Logging.Debug, nextlogfun=() -> PrefixLogger("   ")) = LoggingLayerSpace(l -> "Create $l from $(name(s))", level, nextlogfun, s)
+LoggingLayerSpace(msgfun, s::AbstractLayerSpace; level = Logging.Debug, nextlogfun = () -> PrefixLogger("   ")) = LoggingLayerSpace(msgfun, level, nextlogfun, s)
 NaiveNASlib.name(s::LoggingLayerSpace) = name(s.s)
 function (s::LoggingLayerSpace)(in::Integer,rng=rng_default; outsize=missing, wi=DefaultWeightInit())
-    layer = ismissing(outsize) ? s.s(in, rng) : s.s(in, rng, outsize=outsize, wi=wi)
+    layer = with_logger(s.nextlogfun()) do
+        ismissing(outsize) ? s.s(in, rng) : s.s(in, rng, outsize=outsize, wi=wi)
+    end
     msg = s.msgfun(layer)
     @logmsg s.level msg
     return layer
@@ -339,26 +346,35 @@ ConcConf() = ConcConf(ActivationContribution, validated() ∘ default_logging())
 
 """
     LoggingArchSpace <: AbstractArchSpace
-    LoggingArchSpace(s::AbstractArchSpace)
-    LoggingArchSpace(level::LogLevel, s::AbstractArchSpace)
-    LoggingArchSpace(level::LogLevel, msgfun::Function, s::AbstractArchSpace)
+    LoggingArchSpace(s::AbstractArchSpace; level=Logging.Debug, nextlogfun=in -> PrefixLogger("   "))
+    LoggingArchSpace(msgfun, s::AbstractArchSpace; level=Logging.Debug, nextlogfun=in -> PrefixLogger("   "))
+    LoggingArchSpace(msgfun::Function, level::LogLevel, nextlogfun, s::AbstractArchSpace)
 
 Logs `msgfun(vertex)` at loglevel `level` after creating a `vertex` from `s`.
+
+Calling `nextlogfun(in)` where `in` is the input vertex produces an `AbstractLogger` which will be used when creating `vertex` from `s`.
+
+By default, this is used to add a level of indentation to subsequent logging calls which makes logs of hierarchical archspaces easier to read. Set `nextlogfun = e -> current_logger()` to remove this behaviour.
 """
-struct LoggingArchSpace <: AbstractArchSpace
-    level::LogLevel
-    msgfun::Function
-    s::AbstractArchSpace
+struct LoggingArchSpace{F,L<:LogLevel,LF,T <: AbstractArchSpace} <: AbstractArchSpace
+    msgfun::F
+    level::L
+    nextlogfun::LF
+    s::T
 end
-LoggingArchSpace(s::AbstractArchSpace) = LoggingArchSpace(Logging.Debug, s)
-LoggingArchSpace(level::LogLevel, s::AbstractArchSpace) = LoggingArchSpace(level, v -> "Created $(name(v))", s)
+LoggingArchSpace(s::AbstractArchSpace; level=Logging.Debug, nextlogfun=in -> PrefixLogger("   ")) = LoggingArchSpace(v -> "Created $(name(v))", level, nextlogfun, s)
+LoggingArchSpace(msgfun, s::AbstractArchSpace; level=Logging.Debug, nextlogfun=in -> PrefixLogger("   ")) = LoggingArchSpace(msgfun, level, nextlogfun, s)
 function (s::LoggingArchSpace)(in::AbstractVertex,rng=rng_default; outsize=missing, wi=DefaultWeightInit())
-    layer = ismissing(outsize) ? s.s(in, rng) : s.s(in, rng, outsize=outsize, wi=wi)
+    layer = with_logger(s.nextlogfun(in)) do
+        ismissing(outsize) ? s.s(in, rng) : s.s(in, rng, outsize=outsize, wi=wi)
+    end
     @logmsg s.level s.msgfun(layer)
     return layer
 end
 function (s::LoggingArchSpace)(namestr::String, in::AbstractVertex,rng=rng_default; outsize=missing, wi=DefaultWeightInit())
-    layer = ismissing(outsize) ? s.s(namestr, in, rng) : s.s(namestr, in, rng, outsize=outsize, wi=wi)
+    layer = with_logger(s.nextlogfun(in)) do
+        ismissing(outsize) ? s.s(namestr, in, rng) : s.s(namestr, in, rng, outsize=outsize, wi=wi)
+    end
     @logmsg s.level s.msgfun(layer)
     return layer
 end
