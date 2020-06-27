@@ -263,72 +263,6 @@ function check_singleinput!(v1, v2, mergefun)
     return v1, v2
 end
 
-#TODO: Add in NaiveNASlib?
-struct FailAlignSizeNoOp <: AbstractAlignSizeStrategy end
-NaiveNASlib.postalignsizes(s::FailAlignSizeNoOp, vin, vout, pos) = false
-NaiveNASlib.prealignsizes(s::FailAlignSizeNoOp, vin, vout, will_rm) = false
-
-struct PostApplyMutationValid{S<:AbstractAlignSizeStrategy} <: AbstractAlignSizeStrategy
-    strategy::S
-end
-
-# TODO: Add to NaiveNASlib as bugfix?
-# Needed because mutate_inputs SOs if any vertex does not have any inputs
-function NaiveNASlib.postalignsizes(s::PostApplyMutationValid, vin, vout, pos)
-    if NaiveNASlib.postalignsizes(s.strategy, vin, vout, pos)
-        apply_mutation.(filter(v -> !isempty(inputs(v)), all_in_Δsize_graph(vin, Output())))
-        return true
-    end
-    return false
-end
-
-# TODO: Add in NaiveNASlib
-struct TruncateInIndsToValid{S} <: AbstractSelectionStrategy
-    strategy::S
-end
-
-function NaiveNASlib.Δoutputs(s::TruncateInIndsToValid, vs::AbstractVector{<:AbstractVertex}, valuefun::Function)
-    success, ins, outs = NaiveNASlib.solve_outputs_selection(s.strategy, vs, valuefun)
-    if success
-        for (vv, ininds) in ins
-            for innr in eachindex(ininds)
-                ininds[innr] = aligntomax(nin_org(vv)[innr], ininds[innr])
-            end
-            newins, newouts = align_outs_to_ins(vv, ins[vv], outs[vv])
-            ins[vv] = newins
-            outs[vv] = newouts
-        end
-        Δoutputs(ins, outs, vs)
-    end
-    return success
-end
-
-aligntomax(maxval, ::Missing) = missing
-function aligntomax(maxval, arr)
-    arr = copy(arr)
-    maxind = argmax(arr)
-    while arr[maxind] > maxval
-        newval = maxval
-        while newval in arr && newval > -1
-            newval -= 1
-        end
-        arr[maxind] = newval == 0 ? -1 : newval
-        maxind = argmax(arr)
-    end
-    return arr
-end
-
-align_outs_to_ins(v, ins, outs) = align_outs_to_ins(trait(v), v, ins, outs)
-align_outs_to_ins(t::DecoratingTrait, v, ins, outs) = align_outs_to_ins(base(t), v, ins, outs)
-align_outs_to_ins(t, v, ins, outs) = ins,outs
-function align_outs_to_ins(::SizeInvariant, v, ins::AbstractArray, outs)
-    isempty(ins) && return ins, outs
-    inds = ins[1]
-    newins = repeat([inds], length(ins))
-    newouts = ismissing(outs) ? outs : inds
-    return newins, newouts
-end
-
 function default_crossoverswap_strategy(valuefun = default_neuronselect)
     alignstrat = PostAlignJuMP(DefaultJuMPΔSizeStrategy(), fallback=FailAlignSizeWarn(FailAlignSizeNoOp(), (vin,vout) -> "Failed to align sizes for vertices $(name(vin)) and $(name(vout)) for crossover. Reverting..."))
 
@@ -337,7 +271,7 @@ function default_crossoverswap_strategy(valuefun = default_neuronselect)
     # This could perhaps be considered a bug in NaiveNASlib, maybe even the same as https://github.com/DrChainsaw/NaiveNASlib.jl/issues/39 as it also here is unclear why nout is changed when there is no constraint in place (or?) and neuron value is guaranteed to be positive.
     selectstrat = OutSelect{Exact}(LogSelectionFallback("Reverting...", NoutRevert())) |> TruncateInIndsToValid
 
-    return PostSelectOutputs(selectstrat, alignstrat, valuefun, FailAlignSizeNoOp()) |> PostApplyMutationValid
+    return PostSelectOutputs(selectstrat, alignstrat, valuefun, FailAlignSizeNoOp()) |> PostApplyMutation
 end
 
 stripedges!(vin, vout) = stripinedges!(vin) ,stripoutedges!(vout)
