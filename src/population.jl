@@ -8,7 +8,7 @@ Keeps track of which generation it is and allows for iterating over its members.
 """
 abstract type AbstractPopulation end
 
-generation(p::AbstractPopulation) = generation(b.base)
+generation(p::AbstractPopulation) = generation(p.base)
 
 Base.iterate(p::AbstractPopulation, s...) = Base.iterate(wrappedpop(p), s...)
 

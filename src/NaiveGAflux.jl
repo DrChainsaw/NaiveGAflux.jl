@@ -30,7 +30,7 @@ export evolve!, AbstractEvolution, NoOpEvolution, AfterEvolution, ResetAfterEvol
 export Population, generation
 
 # misc types
-export Probability, MutationShield, ApplyIf, RemoveIfSingleInput, RepeatPartitionIterator, SeedIterator, MapIterator, GpuIterator, BatchIterator, FlipIterator, ShiftIterator, ShuffleIterator, PersistentArray, ShieldedOpt
+export Probability, MutationShield, ApplyIf, RemoveIfSingleInput, RepeatPartitionIterator, SeedIterator, MapIterator, GpuIterator, BatchIterator, ShuffleIterator, PersistentArray, ShieldedOpt
 
 # Persistence
 export persist
@@ -57,7 +57,7 @@ export BaseLayerSpace, AbstractParSpace, SingletonParSpace, Singleton2DParSpace,
 export AbstractWeightInit, DefaultWeightInit, IdentityWeightInit, PartialIdentityWeightInit, ZeroWeightInit
 
 # functions
-export mutate, allow_mutation, select, check_apply, nparams
+export allow_mutation, select, check_apply, nparams
 
 # Pre-built programs for fitting data
 export AutoFlux
