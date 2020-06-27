@@ -556,7 +556,7 @@
             end
 
             @testset "VertexCrossover" begin
-                import NaiveGAflux: select_neurons, default_neuronselect, default_pairgen
+                import NaiveGAflux: default_pairgen
 
                 pairgen_outer(vs1,vs2; ind1=1) = default_pairgen(vs1, vs2; ind1=2ind1)
                 pairgen_inner(vs1, vs2) = default_pairgen(vs1, vs2; ind1=length(vs1))
@@ -639,12 +639,13 @@
                 return CompGraph(vi, dvn)
             end
 
-            @testset "Crossover with MutationProbability" begin
-                import NaiveGAflux: select_neurons, default_neuronselect, default_pairgen
+            @testset "Crossover with MutationProbability and NeuronSelectMutation" begin
+                import NaiveGAflux: default_pairgen
 
                 pairgen_inner(vs1, vs2) = default_pairgen(vs1, vs2; ind1=length(vs1))
 
-                c = VertexCrossover(MutationProbability(CrossoverSwap(;pairgen=pairgen_inner, strategy=teststrat), Probability(0.2, MockRng([0.3, 0.1, 0.3]))))
+                # NeuronSelectMutation doesn't really do anything. It is just to test the code path until a use case for it materializes. I should probably just have deleted the methods instead when no longer needed...
+                c = VertexCrossover(MutationProbability(PostMutation(NeuronSelectMutation(CrossoverSwap(;pairgen=pairgen_inner, strategy=teststrat)), neuronselect), Probability(0.2, MockRng([0.3, 0.1, 0.3]))))
 
                 ga = g("a", 3:6, 7:8)
                 gb = g("b", 2:3, 4:10)
