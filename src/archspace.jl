@@ -189,7 +189,7 @@ struct LoggingLayerSpace{F,L<:LogLevel,LF,T <: AbstractLayerSpace}  <: AbstractL
     nextlogfun::LF
     s::T
 end
-LoggingLayerSpace(s::AbstractLayerSpace; level=Logging.Debug, nextlogfun=() -> PrefixLogger("   ")) = LoggingLayerSpace(l -> "Create $l from $(name(s))", level, nextlogfun, s)
+LoggingLayerSpace(s::AbstractLayerSpace; level=Logging.Debug, nextlogfun=() -> PrefixLogger("   ")) = LoggingLayerSpace(l -> "Create $l from $(name(s))", s, level=level, nextlogfun=nextlogfun)
 LoggingLayerSpace(msgfun, s::AbstractLayerSpace; level = Logging.Debug, nextlogfun = () -> PrefixLogger("   ")) = LoggingLayerSpace(msgfun, level, nextlogfun, s)
 NaiveNASlib.name(s::LoggingLayerSpace) = name(s.s)
 function (s::LoggingLayerSpace)(in::Integer,rng=rng_default; outsize=missing, wi=DefaultWeightInit())
