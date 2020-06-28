@@ -18,8 +18,11 @@ For example, the ΔShapes describing a 2D convolutional layer has `N == M == 2` 
 abstract type ΔShape{N,M} end
 
 shapeΔ(s::ΔShape) = s.Δshape
-indims(s::ΔShape{N,M}) where {N,M} = N
-outdims(s::ΔShape{N,M}) where {N,M} = M
+ndimsin(::ΔShape{N,M}) where {N,M} = N
+ndimsout(::ΔShape{N,M}) where {N,M} = M
+
+ndimsin(s::Tuple{ΔShape, Vararg{ΔShape}}) = ndimsin(first(s))
+ndimsout(s::Tuple{ΔShape, Vararg{ΔShape}}) = ndimsout(last(s))
 
 """
     fshape(s::ΔShape{N,M}, shape::Tuple{N,Integer})

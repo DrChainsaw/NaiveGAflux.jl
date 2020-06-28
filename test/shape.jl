@@ -1,5 +1,5 @@
 @testset "Shape" begin
-    import NaiveGAflux: ΔShape, ShapeAdd, ShapeMul, ShapeDiv, fshape, revert, combine, combine, filter_noops, ShapeTrace, shapetrace, Δshapes, squashshapes, orderΔshapes
+    import NaiveGAflux: ΔShape, ShapeAdd, ShapeMul, ShapeDiv, fshape, revert, combine, combine, filter_noops, ShapeTrace, shapetrace, Δshapes, squashshapes, orderΔshapes, ndimsout, ndimsin
 
     @testset "ΔShapes" begin
 
@@ -28,6 +28,13 @@
             @test revert(ShapeDiv((1,2))) == ShapeMul((1,2))
             @test filter_noops(ShapeDiv((0,1,2,3))) == tuple(ShapeDiv((0,1,2,3)))
             @test filter_noops(ShapeDiv((1,1))) == tuple()
+            
+        end
+
+        @testset "ndims" begin
+            @test ndimsin(ShapeDiv(1,2,3)) == ndimsout(ShapeDiv(1,2,3)) == 3
+            @test ndimsin((ShapeAdd(2,2), ShapeDiv(1,2,3))) == 2
+            @test ndimsout((ShapeAdd(2,2), ShapeDiv(1,2,3))) == 3
         end
 
         @testset "Combine $s1 and $s2" for (s1,s2,exp) in (
@@ -332,7 +339,6 @@
         end
 
         @testset "Squash with different start types" begin
-            import Setfield: @set
             import NaiveGAflux: allΔshapetypes
             vi = iv()
 
@@ -345,7 +351,7 @@
 
             st = shapetrace(mv);
             # All vertices insert ΔShapes in the same order, so we need to do this to make them have different order
-            st = Setfield.@set st.trace[1][1].trace = filter_noops(st.trace[1][1].trace)
+            st = NaiveGAflux.@set st.trace[1][1].trace = filter_noops(st.trace[1][1].trace)
 
             @test allΔshapetypes(st) == [ShapeDiv{2}, ShapeAdd{2}]
 
