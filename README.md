@@ -67,10 +67,11 @@ Tired of tuning hyperparameters? Once you've felt the rush from reasoning about 
 This package has the following main components:
 1. [Search spaces](#search-spaces)
 2. [Mutation operations](#mutation)
-3. [Fitness functions](#fitness-functions)
-4. [Candidate utilities](#candidate-utilities)
-5. [Evolution strategies](#evolution-strategies)
-6. [Iterators](#iterators)
+3. [Crossover operations](#crossover)
+4. [Fitness functions](#fitness-functions)
+5. [Candidate utilities](#candidate-utilities)
+6. [Evolution strategies](#evolution-strategies)
+7. [Iterators](#iterators)
 
 Each component is described more in detail below.
 
@@ -89,7 +90,7 @@ layerspace = VertexSpace(DenseSpace(3:10, [identity, relu, elu, selu]))
 initial_hidden = RepeatArchSpace(layerspace, 1:3)
 # Output layer has fixed size and is shielded from mutation
 outlayer = VertexSpace(Shielded(), DenseSpace(nlabels, identity))
-initial_searchspace = ListArchSpace(initial_hidden, outlayer)
+initial_searchspace = ArchSpaceChain(initial_hidden, outlayer)
 
 # Sample 5 models from the initial search space
 models = [CompGraph(inshape, initial_searchspace(inshape)) for _ in 1:5]
@@ -123,7 +124,7 @@ mp(m, p) = VertexMutation(MutationProbability(m, p))
 addlayer = mp(AddVertexMutation(layerspace), 0.4)
 remlayer = mp(RemoveVertexMutation(), 0.4)
 
-mutation = MutationList(remlayer, addlayer)
+mutation = MutationChain(remlayer, addlayer)
 
 # Selection
 elites = EliteSelection(2)
@@ -194,8 +195,8 @@ bs = VertexSpace(BatchNormSpace([identity, relu]))
 
 # Block of conv->bn and bn-conv respectively.
 # Need to make sure there is always at least one SizeAbsorb layer to make fork and res below play nice
-csbs = ListArchSpace(cs ,bs)
-bscs = ListArchSpace(bs, cs)
+csbs = ArchSpaceChain(cs ,bs)
+bscs = ArchSpaceChain(bs, cs)
 
 # Randomly generates a conv->block:
 cblock = ArchSpace(ParSpace1D(cs, csbs, bscs))
@@ -220,7 +221,7 @@ blocks = RepeatArchSpace(repforkres, 1:3)
 
 # End each block with subsamping through maxpooling
 ms = VertexSpace(MaxPoolSpace(PoolSpace2D([2])))
-reduction = ListArchSpace(blocks, ms)
+reduction = ArchSpaceChain(blocks, ms)
 
 # And lets do 2 to 4 reductions
 featureextract = RepeatArchSpace(reduction, 2:4)
@@ -230,10 +231,10 @@ dense = VertexSpace(DenseSpace(16:512, [relu, selu]))
 drep = RepeatArchSpace(dense, 0:2)
 # Last layer has fixed output size (number of labels)
 dout=VertexSpace(Shielded(), DenseSpace(10, identity))
-output = ListArchSpace(drep, dout)
+output = ArchSpaceChain(drep, dout)
 
 # Aaaand lets glue it together: Feature extracting conv+bn layers -> global pooling -> dense layers
-archspace = ListArchSpace(featureextract, GlobalPoolSpace(), output)
+archspace = ArchSpaceChain(featureextract, GlobalPoolSpace(), output)
 
 # Input is 3 channel image
 inputshape = inputvertex("input", 3, FluxConv{2}())
@@ -249,7 +250,7 @@ graph2 = CompGraph(inputshape, archspace(inputshape))
 
 ### Mutation
 
-Mutation is the way one existing candidate is transformed to a slightly different candidate. NaiveGAflux supports doing this while preserving weights and alignment between layers, thus reducing the impact of mutating an already trained candidate.
+Mutation is the way one candidate is transformed to a slightly different candidate. NaiveGAflux supports doing this while preserving parameters and alignment between layers, thus reducing the impact of mutating an already trained candidate.
 
 The following basic mutation operations are currently supported:
 1. Change the output size of vertices using `NoutMutation`.
@@ -347,18 +348,106 @@ addmut = AddVertexMutation(VertexSpace(DenseSpace(5, identity)), IdentityWeightI
 
 # Chaining mutations is also useful:
 noutmut = NeuronSelectMutation(NoutMutation(-0.8, 0.8))
-mutation = VertexMutation(MutationList(addmut, noutmut))
+mutation = VertexMutation(MutationChain(addmut, noutmut))
 # For deeply composed blobs like this, it can be cumbersome to "dig up" the NeuronSelectMutation.
-# NeuronSelect helps finding NeuronSelectMutations in the compositional hierarchy
-neuronselect = NeuronSelect()
+# neuronselect helps finding NeuronSelectMutations in the compositional hierarchy
 
-# PostMutation lets us add actions to perform after a mutation is done
+# PostMutation lets us add actions to perform after a mutation is done (such as neuronselect)
 logselect(m, g) = @info "Selecting parameters..."
 mutation = PostMutation(mutation, logselect, neuronselect)
 
 @test_logs (:info, "Selecting parameters...") mutation(graph)
 
 @test nout.(vertices(graph)) == nout_org.(vertices(graph)) == [3,8,11,10]
+```
+
+### Crossover
+
+Crossover is the way two candidates are combined to create new candidates. In NaiveGAflux crossover always maps two candidates into two new candidates. Just as for mutation, NaiveGAflux does this while preserving (to whatever extent possible) the parameters and alignment between layers of the combined models.
+
+Crossover operations might not seem to make much sense when using parameter inheritance (i.e the concept that children retain the parameters of their parents). Randomly combining layers from two very different models will most likely not result in a well performing model. There are however a few potentially redeeming effects:
+
+* Early in the evolution process parameters are not yet well fitted and inheriting parameters is not worse than random initialization
+* A mature population on the other hand will consist mostly of models which are close relatives and therefore have somewhat similar weights.
+
+Whether these effects actually make crossover a genuinely useful operation when evolving neural networks is not yet proven though. For now it is perhaps best to view the crossover operations as being provided mostly for the sake of completeness.
+
+The following basic crossover operations are currently supported:
+1. Swap segments between two models using `CrossoverSwap`.
+2. Swap optimizers between two candidates using `OptimizerCrossover`.
+3. Swap learning rate between two candidates using `LearningRateCrossover`.
+
+Most of the mutation utilities also work with crossover operations. Here are a few examples:
+
+```julia
+using NaiveGAflux, Random
+import NaiveGAflux: regraph
+Random.seed!(NaiveGAflux.rng_default, 0)
+
+invertex = inputvertex("A.in", 3, FluxDense())
+layer1 = mutable("A.layer1", Dense(nout(invertex), 4), invertex; layerfun=ActivationContribution)
+layer2 = mutable("A.layer2", Dense(nout(layer1), 5), layer1; layerfun=ActivationContribution)
+layer3 = mutable("A.layer3", Dense(nout(layer2), 3), layer2; layerfun=ActivationContribution)
+layer4 = mutable("A.layer4", Dense(nout(layer3), 2), layer3; layerfun=ActivationContribution)
+modelA = CompGraph(invertex, layer4)
+
+# Create an exact copy to show how parameter alignment is preserved
+# Prefix names with B so we can show that something actually happened
+changeprefix(str::String; cf) = replace(str, r"^A.\.*" => "B.")
+changeprefix(x...;cf=clone) = clone(x...; cf=cf)
+modelB = copy(modelA, changeprefix)
+
+indata = reshape(collect(Float32, 1:3*2), 3,2)
+@test modelA(indata) == modelB(indata)
+
+@test name.(vertices(modelA)) == ["A.in", "A.layer1", "A.layer2", "A.layer3", "A.layer4"]
+@test name.(vertices(modelB)) == ["B.in", "B.layer1", "B.layer2", "B.layer3", "B.layer4"]
+
+# CrossoverSwap takes ones vertex from each graph as input and swaps a random segment from each graph
+# By default it tries to make segments as similar as possible
+swapsame = CrossoverSwap()
+
+swapA = vertices(modelA)[4]
+swapB = vertices(modelB)[4]
+newA, newB = swapsame((swapA, swapB))
+
+# It returns vertices of a new graph in order to be compatible with mutation utilities
+# Parent models are not modified
+@test newA ∉ vertices(modelA)
+@test newB ∉ vertices(modelB)
+
+# This is an internal utility which should not be needed in normal use cases.
+modelAnew = regraph(newA)
+modelBnew = regraph(newB)
+
+@test name.(vertices(modelAnew)) == ["A.in", "B.layer1", "B.layer2", "B.layer3", "A.layer4"]
+@test name.(vertices(modelBnew)) == ["B.in", "A.layer1", "A.layer2", "A.layer3", "B.layer4"]
+
+@test modelA(indata) == modelB(indata) == modelAnew(indata) == modelBnew(indata)
+
+# Deviation parameter will randomly make segments unequal
+swapdeviation = CrossoverSwap(0.5)
+modelAnew2, modelBnew2 = regraph.(swapdeviation((swapA, swapB)))
+
+@test name.(vertices(modelAnew2)) == ["A.in", "B.layer2", "B.layer3", "A.layer4"]
+@test name.(vertices(modelBnew2)) == ["B.in", "B.layer1", "A.layer1", "A.layer2", "A.layer3", "B.layer4"]
+
+# VertexCrossover applies the wrapped crossover operation to all vertices in a CompGraph
+# It in addtion, it selects compatible pairs for us (i.e swapA and swapB).
+# It also takes an optional deviation parameter which is used when pairing
+crossoverall = VertexCrossover(swapdeviation, 0.5)
+
+modelAnew3, modelBnew3 = crossoverall((modelA, modelB))
+
+# I guess things got swapped back and forth so many times not much changed in the end
+@test name.(vertices(modelAnew3)) == ["A.in", "A.layer2", "A.layer3", "A.layer4"]
+@test name.(vertices(modelBnew3)) == ["B.in", "B.layer1", "A.layer1", "B.layer2", "B.layer3", "B.layer4"]
+
+# As advertised above, crossovers interop with most mutation utilities, just remember that input is a tuple
+# Perform the swapping operation with a 30% probability for each valid vertex pair.
+crossoversome = VertexCrossover(MutationProbability(LogMutation(((v1,v2)::Tuple) -> "Swap $(name(v1)) and $(name(v2))", swapdeviation), 0.3))
+
+@test_logs (:info, "Swap A.layer2 and B.layer2") crossoversome((modelA, modelB))
 ```
 
 ### Fitness functions

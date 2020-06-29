@@ -173,22 +173,29 @@ end
 
 """
     LoggingLayerSpace <: AbstractLayerSpace
-    LoggingLayerSpace(s::AbstractLayerSpace)
-    LoggingLayerSpace(level::LogLevel, s::AbstractLayerSpace)
-    LoggingLayerSpace(level::LogLevel, msgfun::Function, s::AbstractLayerSpace)
+    LoggingLayerSpace(s::AbstractLayerSpace; level=Logging.Debug, nextlogfun=() -> PrefixLogger("   "))
+    LoggingLayerSpace(msgfun, s::AbstractLayerSpace; level = Logging.Debug, nextlogfun = () -> PrefixLogger("   "))
+    LoggingLayerSpace(level::LogLevel, msgfun, nextlogfun, s::AbstractLayerSpace)
 
 Logs `msgfun(layer)` at loglevel `level` after creating a `layer` from `s`.
+
+Calling `nextlogfun()` produces an `AbstractLogger` which will be used when creating `layer` from `s`.
+
+By default, this is used to add a level of indentation to subsequent logging calls which makes logs of hierarchical archspaces easier to read. Set `nextlogfun = () -> current_logger()` to remove this behaviour.
 """
-struct LoggingLayerSpace <: AbstractLayerSpace
-    level::LogLevel
-    msgfun::Function
-    s::AbstractLayerSpace
+struct LoggingLayerSpace{F,L<:LogLevel,LF,T <: AbstractLayerSpace}  <: AbstractLayerSpace
+    msgfun::F
+    level::L
+    nextlogfun::LF
+    s::T
 end
-LoggingLayerSpace(s::AbstractLayerSpace) = LoggingLayerSpace(Logging.Debug, s)
-LoggingLayerSpace(level::LogLevel, s::AbstractLayerSpace) = LoggingLayerSpace(level, l -> "Create $l from $(name(s))", s)
+LoggingLayerSpace(s::AbstractLayerSpace; level=Logging.Debug, nextlogfun=() -> PrefixLogger("   ")) = LoggingLayerSpace(l -> "Create $l from $(name(s))", s, level=level, nextlogfun=nextlogfun)
+LoggingLayerSpace(msgfun, s::AbstractLayerSpace; level = Logging.Debug, nextlogfun = () -> PrefixLogger("   ")) = LoggingLayerSpace(msgfun, level, nextlogfun, s)
 NaiveNASlib.name(s::LoggingLayerSpace) = name(s.s)
 function (s::LoggingLayerSpace)(in::Integer,rng=rng_default; outsize=missing, wi=DefaultWeightInit())
-    layer = ismissing(outsize) ? s.s(in, rng) : s.s(in, rng, outsize=outsize, wi=wi)
+    layer = with_logger(s.nextlogfun()) do
+        ismissing(outsize) ? s.s(in, rng) : s.s(in, rng, outsize=outsize, wi=wi)
+    end
     msg = s.msgfun(layer)
     @logmsg s.level msg
     return layer
@@ -339,26 +346,35 @@ ConcConf() = ConcConf(ActivationContribution, validated() ∘ default_logging())
 
 """
     LoggingArchSpace <: AbstractArchSpace
-    LoggingArchSpace(s::AbstractArchSpace)
-    LoggingArchSpace(level::LogLevel, s::AbstractArchSpace)
-    LoggingArchSpace(level::LogLevel, msgfun::Function, s::AbstractArchSpace)
+    LoggingArchSpace(s::AbstractArchSpace; level=Logging.Debug, nextlogfun=in -> PrefixLogger("   "))
+    LoggingArchSpace(msgfun, s::AbstractArchSpace; level=Logging.Debug, nextlogfun=in -> PrefixLogger("   "))
+    LoggingArchSpace(msgfun::Function, level::LogLevel, nextlogfun, s::AbstractArchSpace)
 
 Logs `msgfun(vertex)` at loglevel `level` after creating a `vertex` from `s`.
+
+Calling `nextlogfun(in)` where `in` is the input vertex produces an `AbstractLogger` which will be used when creating `vertex` from `s`.
+
+By default, this is used to add a level of indentation to subsequent logging calls which makes logs of hierarchical archspaces easier to read. Set `nextlogfun = e -> current_logger()` to remove this behaviour.
 """
-struct LoggingArchSpace <: AbstractArchSpace
-    level::LogLevel
-    msgfun::Function
-    s::AbstractArchSpace
+struct LoggingArchSpace{F,L<:LogLevel,LF,T <: AbstractArchSpace} <: AbstractArchSpace
+    msgfun::F
+    level::L
+    nextlogfun::LF
+    s::T
 end
-LoggingArchSpace(s::AbstractArchSpace) = LoggingArchSpace(Logging.Debug, s)
-LoggingArchSpace(level::LogLevel, s::AbstractArchSpace) = LoggingArchSpace(level, v -> "Created $(name(v))", s)
+LoggingArchSpace(s::AbstractArchSpace; level=Logging.Debug, nextlogfun=in -> PrefixLogger("   ")) = LoggingArchSpace(v -> "Created $(name(v))", level, nextlogfun, s)
+LoggingArchSpace(msgfun, s::AbstractArchSpace; level=Logging.Debug, nextlogfun=in -> PrefixLogger("   ")) = LoggingArchSpace(msgfun, level, nextlogfun, s)
 function (s::LoggingArchSpace)(in::AbstractVertex,rng=rng_default; outsize=missing, wi=DefaultWeightInit())
-    layer = ismissing(outsize) ? s.s(in, rng) : s.s(in, rng, outsize=outsize, wi=wi)
+    layer = with_logger(s.nextlogfun(in)) do
+        ismissing(outsize) ? s.s(in, rng) : s.s(in, rng, outsize=outsize, wi=wi)
+    end
     @logmsg s.level s.msgfun(layer)
     return layer
 end
 function (s::LoggingArchSpace)(namestr::String, in::AbstractVertex,rng=rng_default; outsize=missing, wi=DefaultWeightInit())
-    layer = ismissing(outsize) ? s.s(namestr, in, rng) : s.s(namestr, in, rng, outsize=outsize, wi=wi)
+    layer = with_logger(s.nextlogfun(in)) do
+        ismissing(outsize) ? s.s(namestr, in, rng) : s.s(namestr, in, rng, outsize=outsize, wi=wi)
+    end
     @logmsg s.level s.msgfun(layer)
     return layer
 end
@@ -417,18 +433,18 @@ repeatinitW(wi::PartialIdentityWeightInit, invertex, outsize) = nout(invertex) =
 repeatinitW(wi::PartialIdentityWeightInit, invertex, ::Missing) = wi
 
 """
-    ListArchSpace <:AbstractArchSpace
+    ArchSpaceChain <:AbstractArchSpace
 
-Search space composed of a list of search spaces.
+Chains multiple `AbstractArchSpace`s after each other.
 
-Basically a more deterministic version of RepeatArchSpace.
+Input vertex will be used to generate an output vertex from the first `AbstractArchSpace` in the chain which is then used to generate a next output vertex from the next `AbstractArchSpace` in the chain and so on. The output from the last `AbstractArchSpace` is returned.
 """
-struct ListArchSpace <:AbstractArchSpace
-    s::AbstractVector{<:AbstractArchSpace}
+struct ArchSpaceChain{S<:AbstractVector{<:AbstractArchSpace}} <:AbstractArchSpace
+    s::S
 end
-ListArchSpace(s::AbstractArchSpace...) = ListArchSpace(collect(s))
-(s::ListArchSpace)(in::AbstractVertex, rng=rng_default; outsize=missing, wi=DefaultWeightInit()) = foldl((next, ss) -> ss(next, rng, outsize=outsize, wi=repeatinitW(wi, next, outsize)), s.s, init=in)
-(s::ListArchSpace)(name::String, in::AbstractVertex, rng=rng_default; outsize=missing, wi=DefaultWeightInit()) = foldl((next, i) -> s.s[i](join([name,".", i]), next, rng, outsize=outsize, wi=repeatinitW(wi, next, outsize)), eachindex(s.s), init=in)
+ArchSpaceChain(s::AbstractArchSpace...) = ArchSpaceChain(collect(s))
+(s::ArchSpaceChain)(in::AbstractVertex, rng=rng_default; outsize=missing, wi=DefaultWeightInit()) = foldl((next, ss) -> ss(next, rng, outsize=outsize, wi=repeatinitW(wi, next, outsize)), s.s, init=in)
+(s::ArchSpaceChain)(name::String, in::AbstractVertex, rng=rng_default; outsize=missing, wi=DefaultWeightInit()) = foldl((next, i) -> s.s[i](join([name,".", i]), next, rng, outsize=outsize, wi=repeatinitW(wi, next, outsize)), eachindex(s.s), init=in)
 
 
 """
@@ -544,7 +560,7 @@ GlobalPoolSpace(conf::LayerVertexConf, Ts...=(MaxPool, MeanPool)...) = FunctionS
 # About 50% faster on GPU to create a MeanPool and use it compared to dropdims(mean(x, dims=[1:2]), dims=(1,2)). CBA to figure out why...
 struct GlobalPool{PT} end
 GlobalPool(PT) = GlobalPool{PT}()
-(::GlobalPool{PT})(x::AbstractArray{<:Any, N}) where {N, PT} = dropdims(PT(size(x)[1:N-2])(x),dims=Tuple(1:N-2))
+(::GlobalPool{PT})(x::AbstractArray{<:Any, N}) where {N, PT} = Flux.flatten(PT(size(x)[1:N-2])(x))
 
 NaiveNASflux.layertype(gp::GlobalPool) = gp
 NaiveNASflux.layer(gp::GlobalPool) = gp

@@ -210,8 +210,8 @@ end
 
 """
     struct EliteAndSusSelection <: AbstractEvolutionStrategy
-    EliteAndSusSelection(popsize, nelites)
-    EliteAndSusSelection(;popsize=50, nelites=2)
+    EliteAndSusSelection(popsize, nelites, evolve)
+    EliteAndSusSelection(;popsize=50, nelites=2, evolve = crossovermutate())
 
 Standard evolution strategy.
 
@@ -223,17 +223,17 @@ Mutation operations are both applied to the model itself (change sizes, add/remo
 
 Finally, models are renamed so that the name of each vertex of the model of candidate `i` is prefixed with "model`i`".
 """
-struct EliteAndSusSelection <: AbstractEvolutionStrategy
+struct EliteAndSusSelection{F} <: AbstractEvolutionStrategy
     popsize::Int
     nelites::Int
+    evolve::F
 end
-EliteAndSusSelection(;popsize=50, nelites=2) = EliteAndSusSelection(popsize, nelites)
+EliteAndSusSelection(;popsize=50, nelites=2, evolve=crossovermutate()) = EliteAndSusSelection(popsize, nelites, evolve)
 
 function evostrategy_internal(s::EliteAndSusSelection, inshape)
     elite = EliteSelection(s.nelites)
 
-    mutate = EvolveCandidates(evolvecandidate(inshape))
-    evolve = SusSelection(s.popsize - s.nelites, mutate)
+    evolve = SusSelection(s.popsize - s.nelites, EvolutionChain(ShuffleCandidates(), s.evolve(inshape)))
 
     combine = CombinedEvolution(elite, evolve)
     return AfterEvolution(combine, rename_models ∘ clear_redundant_vertices)
@@ -241,8 +241,8 @@ end
 
 """
     struct EliteAndTournamentSelection <: AbstractEvolutionStrategy
-    EliteAndTournamentSelection(popsize, nelites, k, p)
-    EliteAndTournamentSelection(;popsize=50, nelites=2; k=2, p=1.0)
+    EliteAndTournamentSelection(popsize, nelites, k, p, evolve)
+    EliteAndTournamentSelection(;popsize=50, nelites=2; k=2, p=1.0, evolve = crossovermutate())
 
 Standard evolution strategy.
 
@@ -250,32 +250,64 @@ Selects `nelites` candidates to move on to the next generation without any mutat
 
 Also selects `popsize - nelites` candidates out of the whole population using [`TournamentSelection`](@ref) to evolve by applying random mutation.
 
-Mutation operations are both applied to the model itself (change sizes, add/remove vertices/edges) as well as to the optimizer (change learning rate and optimizer algorithm).
+Mutation operations are determined by `evolve` both applied to the model itself (change sizes, add/remove vertices/edges) as well as to the optimizer (change learning rate and optimizer algorithm).
 
 Finally, models are renamed so that the name of each vertex of the model of candidate `i` is prefixed with "model`i`".
 """
-struct EliteAndTournamentSelection <: AbstractEvolutionStrategy
+struct EliteAndTournamentSelection{R,F} <: AbstractEvolutionStrategy
     popsize::Int
     nelites::Int
     k::Int
-    p::Real
+    p::R
+    evolve::F
 end
-EliteAndTournamentSelection(;popsize=50, nelites=2, k=2, p=1.0) = EliteAndTournamentSelection(popsize, nelites, k, p)
+EliteAndTournamentSelection(;popsize=50, nelites=2, k=2, p=1.0, evolve = crossovermutate()) = EliteAndTournamentSelection(popsize, nelites, k, p, evolve)
 
 function evostrategy_internal(s::EliteAndTournamentSelection, inshape)
     elite = EliteSelection(s.nelites)
 
-    mutate = EvolveCandidates(evolvecandidate(inshape))
-    evolve = TournamentSelection(s.popsize - s.nelites, s.k, s.p, mutate)
+    evolve = TournamentSelection(s.popsize - s.nelites, s.k, s.p, s.evolve(inshape))
 
     combine = CombinedEvolution(elite, evolve)
     return AfterEvolution(combine, rename_models ∘ clear_redundant_vertices)
 end
 
-evolvecandidate(inshape) = evolvemodel(graphmutation(inshape), optmutation())
+"""
+    crossovermutate(;pcrossover=0.3, pmutate=0.9)
+
+Return a function which creates an [`EvolutionChain`](@ref) when called with an inputshape.
+
+Crossover will be applied with a probability of `pcrossover` while mutation will be applied with a probability of `pmutate`. Note that these probabilities apply to models only, not optimizers.
+
+Crossover is done using [`CrossoverSwap`](@ref) for models and [`LearningRateCrossover`](@ref) and [`OptimizerCrossover`](@ref) for optimizers.
+
+Mutation is applied both to the model itself (change sizes, add/remove vertices/edges) as well as to the optimizer (change learning rate and optimizer algorithm).
+"""
+crossovermutate(;pcrossover=0.3, pmutate=0.9) = function(inshape)
+    cross = candidatecrossover(pcrossover)
+    crossoverevo = AfterEvolution(PairCandidates(EvolveCandidates(cross)), align_vertex_names)
+
+    mutate = candidatemutation(pmutate, inshape)
+    mutationevo = EvolveCandidates(mutate)
+
+    return EvolutionChain(crossoverevo, mutationevo)
+end
+
+candidatemutation(p, inshape) = evolvemodel(MutationProbability(graphmutation(inshape), p), optmutation())
+candidatecrossover(p) = evolvemodel(MutationProbability(graphcrossover(), p), optcrossover())
 
 function clear_redundant_vertices(pop)
-    foreach(cand -> check_apply(NaiveGAflux.graph(cand)), pop)
+    foreach(cand -> NaiveGAflux.graph(cand, check_apply), pop)
+    return pop
+end
+
+function align_vertex_names(pop)
+    for i in eachindex(pop)
+        m = match(r"model(\d+).\.*", modelname(pop[i]))
+        if !isnothing(m)
+            pop[i] = rename_model(m.captures[1], pop[i])
+        end
+    end
     return pop
 end
 
@@ -293,12 +325,23 @@ function rename_model(i, cand)
     return NaiveGAflux.mapcandidate(g -> copy(g, rename_model))(cand)
 end
 
+function optcrossover(poptswap=0.3, plrswap=0.4)
+    lrc = MutationProbability(LearningRateCrossover(), plrswap) |> OptimizerCrossover
+    oc = MutationProbability(OptimizerCrossover(), poptswap) |> OptimizerCrossover
+    return MutationChain(lrc, oc)
+end
+
 function optmutation(p=0.05)
     lrm = LearningRateMutation()
     om = MutationProbability(OptimizerMutation([Descent, Momentum, Nesterov, ADAM, NADAM, ADAGrad]), p)
-    return MutationList(lrm, om)
+    return MutationChain(lrm, om)
 end
 
+function graphcrossover()
+    vertexswap = LogMutation(((v1,v2)::Tuple) -> "Crossover swap between $(name(v1)) and $(name(v2))", CrossoverSwap(0.05))
+    crossoverop = VertexCrossover(MutationProbability(vertexswap, 0.05), 0.05)
+    return LogMutation(((g1,g2)::Tuple) -> "Crossover between $(modelname(g1)) and $(modelname(g2))", crossoverop)
+end
 
 function graphmutation(inshape)
     acts = [identity, relu, elu, selu]
@@ -321,26 +364,26 @@ function graphmutation(inshape)
     mph(m, p) = VertexMutation(HighValueMutationProbability(m, p))
     mpl(m, p) = VertexMutation(LowValueMutationProbability(m, p))
 
-    inout = mph(LogMutation(v -> "\tIncrease size of vertex $(name(v))", increase_nout), 0.05)
-    dnout = mpl(LogMutation(v -> "\tReduce size of vertex $(name(v))", decrease_nout), 0.05)
-    maddv = mph(LogMutation(v -> "\tAdd vertex after $(name(v))", add_vertex), 0.005)
-    maddm = mpn(MutationFilter(canaddmaxpool(inshape), LogMutation(v -> "\tAdd maxpool after $(name(v))", add_maxpool)), 0.01)
-    mremv = mpl(LogMutation(v -> "\tRemove vertex $(name(v))", rem_vertex), 0.01)
-    ikern = mpl(LogMutation(v -> "\tMutate kernel size of $(name(v))", increase_kernel), 0.005)
-    dkern = mpl(LogMutation(v -> "\tDecrease kernel size of $(name(v))", decrease_kernel), 0.005)
-    mactf = mpl(LogMutation(v -> "\tMutate activation function of $(name(v))", mutate_act), 0.005)
-    madde = mph(LogMutation(v -> "\tAdd edge from $(name(v))", add_edge), 0.02)
-    mreme = mpn(MutationFilter(v -> length(outputs(v)) > 1, LogMutation(v -> "\tRemove edge from $(name(v))", rem_edge)), 0.02)
+    inout = mph(LogMutation(v -> "Increase size of vertex $(name(v))", increase_nout), 0.05)
+    dnout = mpl(LogMutation(v -> "Reduce size of vertex $(name(v))", decrease_nout), 0.05)
+    maddv = mph(LogMutation(v -> "Add vertex after $(name(v))", add_vertex), 0.005)
+    maddm = mpn(MutationFilter(canaddmaxpool(inshape), LogMutation(v -> "Add maxpool after $(name(v))", add_maxpool)), 0.01)
+    mremv = mpl(LogMutation(v -> "Remove vertex $(name(v))", rem_vertex), 0.01)
+    ikern = mpl(LogMutation(v -> "Mutate kernel size of $(name(v))", increase_kernel), 0.005)
+    dkern = mpl(LogMutation(v -> "Decrease kernel size of $(name(v))", decrease_kernel), 0.005)
+    mactf = mpl(LogMutation(v -> "Mutate activation function of $(name(v))", mutate_act), 0.005)
+    madde = mph(LogMutation(v -> "Add edge from $(name(v))", add_edge), 0.02)
+    mreme = mpn(MutationFilter(v -> length(outputs(v)) > 1, LogMutation(v -> "Remove edge from $(name(v))", rem_edge)), 0.02)
 
     mremv = MutationFilter(g -> nv(g) > 5, mremv)
 
     # Create two possible mutations: One which is guaranteed to not increase the size:
-    dsize = MutationList(mremv, PostMutation(dnout, NeuronSelect()), dkern, mreme, maddm)
+    dsize = MutationChain(mremv, PostMutation(dnout, neuronselect), dkern, mreme, maddm)
     # ...and another which can (and typically does) increase the size:
-    isize = MutationList(PostMutation(inout, NeuronSelect()), ikern, madde, maddm, maddv)
+    isize = MutationChain(PostMutation(inout, neuronselect), ikern, madde, maddm, maddv)
     # Add mutation last as new vertices with neuron_value == 0 screws up outputs selection as per https://github.com/DrChainsaw/NaiveNASlib.jl/issues/39
 
-    mgp = VertexMutation(MutationProbability(LogMutation(v -> "\tMutate global pool type for $(name(v))", MutateGlobalPool()), 0.1), SelectGlobalPool())
+    mgp = VertexMutation(MutationProbability(LogMutation(v -> "Mutate global pool type for $(name(v))", MutateGlobalPool()), 0.1), SelectGlobalPool())
 
     # If isbig then perform the mutation operation which is guaranteed to not increase the size
     # This is done mostly to avoid OOM and time outs.
@@ -355,9 +398,9 @@ function graphmutation(inshape)
         decr = isbig(g) || rand() > 0.5 # Perhaps this can be determined somehow...
         return decr
     end
-    mall = MutationList(MutationFilter(decrease_size, dsize), MutationFilter(!decrease_size, isize), mactf, mgp)
+    mall = MutationChain(MutationFilter(decrease_size, dsize), MutationFilter(!decrease_size, isize), mactf, mgp)
 
-    return LogMutation(g -> "Mutate model $(modelname(g))", mall)
+    return LogMutation(g -> "Mutate $(modelname(g))", mall)
 end
 
 isbig(g) = nparams(g) > 20e7
@@ -401,9 +444,9 @@ function add_vertex_mutation(acts)
     wrapitup(as) = AddVertexMutation(rep_fork_res(as, 1,loglevel=Logging.Info), outselect)
 
     add_conv = wrapitup(convspace(default_layerconf(),2 .^(4:9), 1:2:5, acts,loglevel=Logging.Info))
-    add_dense = wrapitup(LoggingArchSpace(Logging.Info, VertexSpace(default_layerconf(), NamedLayerSpace("dense", DenseSpace(2 .^(4:9), acts)))))
+    add_dense = wrapitup(LoggingArchSpace(VertexSpace(default_layerconf(), NamedLayerSpace("dense", DenseSpace(2 .^(4:9), acts)));level = Logging.Info))
 
-    return MutationList(MutationFilter(is_convtype, add_conv), MutationFilter(!is_convtype, add_dense))
+    return MutationChain(MutationFilter(is_convtype, add_conv), MutationFilter(!is_convtype, add_dense))
 end
 
 is_convtype(v::AbstractVertex) = any(is_globpool.(outputs(v))) || any(is_convtype.(outputs(v)))

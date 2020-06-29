@@ -50,13 +50,14 @@
 
             @test wasreset
 
-            graphmutation = VertexMutation(MutationFilter(v -> name(v)=="hlayer", RemoveVertexMutation()))
+
+            graphmutation = VertexMutation(MutationFilter(v -> name(v)=="hlayer", AddVertexMutation(ArchSpace(DenseSpace([1], [relu])))))
             optmutation = OptimizerMutation((Momentum, Nesterov, ADAM))
             evofun = evolvemodel(graphmutation, optmutation)
             newcand = evofun(cand)
 
-            @test nv(NaiveGAflux.graph(newcand)) == 2
-            @test nv(NaiveGAflux.graph(cand)) == 3
+            @test NaiveGAflux.graph(newcand, nv) == 4
+            @test NaiveGAflux.graph(cand, nv) == 3
 
             optimizer(c::AbstractCandidate) = optimizer(c.c)
             optimizer(c::CandidateModel) = typeof(c.opt)
@@ -66,6 +67,22 @@
 
             Flux.train!(cand, data(cand))
             Flux.train!(newcand, data(newcand))
+
+            teststrat() = NaiveGAflux.default_crossoverswap_strategy(v -> ones(nout_org(v)))
+            graphcrossover = VertexCrossover(CrossoverSwap(;pairgen = (v1,v2) -> (1,1), strategy=teststrat); pairgen = (v1,v2;ind1) -> ind1==1 ? (2,3) : nothing)
+            optcrossover = OptimizerCrossover()
+            crossfun = evolvemodel(graphcrossover, optcrossover)
+
+            newcand1, newcand2 = crossfun((cand, newcand))
+
+            @test optimizer(newcand1) == optimizer(newcand)
+            @test optimizer(newcand2) == optimizer(cand)
+
+            @test NaiveGAflux.graph(newcand1, nv) == 4
+            @test NaiveGAflux.graph(newcand2, nv) == 3
+
+            Flux.train!(newcand1, data(newcand1))
+            Flux.train!(newcand2, data(newcand2))
 
         finally
             MemPool.cleanup()

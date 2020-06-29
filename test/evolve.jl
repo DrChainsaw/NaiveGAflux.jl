@@ -50,6 +50,36 @@
         @test evolve!(CombinedEvolution(NoOpEvolution(), NoOpEvolution()), pop) == vcat(pop,pop)
     end
 
+    @testset "EvolutionChain" begin
+        dfitness = EvolveCandidates(mc -> MockCand(2 * fitness(mc)))
+        sqrfitness = EvolveCandidates(mc -> MockCand(fitness(mc)^2))
+        @test evolve!(EvolutionChain(), MockCand.(1:5)) == MockCand.(1:5)
+        @test evolve!(EvolutionChain(dfitness, dfitness, sqrfitness), MockCand.(1:10)) == MockCand.((4:4:40).^2)
+    end
+
+    @testset "PairCandidates" begin
+        struct PairConsumer <: AbstractEvolution end
+        nseen = 0
+        function NaiveGAflux._evolve!(::PairConsumer, pop)
+            nseen = length(pop)
+            @test typeof(pop) == Vector{Tuple{MockCand, MockCand}}
+            return pop
+        end
+
+        @test evolve!(PairCandidates(NoOpEvolution()), []) == []
+        pop = MockCand.(1:9)
+        @test evolve!(PairCandidates(PairConsumer()), pop) == pop
+        @test nseen == 5
+        pop = MockCand.(1:4)
+        @test evolve!(PairCandidates(PairConsumer()), pop) == pop
+        @test nseen == 2
+    end
+
+    @testset "ShuffleCandidates" begin
+        pop = MockCand.(1:10)
+        @test evolve!(ShuffleCandidates(MersenneTwister(1)), pop) != pop
+    end
+
     @testset "EvolveCandidates" begin
         pop = MockCand.([2,3,5,9])
         @test fitness.(evolve!(EvolveCandidates(mc -> MockCand(2mc.val)), pop)) == 2fitness.(pop)

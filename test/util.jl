@@ -208,3 +208,12 @@ end
         @test val(s1) === val(s2) === val(s)
     end
 end
+
+@testset "PrefixLogger" begin
+    import NaiveGAflux: PrefixLogger
+    testlog(msg) = @info msg
+
+    @test_logs (:info, "Prefix testmsg") with_logger(() -> testlog("testmsg"), PrefixLogger("Prefix "))
+
+    @test Logging.min_enabled_level(PrefixLogger(current_logger(), "Test ")) == Logging.min_enabled_level(current_logger())
+end

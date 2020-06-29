@@ -140,9 +140,6 @@ function plotfitness(p::ScatterOpt, population)
     plotgen(p)
 end
 
-opt(c::AbstractCandidate) = opt(wrappedcand(c))
-opt(c::FileCandidate) = callcand(opt, c)
-opt(c::CandidateModel) = c.opt
 lr(o) = learningrate(o)
 ot(o::Flux.Optimiser) = ot(o.os[1])
 ot(o::ShieldedOpt{T}) where T = T

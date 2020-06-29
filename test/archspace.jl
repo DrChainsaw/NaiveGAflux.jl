@@ -232,8 +232,8 @@
         @test space(inpt) == inpt
     end
 
-    @testset "ListArchSpace" begin
-        space = ListArchSpace(VertexSpace.(DenseSpace.((2,3), relu))...)
+    @testset "ArchSpaceChain" begin
+        space = ArchSpaceChain(VertexSpace.(DenseSpace.((2,3), relu))...)
         inpt = inputvertex("in", 3)
 
         v = space(inpt)
@@ -396,8 +396,8 @@
             test_identity_dense(RepeatArchSpace(VertexSpace(DenseSpace(3, identity)), 3))
         end
 
-        @testset "ListArchSpace identity" begin
-            test_identity_dense(ListArchSpace(VertexSpace.(DenseSpace.((2,3), relu))...))
+        @testset "ArchSpaceChain identity" begin
+            test_identity_dense(ArchSpaceChain(VertexSpace.(DenseSpace.((2,3), relu))...))
         end
 
         @testset "ForkArchSpace identity $npaths paths" for npaths in (1, 2, 3)
@@ -410,9 +410,9 @@
             test_identity_conv(ForkArchSpace(RepeatArchSpace(VertexSpace(ConvSpace2D(3, identity, [3])), nreps), 3), inputvertex("in", 3*2+1))
         end
 
-        @testset "ForkArchSpace ListArchSpace identity $sizes sizes" for sizes in ((3,), (2,3), (2,3,4))
-            test_identity_dense(ForkArchSpace(ListArchSpace(VertexSpace.(DenseSpace.(sizes, identity))...), 3), inputvertex("in", 3*2+1))
-            test_identity_conv(ForkArchSpace(ListArchSpace(VertexSpace.((MaxPoolSpace(PoolSpace2D([1])), ConvSpace2D.(sizes, identity, ([3],))...))...), 3), inputvertex("in", 3*2+1))
+        @testset "ForkArchSpace ArchSpaceChain identity $sizes sizes" for sizes in ((3,), (2,3), (2,3,4))
+            test_identity_dense(ForkArchSpace(ArchSpaceChain(VertexSpace.(DenseSpace.(sizes, identity))...), 3), inputvertex("in", 3*2+1))
+            test_identity_conv(ForkArchSpace(ArchSpaceChain(VertexSpace.((MaxPoolSpace(PoolSpace2D([1])), ConvSpace2D.(sizes, identity, ([3],))...))...), 3), inputvertex("in", 3*2+1))
         end
 
         @testset "ResidualArchSpace identity" begin

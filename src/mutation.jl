@@ -8,6 +8,15 @@ Implementations are expected to be callable using an entity of type `T` as only 
 abstract type AbstractMutation{T} end
 
 """
+    AbstractCrossover{T}
+
+Type alias for `AbstractMutation{Tuple{T,T}}` defining a crossover of two entities of type `T`.
+
+Implementations are expected to be callable using a tuple of two type `T` as only input.
+"""
+AbstractCrossover{T} = AbstractMutation{Tuple{T,T}}
+
+"""
     MutationProbability{T} <:AbstractMutation{T}
     MutationProbability(m::AbstractMutation{T}, p::Probability)
     MutationProbability(m::AbstractMutation{T}, p::Number)
@@ -78,16 +87,18 @@ end
 
 
 """
-    MutationList{T} <: AbstractMutation{T}
-    MutationList(m::AbstractMutation{T}...)
+    MutationChain{T} <: AbstractMutation{T}
+    MutationChain(m::AbstractMutation{T}...)
 
-Applies all wrapped `AbstractMutation{T}`s to each entity of type `T`.
+Chains multiple `AbstractMutation{T}`s after each other.
+
+Input entities will be mutated by the first `AbstractMutation{T}` in the chain and the output will be fed into the next `AbstractMutation{T}` in the chain and so on. The output from the last `AbstractMutation{T}` is returned.
 """
-struct MutationList{T} <: AbstractMutation{T}
+struct MutationChain{T} <: AbstractMutation{T}
     m::AbstractVector{<:AbstractMutation{T}}
 end
-MutationList(m::AbstractMutation{T}...) where T = MutationList(collect(m))
-(m::MutationList)(e) = foldl((ei, mi) -> mi(ei), m.m; init=e)
+MutationChain(m::AbstractMutation{T}...) where T = MutationChain(collect(m))
+(m::MutationChain)(e) = foldl((ei, mi) -> mi(ei), m.m; init=e)
 
 """
     RecordMutation{T} <:AbstractMutation{T}
@@ -103,28 +114,39 @@ struct RecordMutation{T} <:AbstractMutation{T}
 end
 RecordMutation(m::AbstractMutation{T}) where T = RecordMutation(m, T[])
 function (m::RecordMutation)(e)
-    push!(m.mutated, e)
-    m.m(e)
+    em = m.m(e)
+    push!(m.mutated, em)
+    return em
+end
+function fetchmutated!(m::RecordMutation)
+    mutated = copy(m.mutated)
+    deleteat!(m.mutated, eachindex(m.mutated))
+    return mutated
 end
 
 """
     LogMutation{T} <:AbstractMutation{T}
-    LogMutation(strfun, m::AbstractMutation{T})
-    LogMutation(strfun, level::LogLevel, m::AbstractMutation{T})
+    LogMutation(strfun, m::AbstractMutation{T}; level = Logging.Info, nextlogfun=e -> PrefixLogger("   "))
+    LogMutation(strfun, level::LogLevel, nextlogfun, m::AbstractMutation{T})
 
 Logs all mutation operations.
 
 Argument `strfun` maps the mutated entity to the logged string.
+
+Calling `nextlogfun(e)` where `e` is the entity to mutate produces an `AbstractLogger` which will be used when applying `m(e)`.
+
+By default, this is used to add a level of indentation to subsequent logging calls which makes logs of hierarchical mutations (e.g. mutate a CompGraph by applying mutations to some of its vertices) easier to read. Set `nextlogfun = e -> current_logger()` to remove this behaviour.
 """
-struct LogMutation{T} <:AbstractMutation{T}
-    strfun
-    level::LogLevel
+struct LogMutation{F,L<:LogLevel,LF,T} <:AbstractMutation{T}
+    strfun::F
+    level::L
+    nextlogfun::LF
     m::AbstractMutation{T}
 end
-LogMutation(strfun, m::AbstractMutation{T}) where T = LogMutation(strfun, Logging.Info, m)
+LogMutation(strfun, m::AbstractMutation{T}; level = Logging.Info, nextlogfun=e -> PrefixLogger("   ")) where T = LogMutation(strfun, level, nextlogfun, m)
 function (m::LogMutation)(e)
     @logmsg m.level m.strfun(e)
-    m.m(e)
+    return with_logger(() -> m.m(e), m.nextlogfun(e))
 end
 
 """
@@ -148,7 +170,7 @@ end
     VertexMutation(m::AbstractMutation{AbstractVertex}, s::AbstractVertexSelection)
     VertexMutation(m::AbstractMutation{AbstractVertex})
 
-Applies a wrapped `AbstractMutation{AbstractVertex}` for each selected vertex in a `CompGraph`.
+Applies a wrapped `AbstractMutation{AbstractVertex}` to each selected vertex in a `CompGraph`.
 
 Vertices to select is determined by the configured `AbstractVertexSelection`.
 """
@@ -263,7 +285,7 @@ Add an edge from a vertex `vi` to another vertex `vo` randomly selected from `vs
 
 Higher values of `p` will give more preference to earlier vertices of `vs`.
 
-If `vo` is not capable of having multiple inputs (determined by `singleinput(v) == true`), `vm = mergefun(voi)` where `voi` is a randomly selected input to `vo` will be used instead of `vo`.
+If `vo` is not capable of having multiple inputs (determined by `singleinput(v) == true`), `vm = mergefun(voi)` where `voi` is a randomly selected input to `vo` will be used instead of `vo` and `vo` will be added as the output of `vm`.
 
 When selecting neurons/outputs after any eventual size change the values `valuefun(v)` will be used to determine the value of each output in vertex `v`. Note that `length(valuefun(v)) == nout_org(v)` must hold.
 
@@ -327,6 +349,7 @@ function try_add_edge(vi, vo, mergefun, valuefun=default_neuronselect)
         if singleinput(voi)
             vm = mergefun(voi)
             # Insert vm between voi and vo, i.e voi -> vo turns into voi -> vm -> vo
+            # vs -> [vo] means only add the new vertex between voi and vo as voi could have other outputs
             insert!(voi, vv -> vm, vs -> [vo])
             cleanup_failed = function()
                 length(inputs(vm)) > 1 && return
@@ -344,7 +367,7 @@ function try_add_edge(vi, vo, mergefun, valuefun=default_neuronselect)
     create_edge!(vi, vo, strategy = create_edge_strat(vo, valuefun))
     cleanup_failed()
 end
-# Need to override this one for strange types which e.g. layers which support exactly 2 inputs or something.
+# Need to override this one for strange types e.g. layers which support exactly 2 inputs or something.
 singleinput(v) = length(inputs(v)) == 1
 
 create_edge_strat(v::AbstractVertex, valuefun) = create_edge_strat(trait(v), valuefun)
@@ -498,48 +521,68 @@ Possible to select ranking method for neurons using `rankfun` which takes a muta
 
 How to select neurons depends a bit on what operation the wrapped `RecordMutation` performs. If not supplied explicitly an attempt to infer it will be made, resulting in an error if not possible.
 """
-struct NeuronSelectMutation{T} <: AbstractMutation{AbstractVertex}
+struct NeuronSelectMutation{T, MT} <: AbstractMutation{MT}
     rankfun::Function
     strategy::T
-    m::RecordMutation{AbstractVertex}
+    m::RecordMutation{MT}
 end
-NeuronSelectMutation(rankfun, m::AbstractMutation{AbstractVertex}) = NeuronSelectMutation(rankfun, neuron_select_strategy(m), m)
-NeuronSelectMutation(rankfun, strategy, m::AbstractMutation{AbstractVertex}) = NeuronSelectMutation(rankfun, strategy, RecordMutation(m))
-NeuronSelectMutation(m::AbstractMutation{AbstractVertex}) = NeuronSelectMutation(default_neuronselect, m)
-NeuronSelectMutation(m::RecordMutation{AbstractVertex}) = NeuronSelectMutation(default_neuronselect, neuron_select_strategy(m.m), m)
+NeuronSelectMutation(rankfun, m::AbstractMutation) = NeuronSelectMutation(rankfun, neuron_select_strategy(m), m)
+NeuronSelectMutation(rankfun, strategy, m::AbstractMutation) = NeuronSelectMutation(rankfun, strategy, RecordMutation(m))
+NeuronSelectMutation(m::AbstractMutation) = NeuronSelectMutation(default_neuronselect, m)
+NeuronSelectMutation(m::RecordMutation) = NeuronSelectMutation(default_neuronselect, neuron_select_strategy(m.m), m)
 
 (m::NeuronSelectMutation)(v::AbstractVertex) = m.m(v)
+(m::NeuronSelectMutation)(vs::NTuple{N, AbstractVertex}) where N = m.m(vs)
 
 neuron_select_strategy(::T) where T <:AbstractMutation = error("Neuron select strategy not implemented for $T")
-neuron_select_strategy(::RemoveVertexMutation) = Nout()
-neuron_select_strategy(::NoutMutation) = Nout()
+neuron_select_strategy(::RemoveVertexMutation) = NeuronSelectOut()
+neuron_select_strategy(::NoutMutation) =  NeuronSelectOut()
+neuron_select_strategy(::AbstractCrossover) = NeuronSelectFlatten()
 
-struct Nout
+struct NeuronSelectFlatten{T}
+    s::T
+end
+NeuronSelectFlatten() = NeuronSelectFlatten(NeuronSelectOut())
+
+struct NeuronSelectOut
     s::AbstractSelectionStrategy
 end
-Nout() = Nout(ApplyAfter())
+NeuronSelectOut() = NeuronSelectOut(ApplyAfter())
 
 """
     select(m::NeuronSelectMutation)
 
 Select neurons for each `AbstractVertex` mutated by `m`.
 """
-select(m::NeuronSelectMutation) = select_neurons(m.strategy, m.m.mutated, m.rankfun)
+select(m::NeuronSelectMutation) = select_neurons(m.strategy, fetchmutated!(m.m), m.rankfun)
 
-select_neurons(::T, vs, rankfun) where T = error("Neuron select not implemented for $T")
-function select_neurons(strategy::Nout, vs::AbstractArray{AbstractVertex}, rankfun::Function)
-    vchanged = filter(v -> nout(v) != nout_org(v), vs)
-    isempty(vchanged) && return
+function select_neurons(s, vs::AbstractArray{NTuple{N, AbstractVertex}}, rankfun) where N
+    vsn = reduce((t, r) -> vcat.(t, r), vs)
+    map(vsi -> select_neurons(s, vsi, rankfun), vsn) |> all
+end
+select_neurons(s, v::AbstractVertex, rankfun) = select_neurons(s, [v], rankfun)
 
-    vall = unique(mapfoldl(v -> all_in_Δsize_graph(v, Output()), vcat, vchanged))
+function select_neurons(s::NeuronSelectFlatten, vs::AbstractArray{<:AbstractVertex}, rankfun)
+    allvs = foldr(NaiveNASlib.flatten, vs, init=AbstractVertex[])
+    select_neurons(s.s, allvs, rankfun)
+end
+
+function select_neurons(strategy::NeuronSelectOut, vs::AbstractArray{<:AbstractVertex}, rankfun)
+    vchanged = filter(vs) do v
+        # Some structural operations (create/remove edges/vertices) might result in nout(v) being unchanged but nin of its outputs is changed
+        nout(v) != nout_org(v) || any(vo -> nin(vo) != nin_org(vo), outputs(v))
+    end
+    isempty(vchanged) && return true
+
+    vall = unique(mapreduce(v -> all_in_Δsize_graph(v, Output()), vcat, vchanged))
     Δoutputs(strategy.s, vall, rankfun)
 end
 
-default_neuronselect(v) = neuron_value(trait(v), v)
+default_neuronselect(v) = neuron_value_safe(trait(v), v)
 
-NaiveNASflux.neuron_value(t::DecoratingTrait, v) = neuron_value(base(t), v)
-NaiveNASflux.neuron_value(::Immutable, v) = ones(nout(v))
-NaiveNASflux.neuron_value(::MutationSizeTrait, v) = clean_values(cpu(neuron_value(v)),v)
+neuron_value_safe(t::DecoratingTrait, v) = neuron_value_safe(base(t), v)
+neuron_value_safe(::Immutable, v) = ones(nout(v))
+neuron_value_safe(::MutationSizeTrait, v) = clean_values(cpu(neuron_value(v)),v)
 clean_values(::Missing, v) = ones(nout_org(v))
 # NaN should perhaps be < 0, but since SelectDirection is used, this might lead to inconsistent results as a subset of neurons for a vertex v whose output vertices are not part of the selection (typically because only v's inputs are touched) are selected. As the output vertices are not changed this will lead to a size inconsistency. Cleanest fix might be to separate "touch output" from "touch input" when formulating the output selection problem.
 clean_values(a::AbstractArray{T}, v, repval=eps(T)) where T <: AbstractFloat = replace(a, NaN => repval, 0.0 => repval, Inf => repval, -Inf => repval)
@@ -568,17 +611,15 @@ end
 
 
 """
-    NeuronSelect()
+    neuronselect(m, e)
 
-Search a given `AbstractMutation` hieararchy for `NeuronSelectMutations` and invoke `select` on them
+Search `AbstractMutation` hieararchy `m` for `NeuronSelectMutations` and invoke `select` on them
 """
-struct NeuronSelect end
-
-(s::NeuronSelect)(m, e) = s(m)
-function (s::NeuronSelect)(m) end
-(s::NeuronSelect)(m::T) where T <:AbstractMutation = foreach(fn -> s(getfield(m,fn)), fieldnames(T))
-(s::NeuronSelect)(a::Union{AbstractVector, Tuple}) = foreach(ae -> s(ae), a)
-(s::NeuronSelect)(m::NeuronSelectMutation) = select(m)
+neuronselect(m, e) = neuronselect(m)
+function neuronselect(m) end
+neuronselect(m::T) where T <:AbstractMutation = foreach(fn -> neuronselect(getfield(m,fn)), fieldnames(T))
+neuronselect(a::Union{AbstractVector, Tuple}) = foreach(ae -> neuronselect(ae), a)
+neuronselect(m::NeuronSelectMutation) = select(m)
 
 """
     RemoveZeroNout()

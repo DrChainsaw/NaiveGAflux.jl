@@ -2,7 +2,7 @@
 
     @testset "ImageClassifier smoketest" begin
         using NaiveGAflux.AutoFlux
-        import NaiveGAflux.AutoFlux.ImageClassification: TrainSplitAccuracy, TrainStrategy, TrainAccuracyVsSize, EliteAndTournamentSelection, EliteAndSusSelection, GlobalOptimizerMutation
+        import NaiveGAflux.AutoFlux.ImageClassification: TrainSplitAccuracy, TrainStrategy, TrainAccuracyVsSize, EliteAndTournamentSelection, EliteAndSusSelection, GlobalOptimizerMutation, modelname
         using Random
 
         # Use Float64 instead of Float32 due to https://github.com/FluxML/Flux.jl/issues/979
@@ -25,6 +25,7 @@
         pop = @test_logs (:info, "Begin generation 1") (:info, "Begin generation 2") (:info, "Begin generation 3") (:info, r"Mutate model") match_mode=:any fit(c, x, y, fitnesstrategy=f, trainstrategy=t, evolutionstrategy = GlobalOptimizerMutation(EliteAndSusSelection(popsize=c.popsize, nelites=1)), mdir = dummydir)
 
         @test length(pop) == c.popsize
+        @test modelname.(pop) == ["model$i" for i in 1:length(pop)]
 
         globallearningrate(c::AbstractCandidate) = globallearningrate(c.c)
         globallearningrate(c::CandidateModel) = globallearningrate(c.opt)
@@ -40,6 +41,7 @@
         pop = @test_logs (:info, "Begin generation 1") (:info, "Begin generation 2") (:info, "Begin generation 3") (:info, r"Mutate model") match_mode=:any fit(c, x, y, fitnesstrategy=TrainAccuracyVsSize(), trainstrategy=t, evolutionstrategy = GlobalOptimizerMutation(EliteAndTournamentSelection(popsize=c.popsize, nelites=1, k=2)), mdir = dummydir)
 
         @test length(pop) == c.popsize
+        @test modelname.(pop) == ["model$i" for i in 1:length(pop)]
 
         @test unique(globallearningrate.(pop)) != [1]
         @test length(unique(globallearningrate.(pop))) == 1

@@ -1,7 +1,7 @@
 name = "NaiveGAflux"
 uuid = "81ede08e-ab29-11e9-16d3-79edd30a1d76"
 authors = ["DrChainsaw"]
-version = "0.4.0"
+version = "0.5.0"
 
 [deps]
 CuArrays = "3a865a2d-5b23-5a0f-bc46-62713ec82fae"

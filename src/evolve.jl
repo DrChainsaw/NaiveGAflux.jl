@@ -134,13 +134,59 @@ end
     CombinedEvolution(evos::AbstractArray)
     CombinedEvolution(evos...)
 
-Combines the evolved populations from several evolutions into one population.
+Combines the evolved populations from several `AbstractEvolution`s into one population.
 """
 struct CombinedEvolution{E<:AbstractArray} <: AbstractEvolution
     evos::E
 end
 CombinedEvolution(evos...) = CombinedEvolution(collect(evos))
 _evolve!(e::CombinedEvolution, pop) = mapfoldl(evo -> evolve!(evo, pop), vcat, e.evos)
+
+"""
+    EvolutionChain <: AbstractEvolution
+    EvolutionChain(evos::AbstractArray)
+    EvolutionChain(evos...)
+
+
+Chains multiple `AbstractEvolution`s in a sequence so that output from the first is input to the next and so on.
+"""
+struct EvolutionChain{E<:AbstractArray} <: AbstractEvolution
+    evos::E
+end
+EvolutionChain(evos...) = EvolutionChain(collect(evos))
+_evolve!(e::EvolutionChain, pop) = foldr(evolve!, reverse(e.evos); init=pop)
+
+"""
+    PairCandidates <: AbstractEvolution
+    PairCandidates(evo::AbstractEvolution)
+
+Creates pairs of candidates in a population and calls `evolve!(evo, pairs)` where `pairs` is the array of pairs.
+"""
+struct PairCandidates{E<:AbstractEvolution} <: AbstractEvolution
+    evo::E
+end
+function _evolve!(e::PairCandidates, pop)
+    padpop = iseven(length(pop)) ? pop : vcat(pop, pop[1])
+    pairs = collect(zip(padpop[1:2:end], padpop[2:2:end]))
+    return foldl(evolve!(e.evo, pairs), init=[]) do popout, (c1,c2)::Tuple
+        length(popout) < length(pop) - 1 ? vcat(popout, c1, c2) : vcat(popout, c1)
+    end
+end
+
+"""
+    ShuffleCandidates
+    ShuffleCandidates()
+    ShuffleCandidates(rng)
+
+Shuffles the population using `rng`.
+
+Useful with [`PairCandidates`](@ref) in case the prior selection does not shuffle the population.
+"""
+struct ShuffleCandidates{R} <: AbstractEvolution
+    rng::R
+end
+ShuffleCandidates() = ShuffleCandidates(rng_default)
+_evolve!(e::ShuffleCandidates, pop) = shuffle(e.rng, pop)
 
 """
     EvolveCandidates <: AbstractEvolution

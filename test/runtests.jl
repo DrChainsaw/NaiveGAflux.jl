@@ -29,11 +29,17 @@ using Test
     @info "Testing util"
     include("util.jl")
 
+    @info "Testing shape"
+    include("shape.jl")
+
     @info "Testing archspace"
     include("archspace.jl")
 
     @info "Testing mutation"
     include("mutation.jl")
+
+    @info "Testing crossover"
+    include("crossover.jl")
 
     @info "Testing fitness"
     include("fitness.jl")
