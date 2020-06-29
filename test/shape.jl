@@ -27,8 +27,7 @@
             @test combine(ShapeDiv((1,2)), ShapeDiv((3,4))) == tuple(ShapeDiv((3,8)))
             @test revert(ShapeDiv((1,2))) == ShapeMul((1,2))
             @test filter_noops(ShapeDiv((0,1,2,3))) == tuple(ShapeDiv((0,1,2,3)))
-            @test filter_noops(ShapeDiv((1,1))) == tuple()
-            
+            @test filter_noops(ShapeDiv((1,1))) == tuple()     
         end
 
         @testset "ndims" begin

@@ -273,17 +273,17 @@ function evostrategy_internal(s::EliteAndTournamentSelection, inshape)
 end
 
 """
-    crossovermutate(;pcrossover=0.5, pmutate=0.5)
+    crossovermutate(;pcrossover=0.3, pmutate=0.9)
 
 Return a function which creates an [`EvolutionChain`](@ref) when called with an inputshape.
 
-Crossover will be applied with a probability of `pcrossover` while mutation will be applied with a probability of `pmutate`.
+Crossover will be applied with a probability of `pcrossover` while mutation will be applied with a probability of `pmutate`. Note that these probabilities apply to models only, not optimizers.
 
-Crossover is done using [`CrossoverSwap`](@ref) whic is only applies to the models.
+Crossover is done using [`CrossoverSwap`](@ref) for models and [`LearningRateCrossover`](@ref) and [`OptimizerCrossover`](@ref) for optimizers.
 
 Mutation is applied both to the model itself (change sizes, add/remove vertices/edges) as well as to the optimizer (change learning rate and optimizer algorithm).
 """
-crossovermutate(;pcrossover=0.75, pmutate=0.75) = function(inshape)
+crossovermutate(;pcrossover=0.3, pmutate=0.9) = function(inshape)
     cross = candidatecrossover(pcrossover)
     crossoverevo = AfterEvolution(PairCandidates(EvolveCandidates(cross)), align_vertex_names)
 
