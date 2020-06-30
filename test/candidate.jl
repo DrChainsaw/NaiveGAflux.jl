@@ -91,15 +91,16 @@
 
     @testset "FileCandidate" begin
         try
-            @testset "FileCandidate cleanup" begin
+            @testset "FileCandidate cleanup" begin 
+                fc = FileCandidate([1,2,3], 0.01, wait)
+                # TODO: This can't be right?!
+                wait(@async wait(fc.movetimer))            
 
-                fc = FileCandidate([1,2,3], t -> wait(t))
-
-                fname = MemPool.default_path(fc.c[])
+                fname = MemPool.default_path(fc.c)
 
                 @test isfile(fname)
-                finalize(fc.c)
 
+                finalize(fc)
                 @test !isfile(fname)
             end
 

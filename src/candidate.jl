@@ -98,26 +98,44 @@ Keeps `c` on disk when not in use and just maintains its [`DRef`](@ref).
 
 Experimental feature. May not work as intended!
 """
-struct FileCandidate{C} <: AbstractCandidate
-    c::Ref{MemPool.DRef}
-    function FileCandidate{C}(c::MemPool.DRef) where C
-        # Wrap the DRef in a Ref to enable finalizer to do delete file
-        ref = Ref(c)
-        finalizer(r -> MemPool.pooldelete(r[]), ref)
-        new{C}(ref)
+mutable struct FileCandidate{C, R<:Real, L<:Base.AbstractLock} <: AbstractCandidate
+    c::MemPool.DRef
+    movedelay::R
+    movetimer::Timer
+    writelock::L
+    function FileCandidate(c::C, movedelay::R, initialtasklistener=identity) where {C, R}
+        cref = MemPool.poolset(c)
+        writelock = ReentrantLock()
+        movetimer = asynctodisk(cref, movedelay, writelock, true, initialtasklistener)
+        fc = new{C, R, typeof(writelock)}(cref, movedelay, movetimer, writelock)
+        finalizer(gfc -> MemPool.pooldelete(gfc.c), fc)
+        return fc
      end
 end
-
-function FileCandidate(c::C, tasklistener = identity) where C
-    cref = MemPool.poolset(c)
-    tasklistener(@async MemPool.movetodisk(cref))
-    return FileCandidate{C}(cref)
-end
+FileCandidate(c::AbstractCandidate) = FileCandidate(c, 0.5)
 
 function callcand(f, c::FileCandidate, args...)
-    ret = f(MemPool.poolget(c.c[]), args...)
-    @async MemPool.movetodisk(c.c[])
+    # If timer is running we just stop and restart
+    close(c.movetimer)
+
+    # writelock means that the candidate is being moved to disk. We need to wait for it or risk data corruption
+    islocked(c.writelock) && @warn "Try to access FileCandidate which is being moved to disk. Consider retuning of movedelay!"
+    ret = lock(c.writelock) do
+        f(MemPool.poolget(c.c), args...)
+    end
+    c.movetimer = asynctodisk(c.c, c.movedelay, c.writelock, false)
     return ret
+end
+
+function asynctodisk(r::MemPool.DRef, delay, writelock, init, listener=identity)
+    return Timer(delay) do _
+        @async begin
+            lock(writelock) do 
+                !init && MemPool.pooldelete(MemPool.movetodisk(r))
+                MemPool.movetodisk(r)
+            end         
+        end |> listener
+    end 
 end
 
 function Serialization.serialize(s::AbstractSerializer, c::FileCandidate)
@@ -138,7 +156,7 @@ Flux.train!(c::FileCandidate, data) = callcand(Flux.train!, c, data)
 fitness(c::FileCandidate) = callcand(fitness, c)
 
 reset!(c::FileCandidate) = callcand(reset!, c)
-wrappedcand(c::FileCandidate) = MemPool.poolget(c.c[])
+wrappedcand(c::FileCandidate) = MemPool.poolget(c.c)
 graph(c::FileCandidate, f) = callcand(graph, c, f)
 opt(c::FileCandidate) = callcand(opt, c)
 
@@ -233,7 +251,7 @@ end
 newcand(c::CandidateModel, mapfield) = CandidateModel(map(mapfield, getproperty.(c, fieldnames(CandidateModel)))...)
 newcand(c::HostCandidate, mapfield) = HostCandidate(newcand(c.c, mapfield))
 newcand(c::CacheCandidate, mapfield) = CacheCandidate(newcand(c.c, mapfield))
-newcand(c::FileCandidate, mapfield) = FileCandidate(callcand(newcand, c, mapfield))
+newcand(c::FileCandidate, mapfield) = FileCandidate(callcand(newcand, c, mapfield), c.movedelay)
 
 function clearstate(s) end
 clearstate(s::AbstractDict) = foreach(k -> delete!(s, k), keys(s))
