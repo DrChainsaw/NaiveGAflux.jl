@@ -55,7 +55,7 @@ allow_mutation(v::AbstractVertex, ms...) = allow_mutation(trait(v), ms...)
 allow_mutation(t::DecoratingTrait, ms...) = allow_mutation(base(t), ms...)
 allow_mutation(::MutationTrait, ms...) = true
 allow_mutation(::Immutable, ms...) = false
-allow_mutation(t::MutationShield, ms...) = !isempty(ms) && all(mt -> mt in t.allowed, typeof.(mutationleaves(ms)))
+allow_mutation(t::MutationShield, ms...) = !isempty(ms) && all(mt -> any(amt -> mt <: amt, t.allowed), typeof.(mutationleaves(ms)))
 NaiveNASlib.clone(t::MutationShield;cf=clone) = MutationShield(cf(base(t); cf=cf), t.allowed)
 
 """

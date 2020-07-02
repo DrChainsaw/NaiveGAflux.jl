@@ -69,18 +69,18 @@ end
 
     import NaiveGAflux: DecoratingMutation
 
-    struct MutationShieldTestDummyMutation1 <: AbstractMutation{AbstractVertex} end
-    struct MutationShieldTestDummyMutation2 <: AbstractMutation{AbstractVertex} end
-    struct MutationShieldTestDummyDecoratingMutation <: DecoratingMutation{AbstractVertex}
+    struct MutationShieldTestMutation1 <: AbstractMutation{AbstractVertex} end
+    struct MutationShieldTestMutation2 <: AbstractMutation{AbstractVertex} end
+    struct MutationShieldTestDecoratingMutation <: DecoratingMutation{AbstractVertex}
         m
     end
-    MutationShieldTestDummyDecoratingMutation(m, ms...) = MutationShieldTestDummyDecoratingMutation((m, ms...))
+    MutationShieldTestDecoratingMutation(m, ms...) = MutationShieldTestDecoratingMutation((m, ms...))
 
-    m1 = MutationShieldTestDummyMutation1
-    m2 = MutationShieldTestDummyMutation2
-    dm = MutationShieldTestDummyDecoratingMutation
+    m1 = MutationShieldTestMutation1
+    m2 = MutationShieldTestMutation2
+    dm = MutationShieldTestDecoratingMutation
 
-    TestShield(t) = MutationShield(t, MutationShieldTestDummyMutation1)
+    TestShield(t) = MutationShield(t, MutationShieldTestMutation1)
 
     v1 = inputvertex("v1", 3)
     v2 = mutable("v2", Dense(nout(v1), 5), v1)
@@ -120,6 +120,27 @@ end
 
         @test name.(select(FilterMutationAllowed(), g1, m)) == name.([v2,v5])
     end
+end
+
+@testset "MutationShield abstract allowed list" begin
+    # This is not a java habit I promise! I have just been burnt by having to rename mock structs across tests when names clash too many times
+    abstract type MutationShieldAbstractTestAbstractMutation <: AbstractMutation{AbstractVertex} end
+    struct MutationShieldAbstractTestMutation1 <: MutationShieldAbstractTestAbstractMutation end
+    struct MutationShieldAbstractTestMutation2 <: MutationShieldAbstractTestAbstractMutation end
+    struct MutationShieldAbstractTestMutation3 <: AbstractMutation{AbstractVertex} end
+
+    m1 = MutationShieldAbstractTestMutation1
+    m2 = MutationShieldAbstractTestMutation2
+    m3 = MutationShieldAbstractTestMutation3
+
+    TestShield(t) = MutationShield(t, MutationShieldAbstractTestAbstractMutation)
+
+    v1 = inputvertex("v1", 3)
+    v2 = mutable("v2", Dense(nout(v1), 5), v1; traitfun = TestShield)
+
+    @test allow_mutation(v2, m1())
+    @test allow_mutation(v2, m2())
+    @test !allow_mutation(v2, m3())
 end
 
 @testset "remove_redundant_vertices" begin

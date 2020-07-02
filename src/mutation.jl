@@ -26,7 +26,7 @@ wrapped(m::DecoratingMutation) = m.m
 
 mutationleaves(m::DecoratingMutation) = (mutationleaves(wrapped(m))...,)
 mutationleaves(tm::Tuple) = mapreduce(mutationleaves, (t1,t2) -> (t1...,t2...), tm)
-mutationleaves(m::AbstractMutation) = tuple(m)
+mutationleaves(m) = tuple(m)
 
 """
     MutationProbability{T} <: DecoratingMutation{T}
