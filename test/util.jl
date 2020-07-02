@@ -63,7 +63,63 @@ end
     @testset "FilterMutationAllowed" begin
         @test select(FilterMutationAllowed(), g1) == [v2,v4]
     end
+end
 
+@testset "MutationShield allowed list" begin
+
+    import NaiveGAflux: DecoratingMutation
+
+    struct MutationShieldTestDummyMutation1 <: AbstractMutation{AbstractVertex} end
+    struct MutationShieldTestDummyMutation2 <: AbstractMutation{AbstractVertex} end
+    struct MutationShieldTestDummyDecoratingMutation <: DecoratingMutation{AbstractVertex}
+        m
+    end
+    MutationShieldTestDummyDecoratingMutation(m, ms...) = MutationShieldTestDummyDecoratingMutation((m, ms...))
+
+    m1 = MutationShieldTestDummyMutation1
+    m2 = MutationShieldTestDummyMutation2
+    dm = MutationShieldTestDummyDecoratingMutation
+
+    TestShield(t) = MutationShield(t, MutationShieldTestDummyMutation1)
+
+    v1 = inputvertex("v1", 3)
+    v2 = mutable("v2", Dense(nout(v1), 5), v1)
+    v3 = mutable("v3", Dense(nout(v2), 4), v2, traitfun = TestShield)
+    v4 = mutable("v4", Dense(nout(v3), 2), v3, traitfun = validated() ∘ TestShield)
+    v5 = mutable("v5", Dense(nout(v4), 1), v4)
+    g1 = CompGraph(v1, v5)
+
+    @testset "Test allowed $m" for m in (
+        m1(),
+        dm(m1()),
+        dm(m1(), m1()),
+        dm(m1(), dm(dm(m1()), m1()))
+        )
+
+         @test !allow_mutation(v1, m)
+         @test allow_mutation(v2, m)
+         @test allow_mutation(v3, m)
+         @test allow_mutation(v4, m)
+         @test allow_mutation(v5, m)
+
+         @test name.(select(FilterMutationAllowed(), g1, m)) == name.([v2,v3,v4,v5])
+    end
+
+    @testset "Test not allowed $m" for m in (
+        m2(),
+        dm(m2()),
+        dm(m1(), m2()),
+        dm(m1(), dm(dm(m1()), m2()))
+        )
+
+        @test !allow_mutation(v1, m)
+        @test allow_mutation(v2, m)
+        @test !allow_mutation(v3, m)
+        @test !allow_mutation(v4, m)
+        @test allow_mutation(v5, m)
+
+        @test name.(select(FilterMutationAllowed(), g1, m)) == name.([v2,v5])
+    end
 end
 
 @testset "remove_redundant_vertices" begin

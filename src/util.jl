@@ -47,16 +47,16 @@ Note that vertex might still be modified if an adjacent vertex is mutated in a w
 struct MutationShield{T<:MutationTrait, S} <:DecoratingTrait
     t::T
     allowed::S
+    MutationShield(t::T, allowed...) where T = new{T, typeof(allowed)}(t, allowed)
 end
-MutationShield(t, allowed...) = MutationShield(t, allowed)
 
 NaiveNASlib.base(t::MutationShield) = t.t
-allow_mutation(v::AbstractVertex) = allow_mutation(trait(v))
-allow_mutation(t::DecoratingTrait) = allow_mutation(base(t))
-allow_mutation(::MutationTrait) = true
-allow_mutation(::Immutable) = false
-allow_mutation(::MutationShield) = false
-NaiveNASlib.clone(t::MutationShield;cf=clone) = MutationShield(cf(base(t), cf=cf))
+allow_mutation(v::AbstractVertex, ms...) = allow_mutation(trait(v), ms...)
+allow_mutation(t::DecoratingTrait, ms...) = allow_mutation(base(t), ms...)
+allow_mutation(::MutationTrait, ms...) = true
+allow_mutation(::Immutable, ms...) = false
+allow_mutation(t::MutationShield, ms...) = !isempty(ms) && all(mt -> mt in t.allowed, typeof.(mutationleaves(ms)))
+NaiveNASlib.clone(t::MutationShield;cf=clone) = MutationShield(cf(base(t); cf=cf), t.allowed)
 
 """
     AbstractVertexSelection
@@ -71,8 +71,8 @@ abstract type AbstractVertexSelection end
 Select all vertices in `g`.
 """
 struct AllVertices <:AbstractVertexSelection end
-select(::AllVertices, g::CompGraph) = vertices(g)
-select(::AllVertices, vs::AbstractArray) = vs
+select(::AllVertices, g::CompGraph, ms...) = vertices(g)
+select(::AllVertices, vs::AbstractArray, ms...) = vs
 
 """
     FilterMutationAllowed
@@ -83,7 +83,7 @@ struct FilterMutationAllowed <:AbstractVertexSelection
     s::AbstractVertexSelection
 end
 FilterMutationAllowed() = FilterMutationAllowed(AllVertices())
-select(s::FilterMutationAllowed, x) = filter(allow_mutation, select(s.s, x))
+select(s::FilterMutationAllowed, x, ms...) = filter(v -> allow_mutation(v, ms...), select(s.s, x, ms...))
 
 """
     ApplyIf <: DecoratingTrait

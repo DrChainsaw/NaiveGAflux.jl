@@ -24,6 +24,10 @@ Abstract type indicating that the type itself does not perform any mutation but 
 abstract type DecoratingMutation{T} <: AbstractMutation{T} end
 wrapped(m::DecoratingMutation) = m.m
 
+mutationleaves(m::DecoratingMutation) = (mutationleaves(wrapped(m))...,)
+mutationleaves(tm::Tuple) = mapreduce(mutationleaves, (t1,t2) -> (t1...,t2...), tm)
+mutationleaves(m::AbstractMutation) = tuple(m)
+
 """
     MutationProbability{T} <: DecoratingMutation{T}
     MutationProbability(m::AbstractMutation{T}, p::Probability)
