@@ -19,7 +19,7 @@ end
 VertexCrossover(crossover ;selection=FilterMutationAllowed(), pairgen=default_pairgen) = VertexCrossover(selection, pairgen, crossover)
 VertexCrossover(crossover, deviation::Number; selection=FilterMutationAllowed()) = VertexCrossover(selection, (vs1,vs2;ind1=1) -> default_pairgen(vs1, vs2, deviation;ind1=ind1), crossover)
 
-(c::VertexCrossover)((g1,g2)::Tuple) = crossover(g1, g2; selection=c.selection, pairgen=c.pairgen, crossoverfun=c.crossover)
+(c::VertexCrossover)((g1,g2)::Tuple) = crossover(g1, g2; selection=SelectWithMutation(c.selection, c), pairgen=c.pairgen, crossoverfun=c.crossover)
 
 
 """
@@ -49,7 +49,7 @@ end
 CrossoverSwap(;pairgen=default_inputs_pairgen, mergefun=default_mergefun, strategy=default_crossoverswap_strategy, selection=FilterMutationAllowed()) = CrossoverSwap(pairgen, mergefun, strategy, selection)
 CrossoverSwap(deviation::Number; mergefun=default_mergefun, strategy=default_crossoverswap_strategy, selection=FilterMutationAllowed()) = CrossoverSwap((vs1,vs2) -> default_inputs_pairgen(vs1, vs2, deviation), mergefun, strategy, selection)
 
-(c::CrossoverSwap)((v1,v2)::Tuple) = crossoverswap(v1, v2; pairgen = c.pairgen, mergefun=c.mergefun, selection=c.selection, strategy=c.strategy)
+(c::CrossoverSwap)((v1,v2)::Tuple) = crossoverswap(v1, v2; pairgen = c.pairgen, mergefun=c.mergefun, selection=SelectWithMutation(c.selection, c), strategy=c.strategy)
 
 
 """
