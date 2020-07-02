@@ -6,7 +6,9 @@ default_layerconf() = LayerVertexConf(ActivationContributionLow ∘ LazyMutable,
 function initial_archspace(inshape, outsize)
 
     layerconf = default_layerconf()
-    outconf = LayerVertexConf(layerconf.layerfun, MutationShield ∘ layerconf.traitfun)
+    outconf = let OutShield(t) = MutationShield(t, KernelSizeMutation, ActivationFunctionMutation)
+        LayerVertexConf(layerconf.layerfun, OutShield ∘ layerconf.traitfun)
+    end
 
     acts = [identity, relu, elu, selu]
 
