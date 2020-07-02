@@ -186,13 +186,13 @@ Applies a wrapped `AbstractMutation{AbstractVertex}` to each selected vertex in 
 
 Vertices to select is determined by the configured `AbstractVertexSelection`.
 """
-struct VertexMutation <:DecoratingMutation{CompGraph}
+struct VertexMutation <: DecoratingMutation{CompGraph}
     m::AbstractMutation{AbstractVertex}
     s::AbstractVertexSelection
 end
 VertexMutation(m::AbstractMutation{AbstractVertex}) = VertexMutation(m, FilterMutationAllowed())
 function (m::VertexMutation)(g::CompGraph)
-    for v in select(m.s, g)
+    for v in select(m.s, g, m)
         m.m(v)
     end
     return g
@@ -601,7 +601,7 @@ clean_values(a::AbstractArray{T}, v, repval=eps(T)) where T <: AbstractFloat = r
 
 
 """
-    PostMutation{T} <: AbstractMutation{T}
+    PostMutation{T} <: DecoratingMutation{T}
     PostMutation(actions, m::AbstractMutation{T})
     PostMutation(m::AbstractMutation{T}, actions...)
 
@@ -609,7 +609,7 @@ Performs a set of actions after a wrapped `AbstractMutation` is applied.
 
 Actions will be invoked with arguments (m::PostMutation{T}, e::T) where m is the enclosing `PostMutation` and `e` is the mutated entity of type `T`.
 """
-struct PostMutation{T} <: AbstractMutation{T}
+struct PostMutation{T} <: DecoratingMutation{T}
     actions
     m::AbstractMutation{T}
 end

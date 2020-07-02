@@ -460,7 +460,7 @@ struct SelectGlobalPool <:AbstractVertexSelection
     s::AbstractVertexSelection
 end
 SelectGlobalPool() = SelectGlobalPool(AllVertices())
-NaiveGAflux.select(s::SelectGlobalPool, g::CompGraph) = filter(is_globpool, NaiveGAflux.select(s.s, g))
+NaiveGAflux.select(s::SelectGlobalPool, g::CompGraph, ms...) = filter(is_globpool, NaiveGAflux.select(s.s, g, ms...))
 
 struct MutateGlobalPool <: AbstractMutation{AbstractVertex} end
 function (::MutateGlobalPool)(v::AbstractVertex)

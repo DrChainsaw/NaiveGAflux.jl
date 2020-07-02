@@ -41,11 +41,15 @@ end
     @test !allow_mutation(v3)
     @test !allow_mutation(v4)
 
-    t = MutationShield(SizeAbsorb())
-    ct(::SizeAbsorb;cf) = SizeInvariant()
-    ct(x...;cf=ct) = clone(x...,cf=cf)
-    tn = ct(t)
-    @test base(tn) == SizeInvariant()
+
+    @testset "Clone" begin
+        t = MutationShield(SizeAbsorb())
+        ct(::SizeAbsorb;cf) = SizeInvariant()
+        ct(x...;cf=ct) = clone(x...,cf=cf)
+        tn = ct(t)
+        @test base(tn) == SizeInvariant()
+        @test tn.allowed == t.allowed
+    end
 end
 
 @testset "VertexSelection" begin
@@ -81,6 +85,11 @@ end
     dm = MutationShieldTestDecoratingMutation
 
     TestShield(t) = MutationShield(t, MutationShieldTestMutation1)
+
+    @testset "Clone" begin
+        t1 = TestShield(SizeAbsorb())
+        @test clone(t1) == t1
+    end
 
     v1 = inputvertex("v1", 3)
     v2 = mutable("v2", Dense(nout(v1), 5), v1)
@@ -135,12 +144,41 @@ end
 
     TestShield(t) = MutationShield(t, MutationShieldAbstractTestAbstractMutation)
 
+    @testset "Clone" begin
+        t1 = TestShield(SizeAbsorb())
+        @test clone(t1) == t1
+    end
+
     v1 = inputvertex("v1", 3)
     v2 = mutable("v2", Dense(nout(v1), 5), v1; traitfun = TestShield)
 
     @test allow_mutation(v2, m1())
     @test allow_mutation(v2, m2())
     @test !allow_mutation(v2, m3())
+end
+
+@testset "SelectWithMutation" begin
+    import NaiveGAflux: SelectWithMutation
+
+    struct SelectWithMutationMutation1 <: AbstractMutation{AbstractVertex} end
+    struct SelectWithMutationMutation2 <: AbstractMutation{AbstractVertex} end
+
+    m1 = SelectWithMutationMutation1
+    m2 = SelectWithMutationMutation2
+
+    TestShield(t) = MutationShield(t, SelectWithMutationMutation1)
+
+    v1 = inputvertex("v1", 3)
+    v2 = mutable("v2", Dense(nout(v1), 5), v1; traitfun = TestShield)
+
+    @test name.(select(FilterMutationAllowed(), [v1,v2])) == []
+
+    @test name.(select(SelectWithMutation(m1()), [v1,v2])) == name.([v2])
+    @test name.(select(SelectWithMutation(m1()), [v1,v2], m1(), m1())) == name.([v2])
+
+    @test name.(select(SelectWithMutation(m2()), [v1,v2])) == []
+    @test name.(select(SelectWithMutation(m2()), [v1,v2], m1())) == []
+    @test name.(select(SelectWithMutation(m1()), [v1,v2], m1(), m2())) == []
 end
 
 @testset "remove_redundant_vertices" begin

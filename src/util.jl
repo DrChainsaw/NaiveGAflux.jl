@@ -56,7 +56,7 @@ allow_mutation(t::DecoratingTrait, ms...) = allow_mutation(base(t), ms...)
 allow_mutation(::MutationTrait, ms...) = true
 allow_mutation(::Immutable, ms...) = false
 allow_mutation(t::MutationShield, ms...) = !isempty(ms) && all(mt -> any(amt -> mt <: amt, t.allowed), typeof.(mutationleaves(ms)))
-NaiveNASlib.clone(t::MutationShield;cf=clone) = MutationShield(cf(base(t); cf=cf), t.allowed)
+NaiveNASlib.clone(t::MutationShield;cf=clone) = MutationShield(cf(base(t); cf=cf), t.allowed...)
 
 """
     AbstractVertexSelection
@@ -79,11 +79,27 @@ select(::AllVertices, vs::AbstractArray, ms...) = vs
 
 Filters out only the vertices for which mutation is allowed from another selection.
 """
-struct FilterMutationAllowed <:AbstractVertexSelection
-    s::AbstractVertexSelection
+struct FilterMutationAllowed{S} <:AbstractVertexSelection
+    s::S
 end
 FilterMutationAllowed() = FilterMutationAllowed(AllVertices())
 select(s::FilterMutationAllowed, x, ms...) = filter(v -> allow_mutation(v, ms...), select(s.s, x, ms...))
+
+"""
+    SelectWithMutation{S, M} <: AbstractVertexSelection
+    SelectWithMutation(m::M)
+    SelectWithMutation(s::S, m::M)
+
+Adds `m` to the list of `ms` when selecting vertices using `s`.
+
+Useful when calling `select` from inside a function without the context of an `AbstractMutation`.
+"""
+struct SelectWithMutation{S, M} <: AbstractVertexSelection
+    s::S
+    m::M
+end
+SelectWithMutation(m) = SelectWithMutation(FilterMutationAllowed(), m)
+select(s::SelectWithMutation, x, ms...) = select(s.s, x, (s.m, ms...))
 
 """
     ApplyIf <: DecoratingTrait
