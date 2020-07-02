@@ -1,6 +1,8 @@
 
 
-default_layerconf() = LayerVertexConf(ActivationContribution ∘ LazyMutable, NaiveGAflux.default_logging())
+ActivationContributionLow(l) = ActivationContribution(l, NeuronValueEvery(20))
+
+default_layerconf() = LayerVertexConf(ActivationContributionLow ∘ LazyMutable, NaiveGAflux.default_logging())
 function initial_archspace(inshape, outsize)
 
     layerconf = default_layerconf()
@@ -56,8 +58,8 @@ end
 function rep_fork_res(s, n, min_rp=1;loglevel=Logging.Debug)
     n == 0 && return s
 
-    resconf = VertexConf(outwrap = ActivationContribution, traitdecoration = MutationShield ∘ NaiveGAflux.default_logging())
-    concconf = ConcConf(ActivationContribution,  MutationShield ∘ NaiveGAflux.default_logging())
+    resconf = VertexConf(outwrap = ActivationContributionLow, traitdecoration = MutationShield ∘ NaiveGAflux.default_logging())
+    concconf = ConcConf(ActivationContributionLow,  MutationShield ∘ NaiveGAflux.default_logging())
 
     msgfun(v) = "Created $(name(v)), nin: $(nin(v)), nout: $(nout(v))"
 
