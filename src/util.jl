@@ -36,14 +36,20 @@ apply(f, p::Real, or = () -> nothing) = apply(p) ? f() : or()
 
 """
     MutationShield <: DecoratingTrait
+    MutationShield(t, allowed...)
 
 Shields its associated vertex from being selected for mutation.
 
+Any types in `allowed` will be allowed to mutate the vertex if supplied when calling `allow_mutation`.
+
 Note that vertex might still be modified if an adjacent vertex is mutated in a way which propagates to a shielded vertex.
 """
-struct MutationShield <:DecoratingTrait
-    t::MutationTrait
+struct MutationShield{T<:MutationTrait, S} <:DecoratingTrait
+    t::T
+    allowed::S
 end
+MutationShield(t, allowed...) = MutationShield(t, allowed)
+
 NaiveNASlib.base(t::MutationShield) = t.t
 allow_mutation(v::AbstractVertex) = allow_mutation(trait(v))
 allow_mutation(t::DecoratingTrait) = allow_mutation(base(t))
