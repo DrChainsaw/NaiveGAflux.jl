@@ -338,7 +338,7 @@ function optmutation(p=0.05)
 end
 
 function graphcrossover()
-    vertexswap = LogMutation(((v1,v2)::Tuple) -> "Crossover swap between $(name(v1)) and $(name(v2))", CrossoverSwap(0.05))
+    vertexswap = LogMutation(((v1,v2)::Tuple) -> "Crossover swap between $(name(v1)) and $(name(v2))", CrossoverSwap(0.05; mergefun=NaiveGAflux.default_mergefun(;layerfun=ActivationContributionLow)))
     crossoverop = VertexCrossover(MutationProbability(vertexswap, 0.05), 0.05)
     return LogMutation(((g1,g2)::Tuple) -> "Crossover between $(modelname(g1)) and $(modelname(g2))", crossoverop)
 end
@@ -356,7 +356,7 @@ function graphmutation(inshape)
     decrease_kernel = KernelSizeMutation(ParSpace2D([-2]))
     mutate_act = ActivationFunctionMutation(acts)
 
-    add_edge = AddEdgeMutation(0.1)
+    add_edge = AddEdgeMutation(0.1; mergefun=NaiveGAflux.default_mergefun(;layerfun=ActivationContributionLow))
     rem_edge = RemoveEdgeMutation()
 
     # Create a shorthand alias for MutationProbability

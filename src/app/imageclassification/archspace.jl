@@ -3,9 +3,12 @@
 ActivationContributionLow(l) = ActivationContribution(l, NeuronValueEvery(20))
 
 default_layerconf() = LayerVertexConf(ActivationContributionLow ∘ LazyMutable, NaiveGAflux.default_logging())
+# Global pool has its own config because it happens to not be compatible with LazyMutable. Should be fixed someday
+default_globpoolconf() = LayerVertexConf(ActivationContributionLow, MutationShield ∘ NaiveGAflux.default_logging())
 function initial_archspace(inshape, outsize)
 
     layerconf = default_layerconf()
+    gpconf = default_globpoolconf()
     outconf = let OutShield(t) = MutationShield(t, KernelSizeMutation, ActivationFunctionMutation)
         LayerVertexConf(layerconf.layerfun, OutShield ∘ layerconf.traitfun)
     end
@@ -42,13 +45,13 @@ function initial_archspace(inshape, outsize)
     # Option 1: Just a global pooling layer
     # For this to work we need to ensure that the layer before the global pool has exactly 10 outputs, that is what this is all about (or else we could just have allowed 0 dense layers in the search space for option 2).
     convout = convspace(outconf, outsize, 1:2:5, identity)
-    blockcout = ArchSpaceChain(convout, GlobalPoolSpace())
+    blockcout = ArchSpaceChain(convout, GlobalPoolSpace(gpconf))
 
     # Option 2: 1-3 Dense layers after the global pool
     dense = VertexSpace(layerconf, NamedLayerSpace("dense", DenseSpace(2 .^(4:9), acts)))
     drep = RepeatArchSpace(dense, 0:2)
     dout=VertexSpace(outconf, NamedLayerSpace("dense", DenseSpace(outsize, identity)))
-    blockdout = ArchSpaceChain(GlobalPoolSpace(), drep, dout)
+    blockdout = ArchSpaceChain(GlobalPoolSpace(gpconf), drep, dout)
 
     blockout = ArchSpace(ParSpace([blockdout, blockcout]))
 
