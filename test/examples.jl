@@ -288,7 +288,7 @@ end
     swapB = vertices(modelB)[4]
     newA, newB = swapsame((swapA, swapB))
 
-    # It returns vertices of a new graph in order to be compatible with mutation utilities
+    # It returns vertices of a new graph to be compatible with mutation utilities
     # Parent models are not modified
     @test newA ∉ vertices(modelA)
     @test newB ∉ vertices(modelB)

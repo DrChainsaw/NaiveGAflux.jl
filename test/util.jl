@@ -41,11 +41,15 @@ end
     @test !allow_mutation(v3)
     @test !allow_mutation(v4)
 
-    t = MutationShield(SizeAbsorb())
-    ct(::SizeAbsorb;cf) = SizeInvariant()
-    ct(x...;cf=ct) = clone(x...,cf=cf)
-    tn = ct(t)
-    @test base(tn) == SizeInvariant()
+
+    @testset "Clone" begin
+        t = MutationShield(SizeAbsorb())
+        ct(::SizeAbsorb;cf) = SizeInvariant()
+        ct(x...;cf=ct) = clone(x...,cf=cf)
+        tn = ct(t)
+        @test base(tn) == SizeInvariant()
+        @test tn.allowed == t.allowed
+    end
 end
 
 @testset "VertexSelection" begin
@@ -63,7 +67,118 @@ end
     @testset "FilterMutationAllowed" begin
         @test select(FilterMutationAllowed(), g1) == [v2,v4]
     end
+end
 
+@testset "MutationShield allowed list" begin
+
+    import NaiveGAflux: DecoratingMutation
+
+    struct MutationShieldTestMutation1 <: AbstractMutation{AbstractVertex} end
+    struct MutationShieldTestMutation2 <: AbstractMutation{AbstractVertex} end
+    struct MutationShieldTestDecoratingMutation <: DecoratingMutation{AbstractVertex}
+        m
+    end
+    MutationShieldTestDecoratingMutation(m, ms...) = MutationShieldTestDecoratingMutation((m, ms...))
+
+    m1 = MutationShieldTestMutation1
+    m2 = MutationShieldTestMutation2
+    dm = MutationShieldTestDecoratingMutation
+
+    TestShield(t) = MutationShield(t, MutationShieldTestMutation1)
+
+    @testset "Clone" begin
+        t1 = TestShield(SizeAbsorb())
+        @test clone(t1) == t1
+    end
+
+    v1 = inputvertex("v1", 3)
+    v2 = mutable("v2", Dense(nout(v1), 5), v1)
+    v3 = mutable("v3", Dense(nout(v2), 4), v2, traitfun = TestShield)
+    v4 = mutable("v4", Dense(nout(v3), 2), v3, traitfun = validated() ∘ TestShield)
+    v5 = mutable("v5", Dense(nout(v4), 1), v4)
+    g1 = CompGraph(v1, v5)
+
+    @testset "Test allowed $m" for m in (
+        m1(),
+        dm(m1()),
+        dm(m1(), m1()),
+        dm(m1(), dm(dm(m1()), m1()))
+        )
+
+         @test !allow_mutation(v1, m)
+         @test allow_mutation(v2, m)
+         @test allow_mutation(v3, m)
+         @test allow_mutation(v4, m)
+         @test allow_mutation(v5, m)
+
+         @test name.(select(FilterMutationAllowed(), g1, m)) == name.([v2,v3,v4,v5])
+    end
+
+    @testset "Test not allowed $m" for m in (
+        m2(),
+        dm(m2()),
+        dm(m1(), m2()),
+        dm(m1(), dm(dm(m1()), m2()))
+        )
+
+        @test !allow_mutation(v1, m)
+        @test allow_mutation(v2, m)
+        @test !allow_mutation(v3, m)
+        @test !allow_mutation(v4, m)
+        @test allow_mutation(v5, m)
+
+        @test name.(select(FilterMutationAllowed(), g1, m)) == name.([v2,v5])
+    end
+end
+
+@testset "MutationShield abstract allowed list" begin
+    # This is not a java habit I promise! I have just been burnt by having to rename mock structs across tests when names clash too many times
+    abstract type MutationShieldAbstractTestAbstractMutation <: AbstractMutation{AbstractVertex} end
+    struct MutationShieldAbstractTestMutation1 <: MutationShieldAbstractTestAbstractMutation end
+    struct MutationShieldAbstractTestMutation2 <: MutationShieldAbstractTestAbstractMutation end
+    struct MutationShieldAbstractTestMutation3 <: AbstractMutation{AbstractVertex} end
+
+    m1 = MutationShieldAbstractTestMutation1
+    m2 = MutationShieldAbstractTestMutation2
+    m3 = MutationShieldAbstractTestMutation3
+
+    TestShield(t) = MutationShield(t, MutationShieldAbstractTestAbstractMutation)
+
+    @testset "Clone" begin
+        t1 = TestShield(SizeAbsorb())
+        @test clone(t1) == t1
+    end
+
+    v1 = inputvertex("v1", 3)
+    v2 = mutable("v2", Dense(nout(v1), 5), v1; traitfun = TestShield)
+
+    @test allow_mutation(v2, m1())
+    @test allow_mutation(v2, m2())
+    @test !allow_mutation(v2, m3())
+end
+
+@testset "SelectWithMutation" begin
+    import NaiveGAflux: SelectWithMutation
+
+    struct SelectWithMutationMutation1 <: AbstractMutation{AbstractVertex} end
+    struct SelectWithMutationMutation2 <: AbstractMutation{AbstractVertex} end
+
+    m1 = SelectWithMutationMutation1
+    m2 = SelectWithMutationMutation2
+
+    TestShield(t) = MutationShield(t, SelectWithMutationMutation1)
+
+    v1 = inputvertex("v1", 3)
+    v2 = mutable("v2", Dense(nout(v1), 5), v1; traitfun = TestShield)
+
+    @test name.(select(FilterMutationAllowed(), [v1,v2])) == []
+
+    @test name.(select(SelectWithMutation(m1()), [v1,v2])) == name.([v2])
+    @test name.(select(SelectWithMutation(m1()), [v1,v2], m1(), m1())) == name.([v2])
+
+    @test name.(select(SelectWithMutation(m2()), [v1,v2])) == []
+    @test name.(select(SelectWithMutation(m2()), [v1,v2], m1())) == []
+    @test name.(select(SelectWithMutation(m1()), [v1,v2], m1(), m2())) == []
 end
 
 @testset "remove_redundant_vertices" begin
