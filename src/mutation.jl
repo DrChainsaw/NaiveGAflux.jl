@@ -17,13 +17,25 @@ Implementations are expected to be callable using a tuple of two type `T` as onl
 AbstractCrossover{T} = AbstractMutation{Tuple{T,T}}
 
 """
-    MutationProbability{T} <:AbstractMutation{T}
+    DecoratingMutation{T}
+
+Abstract type indicating that the type itself does not perform any mutation but wraps a type which might do.
+"""
+abstract type DecoratingMutation{T} <: AbstractMutation{T} end
+wrapped(m::DecoratingMutation) = m.m
+
+mutationleaves(m::DecoratingMutation) = (mutationleaves(wrapped(m))...,)
+mutationleaves(tm::Tuple) = mapreduce(mutationleaves, (t1,t2) -> (t1...,t2...), tm)
+mutationleaves(m) = tuple(m)
+
+"""
+    MutationProbability{T} <: DecoratingMutation{T}
     MutationProbability(m::AbstractMutation{T}, p::Probability)
     MutationProbability(m::AbstractMutation{T}, p::Number)
 
 Applies `m` with probability `p`.
 """
-struct MutationProbability{T} <:AbstractMutation{T}
+struct MutationProbability{T} <: DecoratingMutation{T}
     m::AbstractMutation{T}
     p::Probability
 end
@@ -31,12 +43,12 @@ MutationProbability(m::AbstractMutation{T}, p::Number) where T = MutationProbabi
 (m::MutationProbability)(e) = apply(() -> m.m(e), m.p, () -> e)
 
 """
-    WeightedMutationProbability{T,F} <: AbstractMutation{T}
+    WeightedMutationProbability{T,F} <: DecoratingMutation{T}
     WeightedMutationProbability(m::AbstractMutation::T, pfun::F)
 
 Applies `m` to an entity `e` with a probability `pfun(e)`.
 """
-struct WeightedMutationProbability{T,F} <: AbstractMutation{T}
+struct WeightedMutationProbability{T,F} <: DecoratingMutation{T}
     m::AbstractMutation{T}
     pfun::F
 end
@@ -87,28 +99,28 @@ end
 
 
 """
-    MutationChain{T} <: AbstractMutation{T}
+    MutationChain{T} <: DecoratingMutation{T}
     MutationChain(m::AbstractMutation{T}...)
 
 Chains multiple `AbstractMutation{T}`s after each other.
 
 Input entities will be mutated by the first `AbstractMutation{T}` in the chain and the output will be fed into the next `AbstractMutation{T}` in the chain and so on. The output from the last `AbstractMutation{T}` is returned.
 """
-struct MutationChain{T} <: AbstractMutation{T}
-    m::AbstractVector{<:AbstractMutation{T}}
+struct MutationChain{T} <: DecoratingMutation{T}
+    m::Tuple{Vararg{AbstractMutation{T}}}
 end
-MutationChain(m::AbstractMutation{T}...) where T = MutationChain(collect(m))
+MutationChain(m::AbstractMutation{T}...) where T = MutationChain(m)
 (m::MutationChain)(e) = foldl((ei, mi) -> mi(ei), m.m; init=e)
 
 """
-    RecordMutation{T} <:AbstractMutation{T}
+    RecordMutation{T} <: DecoratingMutation{T}
     RecordMutation(m::AbstractMutation{T})
 
 Records all mutated entities.
 
 Intended use case is to be able to do parameter selection on mutated vertices.
 """
-struct RecordMutation{T} <:AbstractMutation{T}
+struct RecordMutation{T} <: DecoratingMutation{T}
     m::AbstractMutation{T}
     mutated::AbstractVector{T}
 end
@@ -125,7 +137,7 @@ function fetchmutated!(m::RecordMutation)
 end
 
 """
-    LogMutation{T} <:AbstractMutation{T}
+    LogMutation{T} < :DecoratingMutation{T}
     LogMutation(strfun, m::AbstractMutation{T}; level = Logging.Info, nextlogfun=e -> PrefixLogger("   "))
     LogMutation(strfun, level::LogLevel, nextlogfun, m::AbstractMutation{T})
 
@@ -137,7 +149,7 @@ Calling `nextlogfun(e)` where `e` is the entity to mutate produces an `AbstractL
 
 By default, this is used to add a level of indentation to subsequent logging calls which makes logs of hierarchical mutations (e.g. mutate a CompGraph by applying mutations to some of its vertices) easier to read. Set `nextlogfun = e -> current_logger()` to remove this behaviour.
 """
-struct LogMutation{F,L<:LogLevel,LF,T} <:AbstractMutation{T}
+struct LogMutation{F,L<:LogLevel,LF,T} <: DecoratingMutation{T}
     strfun::F
     level::L
     nextlogfun::LF
@@ -150,12 +162,12 @@ function (m::LogMutation)(e)
 end
 
 """
-    MutationFilter{T} <: AbstractMutation{T}
+    MutationFilter{T} <: DecoratingMutation{T}
     MutationFilter(predicate, m)
 
 Applies mutation `m` only for entities `e` for which `predicate(e)` returns true.
 """
-struct MutationFilter{T} <: AbstractMutation{T}
+struct MutationFilter{T} <: DecoratingMutation{T}
     predicate
     m::AbstractMutation{T}
 end
@@ -166,7 +178,7 @@ end
 
 
 """
-    VertexMutation <:AbstractMutation{CompGraph}
+    VertexMutation <: DecoratingMutation{CompGraph}
     VertexMutation(m::AbstractMutation{AbstractVertex}, s::AbstractVertexSelection)
     VertexMutation(m::AbstractMutation{AbstractVertex})
 
@@ -174,13 +186,13 @@ Applies a wrapped `AbstractMutation{AbstractVertex}` to each selected vertex in 
 
 Vertices to select is determined by the configured `AbstractVertexSelection`.
 """
-struct VertexMutation <:AbstractMutation{CompGraph}
+struct VertexMutation <: DecoratingMutation{CompGraph}
     m::AbstractMutation{AbstractVertex}
     s::AbstractVertexSelection
 end
 VertexMutation(m::AbstractMutation{AbstractVertex}) = VertexMutation(m, FilterMutationAllowed())
 function (m::VertexMutation)(g::CompGraph)
-    for v in select(m.s, g)
+    for v in select(m.s, g, m)
         m.m(v)
     end
     return g
@@ -589,7 +601,7 @@ clean_values(a::AbstractArray{T}, v, repval=eps(T)) where T <: AbstractFloat = r
 
 
 """
-    PostMutation{T} <: AbstractMutation{T}
+    PostMutation{T} <: DecoratingMutation{T}
     PostMutation(actions, m::AbstractMutation{T})
     PostMutation(m::AbstractMutation{T}, actions...)
 
@@ -597,7 +609,7 @@ Performs a set of actions after a wrapped `AbstractMutation` is applied.
 
 Actions will be invoked with arguments (m::PostMutation{T}, e::T) where m is the enclosing `PostMutation` and `e` is the mutated entity of type `T`.
 """
-struct PostMutation{T} <: AbstractMutation{T}
+struct PostMutation{T} <: DecoratingMutation{T}
     actions
     m::AbstractMutation{T}
 end

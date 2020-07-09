@@ -317,7 +317,17 @@ struct LayerVertexConf
     traitfun
 end
 LayerVertexConf() = LayerVertexConf(ActivationContribution ∘ LazyMutable, validated() ∘ default_logging())
-Shielded(base=LayerVertexConf()) = LayerVertexConf(base.layerfun, MutationShield ∘ base.traitfun)
+
+"""
+    Shielded(base=LayerVertexConf(); allowed = tuple())
+
+Create a [`LayerVertexConf`](@ref) which is shielded from mutation.
+
+Keyword `allowed` can be used to supply a tuple (or array) of `AbstractMutation` types to allow.
+"""
+Shielded(base=LayerVertexConf(); allowed = tuple()) = let Shield(t) = MutationShield(t, allowed...)
+    LayerVertexConf(base.layerfun, Shield ∘ base.traitfun)
+end
 
 
 (c::LayerVertexConf)(in::AbstractVertex, l) = mutable(l,in,layerfun=c.layerfun, mutation=IoChange, traitfun=c.traitfun)
