@@ -91,10 +91,11 @@
 
     @testset "FileCandidate" begin
         try
-            @testset "FileCandidate cleanup" begin 
-                fc = FileCandidate([1,2,3], 0.01, wait)
-                # TODO: This can't be right?!
-                wait(@async wait(fc.movetimer))            
+            @testset "FileCandidate cleanup" begin
+                fc = FileCandidate([1,2,3], 1.0)
+                # Waiting for timer to end does not seem to be reliable, so we'll just stop the timer and call the timeout function manually
+                close(fc.movetimer)
+                NaiveGAflux.candtodisk(fc.c, fc.writelock)
 
                 fname = MemPool.default_path(fc.c)
 

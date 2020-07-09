@@ -103,10 +103,10 @@ mutable struct FileCandidate{C, R<:Real, L<:Base.AbstractLock} <: AbstractCandid
     movedelay::R
     movetimer::Timer
     writelock::L
-    function FileCandidate(c::C, movedelay::R, initialtasklistener=identity) where {C, R}
+    function FileCandidate(c::C, movedelay::R) where {C, R}
         cref = MemPool.poolset(c)
         writelock = ReentrantLock()
-        movetimer = asynctodisk(cref, movedelay, writelock, true, initialtasklistener)
+        movetimer = asynctodisk(cref, movedelay, writelock)
         fc = new{C, R, typeof(writelock)}(cref, movedelay, movetimer, writelock)
         finalizer(gfc -> MemPool.pooldelete(gfc.c), fc)
         return fc
@@ -123,20 +123,30 @@ function callcand(f, c::FileCandidate, args...)
     ret = lock(c.writelock) do
         f(MemPool.poolget(c.c), args...)
     end
-    c.movetimer = asynctodisk(c.c, c.movedelay, c.writelock, false)
+    c.movetimer = asynctodisk(c.c, c.movedelay, c.writelock)
     return ret
 end
 
-function asynctodisk(r::MemPool.DRef, delay, writelock, init, listener=identity)
+function asynctodisk(r::MemPool.DRef, delay, writelock)
     return Timer(delay) do _
-        @async begin
-            lock(writelock) do 
-                !init && MemPool.pooldelete(MemPool.movetodisk(r))
-                MemPool.movetodisk(r)
-            end         
-        end |> listener
-    end 
+        candtodisk(r, writelock)
+    end
 end
+# Function exists outside of timer for testing purposes basically
+function candtodisk(r::MemPool.DRef, writelock)
+    lock(writelock) do
+        # Not sure why this can even happen, but it does. Bug lurking...
+        inmem = MemPool.with_datastore_lock() do
+            haskey(MemPool.datastore, r.id) && MemPool.isinmemory(MemPool.datastore[r.id])
+        end
+        inmem || return
+
+        # Remove file if it exists or else MemPool won't move it
+        rm(MemPool.default_path(r); force=true)
+        MemPool.movetodisk(r)
+    end
+end
+
 
 function Serialization.serialize(s::AbstractSerializer, c::FileCandidate)
     Serialization.writetag(s.io, Serialization.OBJECT_TAG)
