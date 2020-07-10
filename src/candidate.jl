@@ -82,10 +82,10 @@ function fitness(c::HostCandidate)
     return fitval
 end
 
-const gpu_gc = if CuArrays.functional()
+const gpu_gc = if CUDA.functional()
     function()
         GC.gc()
-        CuArrays.reclaim()
+        CUDA.reclaim()
     end
 else
     () -> nothing

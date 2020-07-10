@@ -34,14 +34,6 @@
         @test space(rng) == (2, 7, 9)
     end
 
-    @testset "SamePad" begin
-        @test SamePad()(2, 1) == (1, 0)
-        @test SamePad()(3, 1) == (1, 1)
-        @test SamePad()(5, 2) == (4, 4)
-        @test SamePad()((4,6), 2) == (3, 3, 5, 5)
-        @test SamePad()((3,7), (2,4)) == (2,2,12,12)
-    end
-
     @testset "NamedLayerSpace" begin
         rng = SeqRng()
         s1 = DenseSpace(2, identity)
@@ -96,17 +88,17 @@
         space = ConvSpace2D(5, relu, 2:5)
         l = space(4, rng)
         @test size(l.weight) == (2,3,4,5)
-        @test size(l(ones(5,5,4,1))) == (5,5,5,1)
+        @test size(l(ones(Float32, 5,5,4,1))) == (5,5,5,1)
 
         rng.ind = 0
         space = ConvSpace(4, elu, 2:5)
         l = space(3, rng)
         @test size(l.weight) == (2,3,4)
-        @test size(l(ones(5,3,1))) == (5,4,1)
+        @test size(l(ones(Float32, 5,3,1))) == (5,4,1)
 
         l = space(4, rng, outsize=3)
         @test size(l.weight) == (3,4,3)
-        @test size(l(ones(5,4,1))) == (5,3,1)
+        @test size(l(ones(Float32, 5,4,1))) == (5,3,1)
     end
 
     @testset "BatchNormSpace" begin
@@ -362,7 +354,7 @@
 
         @testset "ConvSpace2D" begin
             space = ConvSpace2D(3, identity, [3])
-            indata = reshape(1:2*4*5*6,4,5,6,2)
+            indata = Float32.(reshape(1:2*4*5*6,4,5,6,2))
             insize = size(indata, 3)
 
             @testset "IdentityWeightInit" begin
@@ -388,7 +380,7 @@
             v = space(inpt, outsize=nout(inpt), wi=IdentityWeightInit())
             g = CompGraph(inpt, v)
 
-            indata = reshape(1:nout(inpt)*4*5, 5,4,nout(inpt), 1)
+            indata = Float32.(reshape(1:nout(inpt)*4*5, 5,4,nout(inpt), 1))
             @test g(indata) == indata
         end
 

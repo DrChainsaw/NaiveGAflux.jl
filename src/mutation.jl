@@ -458,10 +458,10 @@ Mutate the size of filter kernels of convolutional layers.
 
 Note: High likelyhood of large accuracy degradation after applying this mutation.
 """
-struct KernelSizeMutation{N,F} <: AbstractMutation{AbstractVertex}
+struct KernelSizeMutation{N,F,P} <: AbstractMutation{AbstractVertex}
     Δsizespace::AbstractParSpace{N, Int}
     maxsize::F
-    padspace::AbstractPadSpace
+    pad::P
     rng::AbstractRNG
 end
 KernelSizeMutation(Δsizespace::AbstractParSpace{N, Int}; maxsize = v -> ntuple(i->Inf,N), pad=SamePad(), rng=rng_default) where N = KernelSizeMutation(Δsizespace, maxsize, pad, rng)
@@ -474,11 +474,13 @@ function (m::KernelSizeMutation{N})(v::AbstractVertex) where N
 
     currsize = size(NaiveNASflux.weights(l))[1:N]
     Δsize = Int.(clamp.(m.Δsizespace(m.rng), 1 .- currsize, m.maxsize(v) .- currsize)) # ensure new size is > 0 and < maxsize
-    pad = m.padspace(currsize .+ Δsize, dilation(l))
+    # This will eventually boil down to Setfield doing its thing, and that won't be using any convenience constructors
+    pad = Flux.calc_padding(m.pad, currsize .+ Δsize, dilation(l), stride(l))
     mutate_weights(v, KernelSizeAligned(Δsize, pad))
     return v
 end
 dilation(l) = l.dilation
+stride(l) = l.stride
 
 """
     ActivationFunctionMutation{T,R} <: AbstractMutation{AbstractVertex} where {T <: AbstractParSpace{1}, R <: AbstractRNG}
