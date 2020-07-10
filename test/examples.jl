@@ -29,7 +29,7 @@
     # Not recommended to measure fitness on the training data for real usage.
     fitfun = AccuracyFitness([dataset])
     opt = Flux.Descent(0.01) # All models use the same optimizer here. Would be a bad idea with a stateful optimizer!
-    loss = Flux.logitcrossentropy
+    loss = Flux.Losses.logitcrossentropy
     population = [CandidateModel(model, opt, loss, fitfun) for model in models]
 
     # Step 2: Train the models
@@ -449,7 +449,7 @@ end
 
     graph = CompGraph(inpt, archspace(inpt))
     opt = Flux.ADAM(0.1)
-    loss = Flux.logitcrossentropy
+    loss = Flux.Losses.logitcrossentropy
     fitfun = NanGuard(AccuracyFitness([dataset]))
 
     # CandidateModel is the most basic candidate and handles things like fitness instrumentation

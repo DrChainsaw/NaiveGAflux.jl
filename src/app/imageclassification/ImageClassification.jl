@@ -140,7 +140,7 @@ function create_model(name, as, in, fg, cwrap)
     opt = optselect(Descent(rand() * 0.099 + 0.01))
     # Always cache even if not strictly needed for all fitnessfunctions because consequence is so bad if one forgets
     # it when needed. Users who know what they are doing can unwrap if caching is not wanted.
-    CacheCandidate(cwrap(CandidateModel(CompGraph(in, as(name, in)), opt, Flux.logitcrossentropy, fg())))
+    CacheCandidate(cwrap(CandidateModel(CompGraph(in, as(name, in)), opt, Flux.Losses.logitcrossentropy, fg())))
 end
 
 end
