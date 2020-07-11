@@ -1,7 +1,7 @@
 name = "NaiveGAflux"
 uuid = "81ede08e-ab29-11e9-16d3-79edd30a1d76"
 authors = ["DrChainsaw"]
-version = "0.5.2"
+version = "0.6.0"
 
 [deps]
 CUDA = "052768ef-5323-5732-b1bb-66c8b64840ba"
@@ -21,7 +21,7 @@ CUDA = "1"
 MemPool = "0.3"
 NaiveNASflux = "1.5.0"
 Reexport = "0.2.0, 1"
-Setfield = "0.3.4, 0.5, 0.6"
+Setfield = "0.3.4, 0.5, 0.6, 0.7"
 julia = "1"
 
 [extras]
