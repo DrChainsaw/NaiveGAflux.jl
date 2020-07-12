@@ -549,3 +549,5 @@ NaiveNASlib.minΔninfactor(::GlobalPool) = 1
 NaiveNASlib.minΔnoutfactor(::GlobalPool) = 1
 function NaiveNASlib.mutate_inputs(::GlobalPool, args...) end
 function NaiveNASlib.mutate_outputs(::GlobalPool, args...) end
+
+_Δshapes(::GlobalPool, v) = _Δshapes_gp(actdim(v) .- 2)

@@ -327,7 +327,6 @@ end
 
 _Δshapes(::FluxNoParLayer, v) = _Δshapes(layer(v), v)
 _Δshapes(p::Union{MeanPool, MaxPool}, v) = Δshape_from_window(p.k, 1, p.pad), ShapeDiv(p.stride)
-_Δshapes(::GlobalPool, v) = _Δshapes_gp(actdim(v) .- 2)
 _Δshapes(::Type{typeof(Flux.flatten)}, v) = _Δshapes_gp(actdim(v) .- 2)
 
 Δshape_from_window(ws::NTuple{N}, dilation::Integer, pad) where N = Δshape_from_window(ws, ntuple(i -> dilation, N), pad)
