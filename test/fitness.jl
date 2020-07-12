@@ -21,9 +21,9 @@
         @test_throws AssertionError fitness(taf, (args...) -> error("shall not be called"))
 
         fi = instrument(Train(), taf, f)
-        li = instrument(TrainLoss(), taf, Flux.mse)
+        li = instrument(TrainLoss(), taf, Flux.Losses.mse)
 
-        @test li(fi(x), y) == 2//9
+        @test li(fi(x), y) ≈ 2/9
         @test fitness(taf, (args...) -> error("shall not be called")) == 0.5
 
         reset!(taf)

@@ -129,33 +129,6 @@ function(s::CoupledParSpace{N})(rng=rng_default) where N
 end
 
 """
-    AbstractPadSpace
-
-Abstract type for generating padding parameters for conv layers.
-"""
-abstract type AbstractPadSpace end
-
-"""
-    SamePad <:AbstractPadSpace
-
-Generates padding parameters so that outputshape == inputshape ./ stride.
-
-Formula from Relationship 14 in http://deeplearning.net/software/theano_versions/dev/tutorial/conv_arithmetic.html
-"""
-struct SamePad <:AbstractPadSpace end
-function (::SamePad)(ks, dilation, rng=nothing)
-    # Effective kernel size, including dilation
-    ks_eff = @. ks + (ks - 1) * (dilation - 1)
-    # How much total padding needs to be applied?
-    pad_amt = @. ks_eff - 1
-    # In case amount of padding is odd we need to apply different amounts to each side.
-    return Tuple(mapfoldl(i -> [ceil(Int, i/2), i ÷ 2], vcat, pad_amt))
-end
-
-struct NoPad <:AbstractPadSpace end
-(::NoPad)(ks, dilation, rng=nothing) = 0
-
-"""
     NamedLayerSpace <:AbstractLayerSpace
 
 Adds a `name` to an `AbstractLayerSpace`
@@ -227,7 +200,7 @@ denseinitW(::ZeroWeightInit) = (initW = zeros,)
     ConvSpace(outsizes, activations, ks::AbstractParSpace)
     ConvSpace(base::BaseLayerSpace, ks::AbstractVector{<:Integer}...)
     ConvSpace(base::BaseLayerSpace, ks::AbstractParSpace)
-    ConvSpace(base::BaseLayerSpace, ks::AbstractParSpace, stride::AbstractParSpace, dilation::AbstractParSpace, padding::AbstractPadSpace)
+    ConvSpace(base::BaseLayerSpace, ks::AbstractParSpace, stride::AbstractParSpace, dilation::AbstractParSpace, pad)
 
 
 Search space of basic `N`D convolutional layers.
@@ -237,7 +210,7 @@ struct ConvSpace{N} <:AbstractLayerSpace
     kernelsize::AbstractParSpace{N, <:Integer}
     stride::AbstractParSpace
     dilation::AbstractParSpace
-    padding::AbstractPadSpace
+    pad
 end
 ConvSpace2D(outsizes, activations, ks) = ConvSpace2D(BaseLayerSpace(outsizes, activations), ks)
 ConvSpace2D(base::BaseLayerSpace, ks::AbstractVector{<:Integer}) = ConvSpace(base, ks,ks)
@@ -250,9 +223,8 @@ function (s::ConvSpace)(insize::Integer, rng=rng_default; outsize = outsize(s.ba
     ks = Tuple(s.kernelsize(rng))
     stride = s.stride(rng)
     dilation = s.dilation(rng)
-    pad = s.padding(ks, dilation, rng)
     act = activation(s.base, rng)
-    return convfun(ks, insize=>outsize, act; pad=pad, stride=stride,dilation=dilation, convinitW(wi)...)
+    return convfun(ks, insize=>outsize, act; pad=s.pad, stride=stride,dilation=dilation, convinitW(wi)...)
 end
 
 convinitW(::DefaultWeightInit) = ()
@@ -281,16 +253,15 @@ Search space of `N`D pooling layers.
 struct PoolSpace{N} <:AbstractLayerSpace
     ws::AbstractParSpace{N, <:Integer}
     stride::AbstractParSpace
-    pad::AbstractPadSpace
+    pad
 end
 PoolSpace2D(ws::AbstractVector{<:Integer}) = PoolSpace(ws,ws)
 PoolSpace(ws::AbstractVector{<:Integer}...) = PoolSpace(ParSpace(ws), ParSpace(ws))
-PoolSpace(ws::AbstractParSpace, stride::AbstractParSpace) = PoolSpace(ws,stride, NoPad())
+PoolSpace(ws::AbstractParSpace, stride::AbstractParSpace) = PoolSpace(ws, stride, 0)
 function (s::PoolSpace)(in::Integer, rng=rng_default;outsize=nothing, pooltype)
     ws = Tuple(s.ws(rng))
     stride = s.stride(rng)
-    pad = s.pad(ws, 1, rng)
-    pooltype(ws, stride=stride, pad=pad)
+    pooltype(ws, stride=stride, pad=s.pad)
 end
 
 """

@@ -176,7 +176,7 @@
 
         @testset "Global learning rate scaling" begin
             v1 = inputvertex("in", 3, FluxDense())
-            pop = CandidateModel.(Ref(CompGraph(v1, v1)), Descent.(0.1:0.1:1.0), Flux.mse, Ref(DummyFitness()))
+            pop = CandidateModel.(Ref(CompGraph(v1, v1)), Descent.(0.1:0.1:1.0), Flux.Losses.mse, Ref(DummyFitness()))
 
             lr(c) = c.opt.eta
             @test lr.(pop) == 0.1:0.1:1.0

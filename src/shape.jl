@@ -305,6 +305,6 @@ _Δshapes(p::Union{MeanPool, MaxPool}, v) = Δshape_from_window(p.k, 1, p.pad), 
 Δshape_from_window(ws::NTuple{N}, dilation::Integer, pad) where N = Δshape_from_window(ws, ntuple(i -> dilation, N), pad)
 function Δshape_from_window(ws::NTuple{N}, dilation, pad) where N
     padact = length(pad) == N ? 2 .* pad : ntuple(i -> pad[2(i-1)+1] + pad[2(i-1)+2], N)
-    padref = ntuple(i -> sum(SamePad()(ws[i], dilation[i])), N)
+    padref = ntuple(i -> sum(Flux.calc_padding(SamePad(), tuple(ws[i]), dilation[i], 1)), N)
     return ShapeAdd(padact .- padref)
 end

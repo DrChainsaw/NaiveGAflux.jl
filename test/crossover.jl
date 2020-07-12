@@ -405,8 +405,8 @@
                     @test "b.$v2" ∉ name.(vertices(gb))
                     @test "a.$v2" ∈ name.(vertices(gb))
 
-                    @test size(ga(ones(4,4,3,2))) == (2,2,2,2)
-                    @test size(gb(ones(4,4,3,2))) == (2,2,2,2)
+                    @test size(ga(ones(Float32, 4,4,3,2))) == (2,2,2,2)
+                    @test size(gb(ones(Float32, 4,4,3,2))) == (2,2,2,2)
                 end
 
                 @testset "Self swap is noop" begin
@@ -415,7 +415,7 @@
                     bn = layer(v4n(g_org, "a.bv1"))
                     bn.γ .= randn(Float32, nout(bn))
 
-                    indata = randn(4,4,3,2)
+                    indata = randn(Float32, 4,4,3,2)
                     out_org = g_org(indata)
 
                     g_new = copy(g_org)
@@ -602,8 +602,8 @@
                 @test nout(v4n(gb_new, "a.dv1")) == nout(layer(v4n(gb_new, "a.dv1")))
                 @test nin(v4n(gb_new, "b.dv7")) == [nin(layer(v4n(gb_new, "b.dv7")))]
 
-                @test size(ga_new(ones(4,4,3,2))) == (8,2)
-                @test size(gb_new(ones(4,4,3,2))) == (10,2)
+                @test size(ga_new(ones(Float32, 4,4,3,2))) == (8,2)
+                @test size(gb_new(ones(Float32, 4,4,3,2))) == (10,2)
             end
         end
 
