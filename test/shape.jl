@@ -1,33 +1,43 @@
 @testset "Shape" begin
-    import NaiveGAflux: ΔShape, ShapeAdd, ShapeMul, ShapeDiv, fshape, revert, combine, combine, filter_noops, ShapeTrace, shapetrace, Δshapes, squashshapes, orderΔshapes, ndimsout, ndimsin
+    import NaiveGAflux: ΔShape, ShapeAdd, ShapeMul, ShapeDiv, ShapeFlatten, fshape, revert, combine, combine, filter_noops, ShapeTrace, shapetrace, Δshapes, squashshapes, orderΔshapes, ndimsout, ndimsin
 
     @testset "ΔShapes" begin
 
+        @test fshape(tuple(), (1,2,3,4)) == (1,2,3,4)
+
         @testset "ShapeAdd" begin
-            @test fshape(ShapeAdd((1,2)), (3,4)) == (4,6)
-            @test fshape(combine(ShapeAdd((1,2)), ShapeAdd((-2,-1))), (3,4)) == (2,5)
-            @test combine(ShapeAdd((1,2)), ShapeAdd((3,4))) == tuple(ShapeAdd((4,6)))
-            @test revert(ShapeAdd((1,2))) == ShapeAdd((-1,-2))
-            @test filter_noops(ShapeAdd((0,1,2,3))) == tuple(ShapeAdd((0,1,2,3)))
-            @test filter_noops(ShapeAdd((0,0))) == tuple()
+            @test fshape(ShapeAdd(1,2), (3,4)) == (4,6)
+            @test fshape(combine(ShapeAdd(1,2), ShapeAdd(-2,-1)), (3,4)) == (2,5)
+            @test combine(ShapeAdd(1,2), ShapeAdd(3,4)) == tuple(ShapeAdd(4,6))
+            @test revert(ShapeAdd(1,2)) == ShapeAdd(-1,-2)
+            @test filter_noops(ShapeAdd(0,1,2,3)) == tuple(ShapeAdd(0,1,2,3))
+            @test filter_noops(ShapeAdd(0,0)) == tuple()
         end
 
         @testset "ShapeMul" begin
-            @test fshape(ShapeMul((1,2)), (3,4)) == (3,8)
-            @test fshape(combine(ShapeMul((1,2)), ShapeMul((2,3))), (3,4)) == (6,24)
-            @test combine(ShapeMul((1,2)), ShapeMul((3,4))) == tuple(ShapeMul((3,8)))
-            @test revert(ShapeMul((1,2))) == ShapeDiv((1,2))
-            @test filter_noops(ShapeMul((0,1,2,3))) == tuple(ShapeMul((0,1,2,3)))
-            @test filter_noops(ShapeMul((1,1))) == tuple()
+            @test fshape(ShapeMul(1,2), (3,4)) == (3,8)
+            @test fshape(combine(ShapeMul(1,2), ShapeMul(2,3)), (3,4)) == (6,24)
+            @test combine(ShapeMul(1,2), ShapeMul(3,4)) == tuple(ShapeMul(3,8))
+            @test revert(ShapeMul(1,2)) == ShapeDiv(1,2)
+            @test filter_noops(ShapeMul(0,1,2,3)) == tuple(ShapeMul(0,1,2,3))
+            @test filter_noops(ShapeMul(1,1)) == tuple()
         end
 
         @testset "ShapeDiv" begin
-            @test fshape(ShapeDiv((1,2)), (3,4)) == (3,2)
-            @test fshape(combine(ShapeDiv((1,2)), ShapeDiv((2,3))), (3,4)) == (2,1)
-            @test combine(ShapeDiv((1,2)), ShapeDiv((3,4))) == tuple(ShapeDiv((3,8)))
-            @test revert(ShapeDiv((1,2))) == ShapeMul((1,2))
-            @test filter_noops(ShapeDiv((0,1,2,3))) == tuple(ShapeDiv((0,1,2,3)))
-            @test filter_noops(ShapeDiv((1,1))) == tuple()     
+            @test fshape(ShapeDiv(1,2), (3,4)) == (3,2)
+            @test fshape(combine(ShapeDiv(1,2), ShapeDiv(2,3)), (3,4)) == (2,1)
+            @test combine(ShapeDiv(1,2), ShapeDiv(3,4)) == tuple(ShapeDiv(3,8))
+            @test revert(ShapeDiv(1,2)) == ShapeMul(1,2)
+            @test filter_noops(ShapeDiv(0,1,2,3)) == tuple(ShapeDiv(0,1,2,3))
+            @test filter_noops(ShapeDiv(1,1)) == tuple()
+        end
+
+        @testset "ShapeFlatten" begin
+            @test fshape(ShapeFlatten(), (1,2)) == fshape(ShapeFlatten(), (1,2,3)) == tuple()
+            @test ShapeFlatten() |> revert |> revert == ShapeFlatten()
+            @test ShapeFlatten{2}() |> revert |> revert == ShapeFlatten{2}()
+            @test combine(ShapeFlatten{2}(), ShapeFlatten{2}()) == tuple(ShapeFlatten{2}(), ShapeFlatten{2}())
+            @test filter_noops(ShapeFlatten()) == tuple(ShapeFlatten())
         end
 
         @testset "ndims" begin
@@ -81,11 +91,14 @@
             @test swapΔshape(ShapeAdd(4,12), ShapeDiv(2,3)) == (ShapeDiv(2,3), ShapeAdd(2, 4))
 
             @test swapΔshape(ShapeMul(2,4), ShapeDiv(4,8)) == (ShapeMul(2,4), ShapeDiv(4,8))
+
+            @test swapΔshape(ShapeAdd(2,4), ShapeFlatten()) == (ShapeAdd(2,4), ShapeFlatten())
         end
 
         @testset "Order shapes" begin
             @test orderΔshapes(tuple(ShapeAdd(1,2))) == tuple(ShapeAdd(1,2))
             @test orderΔshapes((ShapeAdd(1,2), ShapeMul(2,3), ShapeAdd(4,6))) == (ShapeAdd(2,2), ShapeAdd(1,2), ShapeMul(2,3))
+            @test orderΔshapes((ShapeAdd(1,2), ShapeMul(2,3), ShapeAdd(4,6), ShapeFlatten())) == (ShapeAdd(1,2), ShapeAdd(2,2), ShapeMul(2,3), ShapeFlatten())
 
             @testset "Mixed ShapeAdds" begin
                 s = (ShapeAdd(1,2), ShapeDiv(2,3), ShapeMul(2,2), ShapeAdd(4,4), ShapeAdd(3,5), ShapeAdd(6,8), ShapeMul(2,3), ShapeMul(1,1), ShapeAdd(3,7))
@@ -113,6 +126,8 @@
             @test squashshapes(ShapeAdd(1,2), ShapeAdd(3,4), ShapeAdd(5,6)) == tuple(ShapeAdd(9,12))
             @test squashshapes(ShapeAdd(1,2), ShapeAdd(3,4), ShapeAdd(-4,-6)) == tuple()
             @test squashshapes(ShapeAdd(1,2), ShapeMul(3,4)) == (ShapeAdd(1,2), ShapeMul(3,4))
+            @test squashshapes(ShapeAdd(1,2), ShapeAdd(-1,1), ShapeFlatten()) == (ShapeAdd(0, 3), ShapeFlatten())
+
             as = (ShapeAdd(1,2), ShapeMul(3,4))
             sa = revert(as)
             @test squashshapes((as..., sa...)) == tuple()
@@ -168,6 +183,9 @@
                 @test Δshapediff(ShapeDiv(2,2), ShapeDiv(2,2)) == tuple()
                 @test Δshapediff(ShapeDiv(2,3), ShapeDiv(3,4)) == (ShapeMul(3,4), ShapeDiv(2,3))
                 @test Δshapediff(ShapeDiv(2,3), ShapeDiv(4,6)) == tuple(ShapeMul(2,2))
+
+                @test Δshapediff(ShapeFlatten(), ShapeFlatten()) == tuple()
+                @test Δshapediff(ShapeFlatten{2}(), ShapeFlatten{3}()) == tuple(ShapeFlatten{2}(), ShapeFlatten{3}())
             end
 
             @testset "Tuples" begin
@@ -191,10 +209,12 @@
     end
 
     @testset "ShapeTrace" begin
+        import NaiveGAflux: GlobalPool
         iv(N=2) = inputvertex("in", 1, FluxConv{N}())
         bv(in, name) = mutable(name, BatchNorm(nout(in)), in)
         pv(in, name; ks=(3,3), stride=ntuple(i->1, length(ks)), kwargs...) = mutable(name, MaxPool(ks; stride=stride, kwargs...), in)
         cv(in, name; ks=(3,3), kwargs...) = mutable(name, Conv(ks, nout(in) => nout(in); kwargs...), in)
+        gp(in, name) = invariantvertex(GlobalPool{MaxPool}(), in, traitdecoration=named(name))
 
         @testset "Trace $vf" for vf in (cv,pv)
             vi = iv()
@@ -274,6 +294,22 @@
                 s = ShapeTrace(vn).trace
                 @test fshape(s, (17,11,20)) == size(vn(ones(Float32, 17, 11, 20, nout(vi), 1)))[1:3]
             end
+        end
+
+        @testset "GlobalPool" begin
+            v1 = gp(iv(3), "v1")
+            @test Δshapes(v1) == tuple(ShapeFlatten{2}())
+
+            s = ShapeTrace(v1).trace
+            @test fshape(s, (11,12)) == tuple()
+        end
+
+        @testset "Flux.flatten" begin
+            v1 = invariantvertex(Flux.flatten, iv(3); traitdecoration = named("v1"))
+            @test Δshapes(v1) == tuple(ShapeFlatten{2}())
+
+            s = ShapeTrace(v1).trace
+            @test fshape(s, (11,12)) == tuple()
         end
 
         @testset "Squash misaligned branches" begin
