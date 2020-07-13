@@ -5,8 +5,6 @@
         import NaiveGAflux.AutoFlux.ImageClassification: TrainSplitAccuracy, TrainStrategy, TrainAccuracyVsSize, EliteAndTournamentSelection, EliteAndSusSelection, GlobalOptimizerMutation, modelname
         using Random
 
-        # Use Float64 instead of Float32 due to https://github.com/FluxML/Flux.jl/issues/979
-
         # Workaround as losses fail with Flux.OneHotMatrix on Appveyor x86 (works everywhere else)
         onehot(y) = Float32.(Flux.onehotbatch(y, 0:5))
 
