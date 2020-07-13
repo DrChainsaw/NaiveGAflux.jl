@@ -317,3 +317,24 @@ PrefixLogger(prefix::String) = PrefixLogger(current_logger(), prefix)
 Logging.min_enabled_level(l::PrefixLogger) = Logging.min_enabled_level(l.wrapped)
 Logging.shouldlog(l::PrefixLogger, args...) =  Logging.shouldlog(l.wrapped, args...)
 Logging.handle_message(l::PrefixLogger, level, message, args...; kwargs...) = Logging.handle_message(l.wrapped, level, l.prefix * message, args...; kwargs...)
+
+"""
+    GlobalPool{PT}
+    GlobalPool(PT)
+
+Global pool combined with `Flux.flatten`. Pool type is determined by `PT`, typically `MaxPool` or `MeanPool`.
+
+Useful because in the context of mutations, one most likely want to keep them as one single vertex to avoid mutations happening between them.
+"""
+struct GlobalPool{PT} end
+GlobalPool(PT) = GlobalPool{PT}()
+
+# About 50% faster on GPU to create a MeanPool and use it compared to dropdims(mean(x, dims=[1:2]), dims=(1,2)). CBA to figure out why...
+(::GlobalPool{PT})(x::AbstractArray{<:Any, N}) where {N, PT} = Flux.flatten(PT(size(x)[1:N-2])(x))
+
+NaiveNASflux.layertype(gp::GlobalPool) = gp
+NaiveNASflux.layer(gp::GlobalPool) = gp
+NaiveNASlib.minΔninfactor(::GlobalPool) = 1
+NaiveNASlib.minΔnoutfactor(::GlobalPool) = 1
+function NaiveNASlib.mutate_inputs(::GlobalPool, args...) end
+function NaiveNASlib.mutate_outputs(::GlobalPool, args...) end
