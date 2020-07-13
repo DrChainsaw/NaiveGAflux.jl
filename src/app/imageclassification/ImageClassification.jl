@@ -3,6 +3,7 @@ module ImageClassification
 using ...NaiveGAflux
 using ..AutoFlux: fit
 import NaiveGAflux: GlobalPool
+import NaiveGAflux: shapetrace, squashshapes, fshape, ndimsout
 using Random
 import Logging
 using Statistics

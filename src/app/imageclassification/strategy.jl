@@ -406,7 +406,7 @@ end
 isbig(g) = nparams(g) > 20e7
 
 canaddmaxpool(inshape) = v -> canaddmaxpool(v, inshape)
-canaddmaxpool(v::AbstractVertex, inshape) = is_convtype(v) && !infork(v) && nmaxpool(all_in_graph(v)) < log2(minimum(inshape))
+canaddmaxpool(v::AbstractVertex, inshape) = is_convtype(v) && !infork(v) && all(fshape(shapetrace(v) |> squashshapes, inshape) .> 1)
 
 function infork(v, inputcnt = Dict{AbstractVertex, Int}(inputs(v) .=> 1), seen = Set())
     v in seen && return any(x -> x < 0, values(inputcnt))
@@ -425,11 +425,9 @@ function infork(v, inputcnt = Dict{AbstractVertex, Int}(inputs(v) .=> 1), seen =
     return any(x -> x < 0, values(inputcnt))
 end
 
-nmaxpool(vs) = sum(endswith.(name.(vs), "maxpool"))
-
 maxkernelsize(inshape) = v -> maxkernelsize(v, inshape)
 function maxkernelsize(v::AbstractVertex, inshape)
-    ks = inshape .÷ 2^nmaxpool(NaiveNASlib.flatten(v))
+    ks = fshape(shapetrace(v) |> squashshapes, inshape)
     # Kernel sizes must be odd due to CuArrays issue# 356 (odd kernel size => symmetric padding)
     return @. ks - !isodd(ks)
  end
