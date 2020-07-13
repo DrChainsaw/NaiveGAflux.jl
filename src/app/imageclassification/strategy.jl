@@ -406,7 +406,15 @@ end
 isbig(g) = nparams(g) > 20e7
 
 canaddmaxpool(inshape) = v -> canaddmaxpool(v, inshape)
-canaddmaxpool(v::AbstractVertex, inshape) = is_convtype(v) && !infork(v) && all(fshape(shapetrace(v) |> squashshapes, inshape) .> 1)
+canaddmaxpool(v::AbstractVertex, inshape) = is_convtype(v) && !infork(v) && canshrink(v, inshape)
+
+function canshrink(v, inshape)
+    # Note assumes stride = 2!
+    # Also assumes single output after a global pool and flatten
+    allvs = all_in_graph(v)
+    gpv = allvs[findfirst(is_globpool, allvs)] |> inputs |> first
+    return all(fshape(shapetrace(gpv) |> squashshapes, inshape) .> 1)
+end
 
 function infork(v, inputcnt = Dict{AbstractVertex, Int}(inputs(v) .=> 1), seen = Set())
     v in seen && return any(x -> x < 0, values(inputcnt))
