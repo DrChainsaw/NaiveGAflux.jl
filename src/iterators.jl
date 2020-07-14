@@ -177,21 +177,17 @@ Base.IteratorEltype(itr::BatchIterator) = Base.IteratorEltype(itr.base)
 function Base.iterate(itr::BatchIterator, start=1)
     start > size(itr.base)[end] && return nothing
     stop = min(size(itr.base)[end], start + itr.batchsize-1)
-    return batch(itr.base, start,stop), start+itr.batchsize
+    return batch(itr.base, start:stop), start+itr.batchsize
 end
 
-## I *think* speed matters here, so...
-batch(s::Singleton, start, stop) = batch(val(s), start, stop)
-batch(a::AbstractArray{T,1}, start, stop) where T = view(a, start:stop)
-batch(a::AbstractArray{T,2}, start, stop) where T = view(a, :,start:stop)
-batch(a::AbstractArray{T,3}, start, stop) where T = view(a, :,:,start:stop)
-batch(a::AbstractArray{T,4}, start, stop) where T = view(a, :,:,:,start:stop)
-batch(a::AbstractArray{T,5}, start, stop) where T = view(a, :,:,:,:,start:stop)
-function batch(a::AbstractArray{T,N}, start, stop) where {T,N}
-    get = repeat(Union{Colon, AbstractArray{Int}}[Colon()], N)
-    get[end] = start:stop
-    return view(a, get...)
-end
+# I *think* speed matters here, so...
+batch(s::Singleton, inds) = batch(val(s), inds)
+batch(a::AbstractArray{T,1}, inds) where T = view(a, inds)
+batch(a::AbstractArray{T,2}, inds) where T = view(a, :,inds)
+batch(a::AbstractArray{T,3}, inds) where T = view(a, :,:,inds)
+batch(a::AbstractArray{T,4}, inds) where T = view(a, :,:,:,inds)
+batch(a::AbstractArray{T,5}, inds) where T = view(a, :,:,:,:,inds)
+batch(a::AbstractArray{T,N}, inds) where {T,N} = view(a, ntuple(i -> Colon(), N - 1)..., inds)
 
 Base.print(io::IO, itr::BatchIterator) = print(io, "BatchIterator(size=$(size(itr.base)), batchsize=$(itr.batchsize))")
 
@@ -208,39 +204,31 @@ Flux.onehotbatch(itr::BatchIterator, labels) = MapIterator(x -> Flux.onehotbatch
     ShuffleIterator(data, batchsize, rng=rng_default)
 
 Same as `BatchIterator` but also shuffles `data`. Order is reshuffled each time iteration begins.
-
-Beware: The data is shuffled in place. Provide a copy if the unshuffled data is also needed.
 """
 struct ShuffleIterator{T, R<:AbstractRNG}
-    base::BatchIterator{T}
+    base::T
+    batchsize::Int
     rng::R
 end
-ShuffleIterator(data, bs, rng=rng_default) = ShuffleIterator(BatchIterator(data, bs), rng)
+ShuffleIterator(data::T, bs, rng::R=rng_default) where {T,R} = ShuffleIterator{T,R}(data, bs, rng)
 
-Base.length(itr::ShuffleIterator) = length(itr.base)
-Base.size(itr::ShuffleIterator) = size(itr.base)
+Base.length(itr::ShuffleIterator) = length(BatchIterator(itr.base, itr.batchsize))
+Base.size(itr::ShuffleIterator) = tuple(length(itr))
 
 Base.IteratorSize(itr::ShuffleIterator) = Base.IteratorSize(itr.base)
 Base.IteratorEltype(itr::ShuffleIterator) = Base.IteratorEltype(itr.base)
 
 function Base.iterate(itr::ShuffleIterator)
-    shufflelastdim!(itr.rng, itr.base.base)
-    return iterate(itr.base)
+    # Borrow batchhandling from BatchIterator
+    inditr = BatchIterator(randperm(itr.rng, size(itr.base)[end]), itr.batchsize)
+    inds, istate = IterTools.@ifsomething iterate(inditr)
+    return batch(itr.base, inds), (inditr, istate)
 end
-Base.iterate(itr::ShuffleIterator, state) = iterate(itr.base, state)
 
-## I *think* speed matters here, so...
-shufflelastdim!(rng, s::Singleton) = shufflelastdim!(rng, val(s))
-shufflelastdim!(rng, a::AbstractArray{T,1}) where T = a[:] = a[randperm(rng, size(a,1))]
-shufflelastdim!(rng, a::AbstractArray{T,2}) where T = a[:,:] = a[:, randperm(rng, size(a, 2))]
-shufflelastdim!(rng, a::AbstractArray{T,3}) where T = a[:,:,:] = a[:,:, randperm(rng, size(a, 3))]
-shufflelastdim!(rng, a::AbstractArray{T,4}) where T = a[:,:,:,:] = a[:,:,:,randperm(rng, size(a, 4))]
-shufflelastdim!(rng, a::AbstractArray{T,5}) where T = a[:,:,:,:,:] = a[:,:,:,:, randperm(rng, size(a, 5))]
-function shufflelastdim!(rng, a::AbstractArray{T,N}) where {T,N}
-    set = repeat(Union{Colon, AbstractArray{Int}}[Colon()], N)
-    get = repeat(Union{Colon, AbstractArray{Int}}[Colon()], N)
-    get[end] = randperm(rng, size(a,N))
-    a[set...] = a[get...]
+function Base.iterate(itr::ShuffleIterator, state)
+    inditr, istate = state
+    inds, istate = IterTools.@ifsomething iterate(inditr, istate)
+    return batch(itr.base, inds), (inditr, istate)
 end
 
 Flux.onehotbatch(itr::ShuffleIterator, labels) = MapIterator(x -> Flux.onehotbatch(x, labels), itr)

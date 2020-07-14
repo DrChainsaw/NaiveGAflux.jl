@@ -76,7 +76,7 @@ TrainSplitAccuracy(;nexamples=2048, batchsize=64, data2fitgen= data -> NanGuard 
 function fitnessfun(s::TrainSplitAccuracy, x, y)
     rem_x, acc_x = split_examples(x, s.nexamples)
     rem_y, acc_y = split_examples(y, s.nexamples)
-    acc_iter = GpuIterator(dataiter(acc_x, acc_y, s.batchsize, 0, s.dataaug))
+    acc_iter = GpuIterator(dataiter(acc_x, acc_y, 1, s.batchsize, 0, s.dataaug))
     return rem_x, rem_y, s.data2fitgen(acc_iter)
 end
 
@@ -176,13 +176,24 @@ struct TrainStrategy{T} <: AbstractTrainStrategy
 end
 TrainStrategy(;nepochs=200, batchsize=32, nbatches_per_gen=400, seed=123, dataaug=identity) = TrainStrategy(nepochs, batchsize, nbatches_per_gen, seed, dataaug)
 function trainiter(s::TrainStrategy, x, y)
-    baseiter = ncycle(dataiter(x, y, s.batchsize, s.seed, s.dataaug), s.nepochs)
+    baseiter = dataiter(x, y, s.nepochs, s.batchsize, s.seed, s.dataaug)
     return RepeatPartitionIterator(GpuIterator(baseiter), s.nbatches_per_gen)
 end
 
-batch(x, batchsize, seed) = ShuffleIterator(NaiveGAflux.Singleton(x), batchsize, MersenneTwister(seed))
-dataiter(x,y::AbstractArray{T, 1}, bs, s, wrap) where T = zip(wrap(batch(x, bs, s)), Flux.onehotbatch(batch(y, bs, s), sort(unique(y))))
-dataiter(x,y::AbstractArray{T, 2}, bs, s, wrap) where T = zip(wrap(batch(x, bs, s)), batch(y, bs, s))
+dataiter(x,y::AbstractArray{T, 1}, args...) where T = epochiter(x,y, args...,yi -> Flux.onehotbatch(yi, sort(unique(y))))
+dataiter(x,y::AbstractArray{T, 2}, args...) where T = epochiter(x,y, args...)
+function epochiter(x,y, ne, bs, seed, xwrap, ywrap = identity)
+    xiter = batchiter(x, bs, seed)
+    yiter = batchiter(y, bs, seed)
+    # Iterates over one epoch
+    biter = zip(xwrap(xiter), ywrap(yiter))
+    # Iterates all epochs
+    eiter = ncycle(biter, ne)
+    # Ensures all models see the exact same examples
+    # This only matters when number of batches per generation is more than the number of batches in one epoch
+    return SeedIterator(SeedIterator(eiter;rng=xiter.rng); rng=yiter.rng)
+end
+batchiter(x, batchsize, seed) = ShuffleIterator(NaiveGAflux.Singleton(x), batchsize, MersenneTwister(seed))
 
 """
     struct GlobalOptimizerMutation{S<:AbstractEvolutionStrategy, F} <: AbstractEvolutionStrategy

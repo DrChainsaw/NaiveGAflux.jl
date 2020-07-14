@@ -76,6 +76,10 @@ end
     end
 end
 
+@testset "ShuffleIterator basic" begin
+    @test reduce(vcat, ShuffleIterator(1:20, 3, MersenneTwister(1))) |> sort == 1:20
+end
+
 @testset "ShuffleIterator ndims $(length(dims))" for dims in ((5), (3,4), (2,3,4), (2,3,4,5), (2,3,4,5,6), (2,3,4,5,6,7))
     sitr = ShuffleIterator(collect(reshape(1:prod(dims),dims...)), 2, MersenneTwister(123))
     bitr = BatchIterator(collect(reshape(1:prod(dims),dims...)), 2)
@@ -95,4 +99,33 @@ end
         @test length(b) == 2
     end
     @test sort(vcat(collect(itr)...)) == [1,3,5,7,9,11]
+end
+
+@testset "RepeatPartitionIterator and ShuffleIterator" begin
+    import IterTools: ncycle
+
+    @testset "Single epoch small" begin
+        ritr = RepeatPartitionIterator(ShuffleIterator(1:20, 3, MersenneTwister(123)), 4)
+        for itr in ritr
+            @test collect(itr) == collect(itr)
+        end
+    end
+
+    @testset "Multi epoch small" begin
+        sitr = ShuffleIterator(1:20, 3, MersenneTwister(123))
+        citr = ncycle(sitr, 2)
+        ritr = RepeatPartitionIterator(SeedIterator(citr; rng=sitr.rng), 4)
+        for itr in ritr
+            @test collect(itr) == collect(itr)
+        end
+    end
+
+    @testset "Multi epoch big" begin
+        sitr = ShuffleIterator(1:20, 3, MersenneTwister(123))
+        citr = ncycle(sitr, 4)
+        ritr = RepeatPartitionIterator(SeedIterator(citr; rng=sitr.rng), 10)
+        for (i, itr) in enumerate(ritr)
+            @test collect(itr) == collect(itr)
+        end
+    end
 end

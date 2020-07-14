@@ -712,9 +712,8 @@ biter = BatchIterator(data, 2)
 @test size(first(biter)) == (4, 2)
 
 # shuffle data before mini-batching
-# Warning 1: Data will be shuffled inplace!
-# Warning 2: Must use different rng instances with the same seed for features and labels!
-siter = ShuffleIterator(copy(data), 2, MersenneTwister(123))
+# Warning: Must use different rng instances with the same seed for features and labels!
+siter = ShuffleIterator(data, 2, MersenneTwister(123))
 @test size(first(siter)) == size(first(biter))
 @test first(siter) != first(biter)
 
@@ -745,7 +744,6 @@ for modeli in 1:3
         @test label == expl
     end
 end
-
 ```
 
 ## Contributing
