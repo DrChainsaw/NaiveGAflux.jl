@@ -23,7 +23,8 @@
     end
 
     @testset "RepeatPartitionIterator repeated partition" begin
-        bitr = RepeatPartitionIterator(Iterators.cycle(Iterators.partition(1:20, 5), 3), 2)
+        import IterTools: ncycle
+        bitr = RepeatPartitionIterator(ncycle(Iterators.partition(1:20, 5), 3), 2)
 
         cnt = 0;
         for (itr, exp) in zip(bitr, [[1:5, 6:10], [11:15, 16:20],[1:5, 6:10], [11:15, 16:20],[1:5, 6:10], [11:15, 16:20]])

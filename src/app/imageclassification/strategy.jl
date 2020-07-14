@@ -176,9 +176,8 @@ struct TrainStrategy{T} <: AbstractTrainStrategy
 end
 TrainStrategy(;nepochs=200, batchsize=32, nbatches_per_gen=400, seed=123, dataaug=identity) = TrainStrategy(nepochs, batchsize, nbatches_per_gen, seed, dataaug)
 function trainiter(s::TrainStrategy, x, y)
-    baseiter = dataiter(x, y, s.batchsize, s.seed, s.dataaug)
-    partiter = RepeatPartitionIterator(GpuIterator(baseiter), s.nbatches_per_gen)
-    return Iterators.cycle(partiter, s.nepochs)
+    baseiter = ncycle(dataiter(x, y, s.batchsize, s.seed, s.dataaug), s.nepochs)
+    return RepeatPartitionIterator(GpuIterator(baseiter), s.nbatches_per_gen)
 end
 
 batch(x, batchsize, seed) = ShuffleIterator(NaiveGAflux.Singleton(x), batchsize, MersenneTwister(seed))

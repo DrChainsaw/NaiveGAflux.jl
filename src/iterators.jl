@@ -71,13 +71,6 @@ Base.IteratorSize(itr::RepeatStatefulIterator) = Base.IteratorSize(itr.base.itr)
 Base.IteratorEltype(itr::RepeatStatefulIterator) = Base.HasEltype()
 
 """
-    cycle(itr, nreps)
-
-An iterator that cycles through `itr nreps` times.
-"""
-Base.Iterators.cycle(itr, nreps) = Iterators.take(Iterators.cycle(itr), nreps * length(itr))
-
-"""
     SeedIterator
     SeedIterator(base; rng=rng_default, seed=rand(rng, UInt32))
 
@@ -128,13 +121,6 @@ struct MapIterator{F, T}
     f::F
     base::T
 end
-
-"""
-    Flux.onehotbatch(itr::Base.Iterators.PartitionIterator)
-
-Return an iterator over [`Flux.onehotbatch`](@ref) of the values from `itr`.
-"""
-Flux.onehotbatch(itr::Base.Iterators.PartitionIterator, labels) = MapIterator(x -> Flux.onehotbatch(x, labels), itr)
 
 """
     GpuIterator(itr)
@@ -209,13 +195,19 @@ end
 
 Base.print(io::IO, itr::BatchIterator) = print(io, "BatchIterator(size=$(size(itr.base)), batchsize=$(itr.batchsize))")
 
+"""
+    Flux.onehotbatch(itr::BatchIterator, labels)
+    Flux.onehotbatch(itr::ShuffleIterator, labels)
+
+Return an iterator over [`Flux.onehotbatch`](@ref) of the values from `itr`.
+"""
 Flux.onehotbatch(itr::BatchIterator, labels) = MapIterator(x -> Flux.onehotbatch(x, labels), itr)
 
 """
     ShuffleIterator{T<:AbstractArray, R<:AbstractRNG}
     ShuffleIterator(data, batchsize, rng=rng_default)
 
-`BatchIterator` which also shuffles `data`. Order is reshuffled each time iteration begins.
+Same as `BatchIterator` but also shuffles `data`. Order is reshuffled each time iteration begins.
 
 Beware: The data is shuffled in place. Provide a copy if the unshuffled data is also needed.
 """
