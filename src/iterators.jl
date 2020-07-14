@@ -58,9 +58,8 @@ function Base.iterate(itr::RepeatStatefulIterator, reset=true)
         itr.base.nextvalstate = itr.start
         itr.base.taken = itr.taken
     end
-    valstate = iterate(itr.base)
-    isnothing(valstate) && return valstate
-    return valstate[1], false
+    val, state = IterTools.@ifsomething iterate(itr.base)
+    return val, false
 end
 
 Base.length(itr::RepeatStatefulIterator) = length(itr.base.itr) - itr.taken
@@ -78,7 +77,7 @@ Iterator which has the random seed of an `AbstractRNG` as state.
 
 Calls `Random.seed!(rng, seed)` every iteration so that wrapped iterators which depend on `rng` will produce the same sequence.
 
-Useful in conjunction with [`RepeatPartitionIterator`](@ref) and random data augmentation so that all candidates in a generation are trained with identical augmentation.
+Useful in conjunction with [`RepeatPartitionIterator`](@ref) and [`ShuffleIterator`](@ref) and/or random data augmentation so that all candidates in a generation are trained with identical data.
 """
 struct SeedIterator{R <: AbstractRNG,T}
     rng::R
@@ -89,18 +88,14 @@ SeedIterator(base; rng=rng_default, seed=rand(rng, UInt32)) = SeedIterator(rng, 
 
 function Base.iterate(itr::SeedIterator)
     Random.seed!(itr.rng, itr.seed)
-    valstate = iterate(itr.base)
-    valstate === nothing && return nothing
-    val, state = valstate
+    val, state = IterTools.@ifsomething iterate(itr.base)
     return val, (itr.seed+1, state)
 end
 
 function Base.iterate(itr::SeedIterator, state)
     seed,basestate = state
     Random.seed!(itr.rng, seed)
-    valstate = iterate(itr.base, basestate)
-    valstate === nothing && return nothing
-    val, state = valstate
+    val, state = IterTools.@ifsomething iterate(itr.base, basestate)
     return val, (seed+1, state)
 end
 
@@ -134,15 +129,13 @@ gpuitr(a::Tuple) = gpuitr.(a)
 
 
 function Base.iterate(itr::MapIterator)
-    valstate = iterate(itr.base)
-    isnothing(valstate) && return valstate
-    return itr.f(valstate[1]), valstate[2]
+    val, state = IterTools.@ifsomething iterate(itr.base)
+    return itr.f(val), state
 end
 
 function Base.iterate(itr::MapIterator, state)
-    valstate = iterate(itr.base, state)
-    isnothing(valstate) && return valstate
-    return itr.f(valstate[1]), valstate[2]
+    val, state = IterTools.@ifsomething iterate(itr.base, state)
+    return itr.f(val), state
 end
 
 Base.length(itr::MapIterator) = length(itr.base)
@@ -189,7 +182,7 @@ batch(a::AbstractArray{T,4}, inds) where T = view(a, :,:,:,inds)
 batch(a::AbstractArray{T,5}, inds) where T = view(a, :,:,:,:,inds)
 batch(a::AbstractArray{T,N}, inds) where {T,N} = view(a, ntuple(i -> Colon(), N - 1)..., inds)
 
-Base.print(io::IO, itr::BatchIterator) = print(io, "BatchIterator(size=$(size(itr.base)), batchsize=$(itr.batchsize))")
+Base.show(io::IO, itr::BatchIterator) where T = print(io, "BatchIterator(size=$(size(itr.base)), batchsize=$(itr.batchsize))")
 
 """
     Flux.onehotbatch(itr::BatchIterator, labels)
@@ -230,5 +223,7 @@ function Base.iterate(itr::ShuffleIterator, state)
     inds, istate = IterTools.@ifsomething iterate(inditr, istate)
     return batch(itr.base, inds), (inditr, istate)
 end
+
+Base.show(io::IO, itr::ShuffleIterator) = print(io, "ShuffleIterator(size=$(size(itr.base)), batchsize=$(itr.batchsize))")
 
 Flux.onehotbatch(itr::ShuffleIterator, labels) = MapIterator(x -> Flux.onehotbatch(x, labels), itr)

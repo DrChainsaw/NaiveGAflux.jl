@@ -78,6 +78,9 @@ end
 
 @testset "ShuffleIterator basic" begin
     @test reduce(vcat, ShuffleIterator(1:20, 3, MersenneTwister(1))) |> sort == 1:20
+
+    itr = ShuffleIterator(ones(2,3,4), 4, MersenneTwister(2))
+    @test "siter: $itr" == "siter: ShuffleIterator(size=(2, 3, 4), batchsize=4)"
 end
 
 @testset "ShuffleIterator ndims $(length(dims))" for dims in ((5), (3,4), (2,3,4), (2,3,4,5), (2,3,4,5,6), (2,3,4,5,6,7))
