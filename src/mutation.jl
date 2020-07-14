@@ -325,14 +325,10 @@ function no_shapechange(vi, vc=vi, valid = [])
         if vi ∉ inputs(vc)
             valid = vcat(valid, vc)
         end
-        layertype(vc) isa GlobalPool && return valid
-        if layertype(vc) == FluxNoParLayer()
-            layer(vc) isa MaxPool && return valid
-            layer(vc) isa MeanPool && return valid
-        end
+        Δshapes(vc) |> squashshapes |> !isempty && return valid
     end
     isempty(outputs(vc)) && return valid
-    return mapfoldl(vco -> no_shapechange(vi, vco, valid), vcat, outputs(vc))
+    return mapfoldl(vco -> no_shapechange(vi, vco, valid), vcat, outputs(vc)) |> unique
 end
 
 function (m::AddEdgeMutation)(vi::AbstractVertex)

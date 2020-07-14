@@ -71,6 +71,28 @@ end
 ShapeAdd(Δshape::Int...) = ShapeAdd(Δshape)
 fshape(s::ShapeAdd{N}, shape::NTuple{N, Integer}) where N = shape .+ shapeΔ(s)
 
+"""
+    ShapeFlatten{N} <: ΔShape{N, 0}
+
+Flattens shape so it no longer exists.
+
+Note that `N` can be `Any` since flatten operations typically don't care about the number of input dimensions.
+"""
+struct ShapeFlatten{N} <: ΔShape{N, 0} end
+ShapeFlatten() = ShapeFlatten{Any}()
+fshape(::ShapeFlatten, shape) = tuple()
+
+"""
+    RevertΔShape{N,M,T<:ΔShape{N,M}} <: ΔShape{N,M}
+    RevertΔShape(Δshape)
+
+Revert operation of `Δshape` typically used when the revert operation is undefined.
+"""
+struct RevertΔShape{N,M,T<:ΔShape{N,M}} <: ΔShape{N,M}
+    Δshape::T
+end
+
+fshape(s::Tuple{}, shape) = shape
 fshape(s::Tuple{ΔShape{N}, Vararg{ΔShape}}, shape::NTuple{N, Integer}) where N = foldr(fshape, reverse(s); init=shape)
 
 """
@@ -81,6 +103,8 @@ Return a `ΔShape` or tuple of `ΔShape`s which reverts the shape change of `s`,
 
 Warning: Not guaranteed to produce exact results for all `ΔShape` types! For example, the operation performed by `ShapeDiv` is not generally invertible due to rounding.
 """
+revert(s) = RevertΔShape(s)
+revert(s::RevertΔShape) = shapeΔ(s)
 revert(s::ShapeAdd) = ShapeAdd(.-shapeΔ(s))
 revert(s::ShapeMul) = ShapeDiv(shapeΔ(s))
 revert(s::ShapeDiv) = ShapeMul(shapeΔ(s))
@@ -118,6 +142,7 @@ swapΔshape(s1::ShapeAdd{N}, s2::ShapeDiv{N}) where N = isdiv(s1, s2) ? (s2, Sha
 swapΔshape(s1::ShapeDiv{N}, s2::ShapeAdd{N}) where N = ShapeAdd(shapeΔ(s1) .* shapeΔ(s2)), s1
 
 """
+    filter_noops(s::ΔShape)
     filter_noops(s::ΔShape...)
     filter_noops(s::Tuple{Vararg{ΔShape}})
     filter_noops(s::ΔShape)
@@ -126,6 +151,7 @@ Return a tuple of `ΔShape`s where all identity mappings (e.g things like `Shape
 
 If called with a single identity mapping and empty tuple is returned.
 """
+filter_noops(s::ΔShape) = tuple(s)
 filter_noops(s::ΔShape...) = filter_noops(s)
 filter_noops(s::Tuple{Vararg{ΔShape}}) = mapreduce(filter_noops, (s1,s2) -> (s1...,s2...), s; init=tuple())
 filter_noops(s::Union{ShapeMul, ShapeDiv}) = all(x -> x == 1, shapeΔ(s)) ? tuple() : tuple(s)
@@ -289,7 +315,7 @@ More concretely, if `xs = size(x)[sdims]` then `size(v(x))[sdims] == fshape(Δsh
 Δshapes(t::DecoratingTrait, v) = Δshapes(base(t), v)
 Δshapes(::MutationSizeTrait, v) = _Δshapes(layertype(v), v)
 
-_Δshapes(::Any, v) = tuple()
+_Δshapes(t::Any, v) = tuple()
 
 function _Δshapes(::FluxConv{N}, v) where N
     c = layer(v)
@@ -301,10 +327,19 @@ end
 
 _Δshapes(::FluxNoParLayer, v) = _Δshapes(layer(v), v)
 _Δshapes(p::Union{MeanPool, MaxPool}, v) = Δshape_from_window(p.k, 1, p.pad), ShapeDiv(p.stride)
+_Δshapes(::Type{typeof(Flux.flatten)}, v) = _Δshapes_gp(actdim(v) .- 2)
+_Δshapes(::GlobalPool, v) = _Δshapes_gp(actdim(v) .- 2)
 
 Δshape_from_window(ws::NTuple{N}, dilation::Integer, pad) where N = Δshape_from_window(ws, ntuple(i -> dilation, N), pad)
 function Δshape_from_window(ws::NTuple{N}, dilation, pad) where N
     padact = length(pad) == N ? 2 .* pad : ntuple(i -> pad[2(i-1)+1] + pad[2(i-1)+2], N)
     padref = ntuple(i -> sum(Flux.calc_padding(SamePad(), tuple(ws[i]), dilation[i], 1)), N)
     return ShapeAdd(padact .- padref)
+end
+
+function _Δshapes_gp(shapedims)
+    udims = unique(shapedims)
+    # Graphs with different shapedims are probably not correct, but there is always the chance that some op in between which fixes this does not have a defined ΔShape.
+    length(udims) != 1 && return tuple(ShapeFlatten())
+    return tuple(ShapeFlatten{first(udims)}())
 end

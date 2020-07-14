@@ -485,7 +485,92 @@
 
     @testset "AddEdgeMutation" begin
         import NaiveGAflux: default_mergefun
-        cl(name, in, outsize) = mutable(name, Conv((1,1), nout(in)=>outsize), in)
+        cl(name, in, outsize; kwargs...) = mutable(name, Conv((1,1), nout(in)=>outsize; kwargs...), in)
+        dl(name, in, outsize) = mutable(name, Dense(nout(in), outsize), in)
+
+        @testset "No shapechange" begin
+            import NaiveGAflux: no_shapechange
+
+            @testset "Test size changing ops" begin
+                v0 = inputvertex("in", 3, FluxConv{2}())
+                v1 = cl("v1", v0, 4)
+                v2 = cl("v2", v1, 5)
+                v3 = mutable("v3", MaxPool((2,2)), v2)
+                v4 = cl("v4", v3, 4)
+                v5 = cl("v5", v4, 3)
+                v6 = cl("v6", v5, 2; stride=2)
+                v7 = cl("v7", v6, 3)
+                v8 = cl("v8", v7, 4)
+                v9 = cl("v9", v8, 2; pad=1)
+                v10 = cl("v10", v9, 3)
+
+                @test name.(no_shapechange(v0)) == name.([v2,v3])
+                @test name.(no_shapechange(v1)) == name.([v3])
+                @test name.(no_shapechange(v2)) == []
+
+                @test name.(no_shapechange(v3)) == name.([v5, v6])
+                @test name.(no_shapechange(v4)) == name.([v6])
+                @test name.(no_shapechange(v5)) == []
+
+                @test name.(no_shapechange(v6)) == name.([v8, v9])
+                @test name.(no_shapechange(v7)) == name.([v9])
+                @test name.(no_shapechange(v8)) == []
+            end
+
+            @testset "Branchy graph" begin
+                v0 = inputvertex("in", 3, FluxConv{2}())
+                v1 = cl("v1", v0, 4)
+
+                v1a1 = cl("v1a1", v1, 5)
+                v1a2 = cl("v1a2", v1a1, 3)
+
+                v1b1 = cl("v1b1", v1, 4)
+
+                v2 = concat("v2", v1a2, v1b1)
+
+                v2a1 = cl("v2a1", v2, 2;pad=1)
+                v2a2 = cl("v2a2", v2a1, 3)
+                v2a3 = cl("v2a3", v2a2, 4)
+
+                v2b1 = cl("v2b1", v2, 4)
+                v2b2 = cl("v2b2", v2b1, 3; pad=1)
+                v2b3 = cl("v2b3", v2b2, 2)
+
+                v2c1 = cl("v2c2", v2, 5)
+                v2c2 = cl("v2c2", v2c1, 3)
+                v2c3 = cl("v2c3", v2c2, 2;pad=1)
+
+                v3 = concat("v3", v2a3, v2b3, v2c3)
+                v4 = cl("v4", v3, 3)
+
+                @test name.(no_shapechange(v0)) == name.([v1a1, v1a2, v2, v2a1, v2b1, v2b2, v2c2, v2c2, v2c3, v1b1])
+                @test name.(no_shapechange(v1)) == name.([v1a2, v2, v2a1, v2b1, v2b2, v2c1, v2c2, v2c3])
+
+                @test name.(no_shapechange(v1a1)) == name.([v2, v2a1, v2b1, v2b2, v2c1, v2c2, v2c3])
+                @test name.(no_shapechange(v1b1)) == name.([v2a1, v2b1, v2b2, v2c1, v2c2, v2c3])
+
+                @test name.(no_shapechange(v2a1)) == name.([v2a3, v3, v4])
+                @test name.(no_shapechange(v2b2)) == name.([v3, v4])
+                @test name.(no_shapechange(v2c3)) == name.([v4])
+            end
+
+            @testset "With global pool and flatten" begin
+                v0 = inputvertex("in", 3, FluxConv{2}())
+                v1 = cl("v1", v0, 2)
+                v2 = cl("v2", v1, 3)
+                v3 = cl("v3", v2, 4)
+                v4 = invariantvertex(NaiveGAflux.GlobalPool{MaxPool}(), v3; traitdecoration=named("v4"))
+                v5 = dl("v5", v4, 3)
+                v6 = dl("v6", v5, 4)
+                v7 = dl("v7", v6, 2)
+
+                @test name.(no_shapechange(v0)) == name.([v2,v3,v4])
+                @test name.(no_shapechange(v1)) == name.([v3, v4])
+
+                @test name.(no_shapechange(v4)) == name.([v6,v7])
+                @test name.(no_shapechange(v5)) == name.([v7])
+            end
+        end
 
         @testset "AddEdgeMutation pconc=$pconc" for pconc in (0, 1)
 
