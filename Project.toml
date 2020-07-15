@@ -5,6 +5,7 @@ version = "0.6.0"
 
 [deps]
 CUDA = "052768ef-5323-5732-b1bb-66c8b64840ba"
+IterTools = "c8e1da08-722c-5040-9ed9-7db0dc04731e"
 Logging = "56ddb016-857b-54e1-b83d-db4d58db5568"
 MemPool = "f9f48841-c794-520a-933b-121f7ba6ed94"
 NaiveNASflux = "85610aed-7d32-5e57-bb50-4c2e1c9e7997"
@@ -18,6 +19,7 @@ Test = "8dfed614-e22c-5e08-85e1-65c5234f0b40"
 
 [compat]
 CUDA = "1"
+IterTools = "1"
 MemPool = "0.3"
 NaiveNASflux = "1.5.0"
 Reexport = "0.2.0, 1"

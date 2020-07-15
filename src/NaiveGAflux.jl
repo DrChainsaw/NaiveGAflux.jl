@@ -8,6 +8,7 @@ using Logging
 using Statistics
 import CUDA
 import MemPool
+import IterTools
 
 using Setfield
 

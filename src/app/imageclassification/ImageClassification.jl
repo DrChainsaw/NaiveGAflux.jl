@@ -7,6 +7,7 @@ import NaiveGAflux: shapetrace, squashshapes, fshape, ndimsout
 using Random
 import Logging
 using Statistics
+import IterTools: ncycle
 
 # To store program state for pause/resume
 using Serialization

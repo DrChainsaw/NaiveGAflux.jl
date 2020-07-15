@@ -116,4 +116,27 @@
         @test fitness(testfitness, SizeVsTestFakeModel(1)) == 0.12351
         @test fitness(testfitness, SizeVsTestFakeModel(100_000)) ≈ 0.12351
     end
+
+    @testset "TrainStrategy" begin
+        import NaiveGAflux.AutoFlux.ImageClassification: TrainStrategy, trainiter
+        nexamples = 10
+        x = randn(Float32, 4,4,3, nexamples)
+        y = rand(0:7, nexamples)
+
+        @testset "Test $ne epochs and $nbpg batches per generation" for ne in (1, 2, 10), nbpg in (2, 10)
+            bs = 3
+            s = TrainStrategy(nepochs=ne, batchsize=bs, nbatches_per_gen=nbpg)
+            itr = trainiter(s, x, y)
+
+            totsize = ne * ceil(nexamples / bs)
+            @test mapreduce(length ∘ collect, +, itr) == totsize
+            @test length(itr |> first) == min(nbpg, totsize)
+            @test size(itr |> first |> first |> first, 4) == bs
+
+            # All models shall see the same examples
+            for iitr in itr
+                @test collect(iitr) == collect(iitr)
+            end
+        end
+    end
 end
