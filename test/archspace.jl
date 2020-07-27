@@ -163,37 +163,42 @@
     end
 
     @testset "ArchSpace" begin
-        bs = BaseLayerSpace(3, elu)
-        space = ArchSpace(DenseSpace(bs))
         inpt = inputvertex("in", 2)
-        v = space(inpt)
-        @test nin(v) == [2]
-        @test nout(v) == 3
+        @testset "Singleton Dense" begin
+            bs = BaseLayerSpace(3, elu)
+            space = ArchSpace(DenseSpace(bs))
 
-        v = space(inpt, outsize = 4)
-        @test nin(v) == [2]
-        @test nout(v) == 4
+            v = space(inpt)
+            @test nin(v) == [2]
+            @test nout(v) == 3
 
-        v = space("v", inpt, outsize = 4)
-        @test name(v) == "v"
-        @test nin(v) == [2]
-        @test nout(v) == 4
+            v = space(inpt, outsize = 4)
+            @test nin(v) == [2]
+            @test nout(v) == 4
 
-        rng = SeqRng()
-        space = ArchSpace(ConvSpace{2}(outsizes=3, kernelsizes=2:5), BatchNormSpace(relu), PoolSpace{2}(windowsizes=2))
+            v = space("v", inpt, outsize = 4)
+            @test name(v) == "v"
+            @test nin(v) == [2]
+            @test nout(v) == 4
+        end
 
-        v = space("conv", inpt, rng)
-        @test layertype(v) == FluxConv{2}()
-        @test nin(v) == [2]
-        @test nout(v) == 3
-        @test name(v) == "conv"
+        @testset "Conv BN Pool" begin
+            rng = SeqRng()
+            space = ArchSpace(ConvSpace{2}(outsizes=3, kernelsizes=2:5), BatchNormSpace(relu), PoolSpace{2}(windowsizes=2))
 
-        rng.ind = 1
-        v = space("bn", inpt, rng)
-        @test layertype(v) == FluxBatchNorm()
-        @test nin(v) == [2]
-        @test nout(v) == 2
-        @test name(v) == "bn"
+            v = space("conv", inpt, rng)
+            @test layertype(v) == FluxConv{2}()
+            @test nin(v) == [2]
+            @test nout(v) == 3
+            @test name(v) == "conv"
+
+            rng.ind = 1
+            v = space("bn", inpt, rng)
+            @test layertype(v) == FluxBatchNorm()
+            @test nin(v) == [2]
+            @test nout(v) == 2
+            @test name(v) == "bn"
+        end
     end
 
     @testset "RepeatArchSpace" begin

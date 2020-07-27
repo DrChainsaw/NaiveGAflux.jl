@@ -401,8 +401,8 @@ Search space of `AbstractArchSpace`s.
 struct ArchSpace <:AbstractArchSpace
     s::AbstractParSpace{1, <:AbstractArchSpace}
 end
-ArchSpace(l::AbstractLayerSpace;conf=LayerVertexConf()) = ArchSpace(SingletonParSpace(VertexSpace(conf,l)))
-ArchSpace(l::AbstractLayerSpace, ls::AbstractLayerSpace...;conf=LayerVertexConf()) = ArchSpace(ParSpace(VertexSpace.(conf,[l,ls...])))
+ArchSpace(l::AbstractLayerSpace; conf=LayerVertexConf()) = ArchSpace(VertexSpace(conf,l))
+ArchSpace(l::AbstractLayerSpace, ls::AbstractLayerSpace...; conf=LayerVertexConf()) = ArchSpace(VertexSpace.(conf,[l,ls...])...)
 ArchSpace(s::AbstractArchSpace) = ArchSpace(SingletonParSpace(s))
 ArchSpace(s::AbstractArchSpace, ss::AbstractArchSpace...) = ArchSpace(ParSpace([s, ss...]))
 

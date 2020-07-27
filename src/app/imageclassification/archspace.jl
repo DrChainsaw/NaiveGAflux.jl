@@ -53,7 +53,7 @@ function initial_archspace(inshape, outsize)
     dout=VertexSpace(outconf, NamedLayerSpace("dense", DenseSpace(outsize, identity)))
     blockdout = ArchSpaceChain(GlobalPoolSpace(gpconf), drep, dout)
 
-    blockout = ArchSpace(ParSpace([blockdout, blockcout]))
+    blockout = ArchSpace(blockdout, blockcout)
 
     # Remember that each "block" here is a random and pretty big search space.
     # Basically the only constraint is to not randomly run out of GPU memory...
@@ -72,7 +72,7 @@ function rep_fork_res(s, n, min_rp=1;loglevel=Logging.Debug)
     fork = LoggingArchSpace(msgfun, ForkArchSpace(rep, min_rp:3, conf=concconf); level = loglevel)
     res = LoggingArchSpace(msgfun, ResidualArchSpace(rep, resconf); level = loglevel)
     # Manical cackling laughter...
-    return rep_fork_res(ArchSpace(ParSpace([rep, fork, res])), n-1, 0, loglevel=loglevel)
+    return rep_fork_res(ArchSpace(rep, fork, res), n-1, 0, loglevel=loglevel)
 end
 
 function convspace(conf, outsizes, kernelsizes, acts; loglevel=Logging.Debug)
