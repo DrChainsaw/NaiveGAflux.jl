@@ -270,6 +270,8 @@ BatchNormSpace(acts::AbstractVector) = BatchNormSpace(acts...)
     PoolSpace{N}(;windowsizes, strides=1, paddings=SamePad(), poolfun=[MaxPool, MeanPool])
 
 Search space of `N`D pooling layers.
+
+Constructor with keyword arguments takes scalars/tuples, vectors or `AbstractParSpace`s as inputs.
 """
 struct PoolSpace{N} <:AbstractLayerSpace
     poolfun::AbstractParSpace
@@ -277,7 +279,7 @@ struct PoolSpace{N} <:AbstractLayerSpace
     stride::AbstractParSpace
     pad::AbstractParSpace
 end
-PoolSpace{N}(;windowsizes, strides=1, paddings=SamePad(), poolfuns=[MaxPool, MeanPool]) where N = PoolSpace{N}(
+PoolSpace{N}(;windowsizes, strides=1, paddings=0, poolfuns=[MaxPool, MeanPool]) where N = PoolSpace{N}(
     parspaceof(poolfuns),
     parspaceof(N, windowsizes),
     parspaceof(N, strides),

@@ -46,7 +46,7 @@
     end
 
     @testset "PruneLongRunning" begin
-        import NaiveGAflux.AutoFlux.ImageClassification: PruneLongRunning,  TrainSplitAccuracy, fitnessfun
+        import NaiveGAflux.AutoFlux.ImageClassification: PruneLongRunning, TrainSplitAccuracy, fitnessfun
 
         x = ones(Float32, 5,5,3,4)
         y = [1 1 1 1; 0 0 0 0]

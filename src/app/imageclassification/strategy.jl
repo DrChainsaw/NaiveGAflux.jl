@@ -354,15 +354,15 @@ function graphcrossover()
 end
 
 function graphmutation(inshape)
-    acts = [identity, relu, elu, selu]
+    acts = default_actfuns()
 
-    increase_nout = NeuronSelectMutation(NoutMutation(0, 0.1)) # Max 10% change in output size
-    decrease_nout = NeuronSelectMutation(NoutMutation(-0.1, 0))
+    change_nout = NeuronSelectMutation(NoutMutation(-0.2, 0.2)) # Max 20% change in output size
+    decrease_nout = NeuronSelectMutation(NoutMutation(-0.2, 0))
     add_vertex = add_vertex_mutation(acts)
-    add_maxpool = AddVertexMutation(VertexSpace(default_layerconf(), NamedLayerSpace("maxpool", PoolSpace{2}(windowsizes=2, strides=2, poolfuns=MaxPool))))
+    add_downsampling = AddVertexMutation(downsamplingspace(default_layerconf(); outsizes = 2 .^(4:9), activations=acts))
     rem_vertex = RemoveVertexMutation()
     # [-2, 2] keeps kernel size odd due to CuArrays issue# 356 (odd kernel size => symmetric padding)
-    increase_kernel = KernelSizeMutation(ParSpace2D([ 2]), maxsize=maxkernelsize(inshape))
+    change_kernel = KernelSizeMutation(ParSpace2D([-2, 2]), maxsize=maxkernelsize(inshape))
     decrease_kernel = KernelSizeMutation(ParSpace2D([-2]))
     mutate_act = ActivationFunctionMutation(acts)
 
@@ -374,12 +374,12 @@ function graphmutation(inshape)
     mph(m, p) = VertexMutation(HighValueMutationProbability(m, p))
     mpl(m, p) = VertexMutation(LowValueMutationProbability(m, p))
 
-    inout = mph(LogMutation(v -> "Increase size of vertex $(name(v))", increase_nout), 0.05)
-    dnout = mpl(LogMutation(v -> "Reduce size of vertex $(name(v))", decrease_nout), 0.05)
+    cnout = mph(LogMutation(v -> "Mutate output size of vertex $(name(v))", change_nout), 0.05)
+    dnout = mpl(LogMutation(v -> "Reduce output size of vertex $(name(v))", decrease_nout), 0.05)
     maddv = mph(LogMutation(v -> "Add vertex after $(name(v))", add_vertex), 0.005)
-    maddm = mpn(MutationFilter(canaddmaxpool(inshape), LogMutation(v -> "Add maxpool after $(name(v))", add_maxpool)), 0.01)
+    maddd = mpn(MutationFilter(candownsample(inshape), LogMutation(v -> "Add downsampling after $(name(v))", add_downsampling)), 0.01)
     mremv = mpl(LogMutation(v -> "Remove vertex $(name(v))", rem_vertex), 0.01)
-    ikern = mpl(LogMutation(v -> "Mutate kernel size of $(name(v))", increase_kernel), 0.005)
+    ckern = mpl(LogMutation(v -> "Mutate kernel size of $(name(v))", change_kernel), 0.005)
     dkern = mpl(LogMutation(v -> "Decrease kernel size of $(name(v))", decrease_kernel), 0.005)
     mactf = mpl(LogMutation(v -> "Mutate activation function of $(name(v))", mutate_act), 0.005)
     madde = mph(LogMutation(v -> "Add edge from $(name(v))", add_edge), 0.02)
@@ -388,35 +388,24 @@ function graphmutation(inshape)
     mremv = MutationFilter(g -> nv(g) > 5, mremv)
 
     # Create two possible mutations: One which is guaranteed to not increase the size:
-    dsize = MutationChain(mremv, PostMutation(dnout, neuronselect), dkern, mreme, maddm)
-    # ...and another which can (and typically does) increase the size:
-    isize = MutationChain(PostMutation(inout, neuronselect), ikern, madde, maddm, maddv)
+    dsize = MutationChain(mremv, PostMutation(dnout, neuronselect), dkern, mreme, maddd)
+    # ...and another which is not guaranteed to decrease the size
+    csize = MutationChain(mremv, PostMutation(cnout, neuronselect), ckern, mreme, madde, maddd, maddv)
     # Add mutation last as new vertices with neuron_value == 0 screws up outputs selection as per https://github.com/DrChainsaw/NaiveNASlib.jl/issues/39
 
     mgp = VertexMutation(MutationProbability(LogMutation(v -> "Mutate global pool type for $(name(v))", MutateGlobalPool()), 0.1), SelectGlobalPool())
 
     # If isbig then perform the mutation operation which is guaranteed to not increase the size
     # This is done mostly to avoid OOM and time outs.
-    # If not big then randomly decide whether to increase the model complexity or decrease it
-    decr = nothing
-    function decrease_size(g)
-        if !isnothing(decr)
-            rv = decr
-            decr = nothing
-            return rv
-        end
-        decr = isbig(g) || rand() > 0.5 # Perhaps this can be determined somehow...
-        return decr
-    end
-    mall = MutationChain(MutationFilter(decrease_size, dsize), MutationFilter(!decrease_size, isize), mactf, mgp)
+    mall = MutationChain(MutationFilter(isbig, dsize), MutationFilter(!isbig, csize), mactf, mgp)
 
     return LogMutation(g -> "Mutate $(modelname(g))", mall)
 end
 
 isbig(g) = nparams(g) > 20e7
 
-canaddmaxpool(inshape) = v -> canaddmaxpool(v, inshape)
-canaddmaxpool(v::AbstractVertex, inshape) = is_convtype(v) && !infork(v) && canshrink(v, inshape)
+candownsample(inshape) = v -> candownsample(v, inshape)
+candownsample(v::AbstractVertex, inshape) = is_convtype(v) && !infork(v) && canshrink(v, inshape)
 
 function canshrink(v, inshape)
     # Note assumes stride = 2!
