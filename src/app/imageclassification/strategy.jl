@@ -359,7 +359,7 @@ function graphmutation(inshape)
     increase_nout = NeuronSelectMutation(NoutMutation(0, 0.1)) # Max 10% change in output size
     decrease_nout = NeuronSelectMutation(NoutMutation(-0.1, 0))
     add_vertex = add_vertex_mutation(acts)
-    add_maxpool = AddVertexMutation(VertexSpace(default_layerconf(), NamedLayerSpace("maxpool", MaxPoolSpace(PoolSpace2D([2])))))
+    add_maxpool = AddVertexMutation(VertexSpace(default_layerconf(), NamedLayerSpace("maxpool", PoolSpace{2}(windowsizes=2, strides=2, poolfuns=MaxPool))))
     rem_vertex = RemoveVertexMutation()
     # [-2, 2] keeps kernel size odd due to CuArrays issue# 356 (odd kernel size => symmetric padding)
     increase_kernel = KernelSizeMutation(ParSpace2D([ 2]), maxsize=maxkernelsize(inshape))

@@ -28,7 +28,7 @@ function initial_archspace(inshape, outsize)
     rfr2 = rep_fork_res(conv2,2)
 
     # Each "block" is finished with a maxpool to downsample
-    maxpoolvertex = VertexSpace(layerconf, NamedLayerSpace("maxpool", MaxPoolSpace(PoolSpace2D([2]))))
+    maxpoolvertex = VertexSpace(layerconf, NamedLayerSpace("maxpool", PoolSpace{2}(windowsizes=2, strides=2, poolfuns=MaxPool)))
     red1 = ArchSpaceChain(rfr1, maxpoolvertex)
     red2 = ArchSpaceChain(rfr2, maxpoolvertex)
 
@@ -78,7 +78,7 @@ end
 function convspace(conf, outsizes, kernelsizes, acts; loglevel=Logging.Debug)
     # CoupledParSpace due to CuArrays issue# 356
     msgfun(v) = "Created $(name(v)), nin: $(nin(v)), nout: $(nout(v))"
-    conv2d = LoggingArchSpace(msgfun, VertexSpace(conf, NamedLayerSpace("conv2d", ConvSpace2D(outsizes, acts, kernelsizes))); level=loglevel)
+    conv2d = LoggingArchSpace(msgfun, VertexSpace(conf, NamedLayerSpace("conv2d", ConvSpace{2}(outsizes=outsizes, activations=acts, kernelsizes=kernelsizes))); level=loglevel)
     bn = LoggingArchSpace(msgfun, VertexSpace(conf, NamedLayerSpace("batchnorm", BatchNormSpace(acts))); level=loglevel)
 
     # Make sure that each alternative has the option to change output size

@@ -82,8 +82,7 @@ struct BaseLayerSpace{T}
     nouts::AbstractParSpace{1, <:Integer}
     acts::AbstractParSpace{1, T}
 end
-BaseLayerSpace(n::Integer, act) = BaseLayerSpace(SingletonParSpace(n), SingletonParSpace(act))
-BaseLayerSpace(n::AbstractVector{<:Integer}, act::AbstractVector{T}) where T = BaseLayerSpace(ParSpace(n), ParSpace(act))
+BaseLayerSpace(outsizes, acts) = BaseLayerSpace(parspaceof(outsizes), parspaceof(acts))
 outsize(s::BaseLayerSpace, rng=rng_default) = s.nouts(rng)
 activation(s::BaseLayerSpace, rng=rng_default) = s.acts(rng)
 
@@ -117,7 +116,13 @@ ParSpace2D(p::AbstractVector{T}) where T = ParSpace(p,p)
 (s::ParSpace)(rng=rng_default) = rand.((rng,), s.p)
 (s::ParSpace{1, T})(rng=rng_default) where T = rand(rng, s.p[1])
 
+"""
+    CoupledParSpace{N, T} <:AbstractParSpace{N, T}
 
+Search space for parameters.
+
+Return the same uniformly sampled value for all `N` dimensions from the search space when invoked.
+"""
 struct CoupledParSpace{N, T} <:AbstractParSpace{N, T}
     p::AbstractParSpace{1, T}
 end
@@ -127,6 +132,16 @@ function(s::CoupledParSpace{N})(rng=rng_default) where N
     val = s.p(rng)
     return ntuple(i -> val, N)
 end
+
+parspaceof(x) = parspaceof(1, x)
+parspaceof(N, x) = parspaceof(Val(N), x)
+parspaceof(::Val{N}, s::AbstractParSpace{N}) where N = s
+parspaceof(::Val{N}, s::AbstractParSpace{1}) where N = parspaceof(N, s.p[1])
+parspaceof(::Val{N}, s::CoupledParSpace{1}) where N = CoupledParSpace(s.p, N)
+
+parspaceof(n::Val{N}, x) where N = parspaceof(n, ntuple(i -> x, N))
+parspaceof(::Val{N}, x::NTuple{N}) where N = SingletonParSpace(x...)
+parspaceof(::Val{N}, x::NTuple{N, AbstractVector}) where N = ParSpace(x...)
 
 """
     NamedLayerSpace <:AbstractLayerSpace
@@ -194,37 +209,42 @@ denseinitW(::ZeroWeightInit) = (initW = zeros,)
 
 """
     ConvSpace{N} <:AbstractLayerSpace
-    ConvSpace2D(outsizes, activations, ks)
-    ConvSpace2D(base::BaseLayerSpace, ks::AbstractVector{<:Integer})
-    ConvSpace(outsizes, activations, ks::AbstractVector{<:Integer}...)
-    ConvSpace(outsizes, activations, ks::AbstractParSpace)
-    ConvSpace(base::BaseLayerSpace, ks::AbstractVector{<:Integer}...)
-    ConvSpace(base::BaseLayerSpace, ks::AbstractParSpace)
-    ConvSpace(base::BaseLayerSpace, ks::AbstractParSpace, stride::AbstractParSpace, dilation::AbstractParSpace, pad)
+
+    ConvSpace{N}(;outsizes, kernelsizes, activations=identity, strides=1, dilations=1, paddings=SamePad(), convfuns=Conv)
+    ConvSpace(convfun::AbstractParSpace, base::BaseLayerSpace, ks::AbstractParSpace, stride::AbstractParSpace, dilation::AbstractParSpace, pad)
 
 
-Search space of basic `N`D convolutional layers.
+
+Search space of `N`D convolutional layers.
+
+Constructor with keyword arguments takes scalars, vectors or `AbstractParSpace`s as inputs.
 """
 struct ConvSpace{N} <:AbstractLayerSpace
+    convfun::AbstractParSpace
     base::BaseLayerSpace
     kernelsize::AbstractParSpace{N, <:Integer}
     stride::AbstractParSpace
     dilation::AbstractParSpace
-    pad
+    pad::AbstractParSpace
 end
-ConvSpace2D(outsizes, activations, ks) = ConvSpace2D(BaseLayerSpace(outsizes, activations), ks)
-ConvSpace2D(base::BaseLayerSpace, ks::AbstractVector{<:Integer}) = ConvSpace(base, ks,ks)
-ConvSpace(outsizes, activations, ks::AbstractVector{<:Integer}...) = ConvSpace(BaseLayerSpace(outsizes, activations), ks...)
-ConvSpace(outsizes, activations, ks::AbstractParSpace) = ConvSpace(BaseLayerSpace(outsizes, activations), ks)
-ConvSpace(base::BaseLayerSpace, ks::AbstractVector{<:Integer}...) = ConvSpace(base, ParSpace(ks))
-ConvSpace(base::BaseLayerSpace, ks::AbstractParSpace) = ConvSpace(base, ks, SingletonParSpace(1), SingletonParSpace(1), SamePad())
 
-function (s::ConvSpace)(insize::Integer, rng=rng_default; outsize = outsize(s.base, rng), wi=DefaultWeightInit(), convfun = Conv)
+ConvSpace{N}(;outsizes, kernelsizes, activations=identity, strides=1, dilations=1, paddings=SamePad(), convfuns=Conv) where N =
+ConvSpace(
+    parspaceof(convfuns),
+    BaseLayerSpace(parspaceof(outsizes), parspaceof(activations)),
+    parspaceof(N, kernelsizes),
+    parspaceof(N, strides),
+    parspaceof(N, dilations),
+    parspaceof(paddings))
+
+function (s::ConvSpace)(insize::Integer, rng=rng_default; outsize = outsize(s.base, rng), wi=DefaultWeightInit())
+    convfun = s.convfun(rng)
     ks = Tuple(s.kernelsize(rng))
+    act = activation(s.base, rng)
+    pad = s.pad(rng)
     stride = s.stride(rng)
     dilation = s.dilation(rng)
-    act = activation(s.base, rng)
-    return convfun(ks, insize=>outsize, act; pad=s.pad, stride=stride,dilation=dilation, convinitW(wi)...)
+    return convfun(ks, insize=>outsize, act; pad=pad, stride=stride, dilation=dilation, convinitW(wi)...)
 end
 
 convinitW(::DefaultWeightInit) = ()
@@ -247,33 +267,30 @@ BatchNormSpace(acts::AbstractVector) = BatchNormSpace(acts...)
 
 """
     PoolSpace{N} <:AbstractLayerSpace
+    PoolSpace{N}(;windowsizes, strides=1, paddings=SamePad(), poolfun=[MaxPool, MeanPool])
 
 Search space of `N`D pooling layers.
 """
 struct PoolSpace{N} <:AbstractLayerSpace
+    poolfun::AbstractParSpace
     ws::AbstractParSpace{N, <:Integer}
     stride::AbstractParSpace
-    pad
+    pad::AbstractParSpace
 end
-PoolSpace2D(ws::AbstractVector{<:Integer}) = PoolSpace(ws,ws)
-PoolSpace(ws::AbstractVector{<:Integer}...) = PoolSpace(ParSpace(ws), ParSpace(ws))
-PoolSpace(ws::AbstractParSpace, stride::AbstractParSpace) = PoolSpace(ws, stride, 0)
-function (s::PoolSpace)(in::Integer, rng=rng_default;outsize=nothing, pooltype)
+PoolSpace{N}(;windowsizes, strides=1, paddings=SamePad(), poolfuns=[MaxPool, MeanPool]) where N = PoolSpace{N}(
+    parspaceof(poolfuns),
+    parspaceof(N, windowsizes),
+    parspaceof(N, strides),
+    parspaceof(paddings)
+)
+
+function (s::PoolSpace)(in::Integer, rng=rng_default;outsize=nothing, wi=nothing)
+    poolfun = s.poolfun(rng)
     ws = Tuple(s.ws(rng))
     stride = s.stride(rng)
-    pooltype(ws, stride=stride, pad=s.pad)
+    pad = s.pad(rng)
+    poolfun(ws, stride=stride, pad=pad)
 end
-
-"""
-    MaxPoolSpace{N} <: AbstractLayerSpace
-
-Search space of `N`D max pooling layers.
-"""
-struct MaxPoolSpace{N} <: AbstractLayerSpace
-    s::PoolSpace{N}
-end
-(s::MaxPoolSpace)(in::Integer, rng=rng_default;outsize=nothing, wi=nothing) = s.s(in, rng, pooltype=MaxPool)
-
 
 default_logging() = logged(level=Logging.Debug, info=NameAndIOInfoStr())
 """
@@ -379,13 +396,15 @@ create_layer(outsize::Integer, insize::Integer, ls::AbstractLayerSpace, wi, rng)
 """
     ArchSpace <:AbstractArchSpace
 
-Search space of `AbstractArchSpace`.
+Search space of `AbstractArchSpace`s.
 """
 struct ArchSpace <:AbstractArchSpace
     s::AbstractParSpace{1, <:AbstractArchSpace}
 end
 ArchSpace(l::AbstractLayerSpace;conf=LayerVertexConf()) = ArchSpace(SingletonParSpace(VertexSpace(conf,l)))
 ArchSpace(l::AbstractLayerSpace, ls::AbstractLayerSpace...;conf=LayerVertexConf()) = ArchSpace(ParSpace(VertexSpace.(conf,[l,ls...])))
+ArchSpace(s::AbstractArchSpace) = ArchSpace(SingletonParSpace(s))
+ArchSpace(s::AbstractArchSpace, ss::AbstractArchSpace...) = ArchSpace(ParSpace([s, ss...]))
 
 (s::ArchSpace)(in::AbstractVertex, rng=rng_default; outsize=missing, wi=DefaultWeightInit()) = s.s(rng)(in, rng, outsize=outsize, wi=wi)
 (s::ArchSpace)(name::String, in::AbstractVertex, rng=rng_default; outsize=missing, wi=DefaultWeightInit()) = s.s(rng)(name, in, rng, outsize=outsize, wi=wi)
