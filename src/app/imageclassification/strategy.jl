@@ -341,7 +341,7 @@ function optcrossover(poptswap=0.3, plrswap=0.4)
     return MutationChain(lrc, oc)
 end
 
-function optmutation(p=0.05)
+function optmutation(p=0.1)
     lrm = LearningRateMutation()
     om = MutationProbability(OptimizerMutation([Descent, Momentum, Nesterov, ADAM, NADAM, ADAGrad]), p)
     return MutationChain(lrm, om)

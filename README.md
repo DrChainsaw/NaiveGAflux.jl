@@ -435,7 +435,6 @@ crossoverall = VertexCrossover(swapdeviation, 0.5)
 
 modelAnew3, modelBnew3 = crossoverall((modelA, modelB))
 
-# I guess things got swapped back and forth so many times not much changed in the end
 @test name.(vertices(modelAnew3)) == ["A.in", "B.layer3", "A.layer3", "B.layer1"]
 @test name.(vertices(modelBnew3)) == ["B.in", "B.layer2", "A.layer4", "A.layer1", "B.layer4", "A.layer2"]
 
