@@ -19,9 +19,9 @@ function initial_archspace(inshape, outsize)
 
     # Only use odd kernel sizes due to CuArrays issue# 356
     # Bias selection towards smaller number of large kernels in the beginning...
-    conv1 = convspace(layerconf, 2 .^(3:8), 1:2:7, acts)
+    conv1 = convspace(layerconf, 2 .^(3:8), ks(1:2:7), acts)
     # Then larger number of small kernels
-    conv2 = convspace(layerconf, 2 .^(5:9), 1:2:5, acts)
+    conv2 = convspace(layerconf, 2 .^(5:9), ks(1:2:5), acts)
 
     # Convblocks are repeated, forked or put in residual connections.
     rfr1 = rep_fork_res(conv1, 1)
@@ -43,7 +43,7 @@ function initial_archspace(inshape, outsize)
 
     # Option 1: Just a global pooling layer
     # For this to work we need to ensure that the layer before the global pool has exactly 10 outputs, that is what this is all about (or else we could just have allowed 0 dense layers in the search space for option 2).
-    convout = convspace(outconf, outsize, 1:2:5, identity)
+    convout = convspace(outconf, outsize, ks(1:2:5), identity)
     blockcout = ArchSpaceChain(convout, GlobalPoolSpace(gpconf))
 
     # Option 2: 1-3 Dense layers after the global pool
@@ -58,6 +58,9 @@ function initial_archspace(inshape, outsize)
     # Basically the only constraint is to not randomly run out of GPU memory...
     return ArchSpaceChain(block1, block2, blockout)
 end
+
+# Bias towards kernel size of 3
+ks(sizes) = vcat(sizes, fill(3, length(sizes)))
 
 function rep_fork_res(s, n, min_rp=1;loglevel=Logging.Debug)
     n == 0 && return s
@@ -75,10 +78,11 @@ function rep_fork_res(s, n, min_rp=1;loglevel=Logging.Debug)
 end
 
 function convspace(conf, outsizes, kernelsizes, acts; loglevel=Logging.Debug)
-    # CoupledParSpace due to CuArrays issue# 356
     msgfun(v) = "Created $(name(v)), nin: $(nin(v)), nout: $(nout(v))"
-    conv2d = LoggingArchSpace(msgfun, VertexSpace(conf, NamedLayerSpace("conv2d", ConvSpace{2}(outsizes=outsizes, activations=acts, kernelsizes=kernelsizes))); level=loglevel)
-    bn = LoggingArchSpace(msgfun, VertexSpace(conf, NamedLayerSpace("batchnorm", BatchNormSpace(acts))); level=loglevel)
+    aswrap(vname, as) = LoggingArchSpace(msgfun, VertexSpace(conf, NamedLayerSpace(vname, as)); level=loglevel)
+    
+    conv2d = aswrap("conv2d", ConvSpace{2}(outsizes=outsizes, activations=acts, kernelsizes=kernelsizes))
+    bn = aswrap("batchnorm", BatchNormSpace(acts))
 
     # Make sure that each alternative has the option to change output size
     # This is important to make fork and res play nice together

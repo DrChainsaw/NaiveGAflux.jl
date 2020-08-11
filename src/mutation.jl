@@ -341,7 +341,7 @@ function (m::AddEdgeMutation)(vi::AbstractVertex)
     selfun(::Nothing, vc) = apply(m.p) ? vc : nothing
     selfun(vs, vd) = vs
     vo = foldl(selfun, allverts, init=nothing)
-    vo = vo == nothing ? rand(m.rng, allverts) : vo
+    vo = isnothing(vo) ? rand(m.rng, allverts) : vo
 
     try_add_edge(vi, vo, m.mergefun, m.valuefun)
     return vi

@@ -201,7 +201,7 @@ Useful to determine whether two arbitrary sequences of `ΔShape`s result in the 
 squashshapes(s::Tuple{}; order=nothing) = s
 squashshapes(s::ΔShape; order=nothing) = tuple(s)
 squashshapes(s::ΔShape...; order=allΔshapetypes(s)) = squashshapes(s; order = order)
-squashshapes(s::Tuple{Vararg{ΔShape}}; order=allΔshapetypes(s)) where N = _squashshapes(orderΔshapes(s; order=order))
+squashshapes(s::Tuple{Vararg{ΔShape}}; order=allΔshapetypes(s)) = _squashshapes(orderΔshapes(s; order=order))
 
 _squashshapes(s::ΔShape) = tuple(s)
 _squashshapes(s::Tuple{ΔShape}) = s
