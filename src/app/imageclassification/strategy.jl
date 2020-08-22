@@ -374,13 +374,13 @@ function graphmutation(inshape)
     mph(m, p) = VertexMutation(HighValueMutationProbability(m, p))
     mpl(m, p) = VertexMutation(LowValueMutationProbability(m, p))
 
-    cnout = mph(LogMutation(v -> "Mutate output size of vertex $(name(v))", change_nout), 0.05)
+    cnout = mpn(LogMutation(v -> "Mutate output size of vertex $(name(v))", change_nout), 0.05)
     dnout = mpl(LogMutation(v -> "Reduce output size of vertex $(name(v))", decrease_nout), 0.05)
     maddv = mph(LogMutation(v -> "Add vertex after $(name(v))", add_vertex), 0.005)
     maddd = mpn(MutationFilter(candownsample(inshape), LogMutation(v -> "Add downsampling after $(name(v))", add_downsampling)), 0.01)
     mremv = mpl(LogMutation(v -> "Remove vertex $(name(v))", rem_vertex), 0.01)
-    ckern = mpl(MutationFilter(allowkernelmutation, LogMutation(v -> "Mutate kernel size of $(name(v))", change_kernel)), 0.01)
-    dkern = mpl(MutationFilter(allowkernelmutation, LogMutation(v -> "Decrease kernel size of $(name(v))", decrease_kernel)), 0.01)
+    ckern = mpn(MutationFilter(allowkernelmutation, LogMutation(v -> "Mutate kernel size of $(name(v))", change_kernel)), 0.02)
+    dkern = mpn(MutationFilter(allowkernelmutation, LogMutation(v -> "Decrease kernel size of $(name(v))", decrease_kernel)), 0.02)
     mactf = mpl(LogMutation(v -> "Mutate activation function of $(name(v))", mutate_act), 0.005)
     madde = mph(LogMutation(v -> "Add edge from $(name(v))", add_edge), 0.02)
     mreme = mpn(MutationFilter(v -> length(outputs(v)) > 1, LogMutation(v -> "Remove edge from $(name(v))", rem_edge)), 0.02)
@@ -406,8 +406,6 @@ isbig(g) = nparams(g) > 20e7
 
 candownsample(inshape) = v -> candownsample(v, inshape)
 candownsample(v::AbstractVertex, inshape) = is_convtype(v) && !infork(v) && canshrink(v, inshape)
-
-
 
 function canshrink(v, inshape)
     # Note assumes stride = 2!
@@ -454,7 +452,7 @@ function add_vertex_mutation(acts)
 
     wrapitup(as) = AddVertexMutation(rep_fork_res(as, 1,loglevel=Logging.Info), outselect)
 
-    add_conv = wrapitup(convspace(default_layerconf(),2 .^(4:9), ks(1:2:5), acts,loglevel=Logging.Info))
+    add_conv = wrapitup(convspace(default_layerconf(),2 .^(4:9), 1:2:5, acts,loglevel=Logging.Info))
     add_dense = wrapitup(LoggingArchSpace(VertexSpace(default_layerconf(), NamedLayerSpace("dense", DenseSpace(2 .^(4:9), acts)));level = Logging.Info))
 
     return MutationChain(MutationFilter(is_convtype, add_conv), MutationFilter(!is_convtype, add_dense))
