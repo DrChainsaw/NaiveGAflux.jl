@@ -384,7 +384,7 @@ function try_add_edge(vi, vo, mergefun, valuefun=default_neuronselect)
     cleanup_failed()
 end
 # Need to override this one for strange types e.g. layers which support exactly 2 inputs or something.
-singleinput(v) = length(inputs(v)) == 1
+singleinput(v) = isempty(inputs(v)) || length(inputs(v)) == 1
 
 create_edge_strat(v::AbstractVertex, valuefun) = create_edge_strat(trait(v), valuefun)
 create_edge_strat(d::DecoratingTrait, valuefun) = create_edge_strat(base(d), valuefun)
