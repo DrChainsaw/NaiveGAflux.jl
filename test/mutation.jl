@@ -487,7 +487,7 @@
         import NaiveGAflux: default_mergefun
         cl(name, in, outsize; kwargs...) = mutable(name, Conv((1,1), nout(in)=>outsize; kwargs...), in)
         dl(name, in, outsize) = mutable(name, Dense(nout(in), outsize), in)
-
+ 
         @testset "No shapechange" begin
             import NaiveGAflux: no_shapechange
 
@@ -536,22 +536,22 @@
                 v2b2 = cl("v2b2", v2b1, 3; pad=1)
                 v2b3 = cl("v2b3", v2b2, 2)
 
-                v2c1 = cl("v2c2", v2, 5)
+                v2c1 = cl("v2c1", v2, 5)
                 v2c2 = cl("v2c2", v2c1, 3)
                 v2c3 = cl("v2c3", v2c2, 2;pad=1)
 
                 v3 = concat("v3", v2a3, v2b3, v2c3)
                 v4 = cl("v4", v3, 3)
 
-                @test name.(no_shapechange(v0)) == name.([v1a1, v1a2, v2, v2a1, v2b1, v2b2, v2c2, v2c2, v2c3, v1b1])
+                @test name.(no_shapechange(v0)) == name.([v1a1, v1a2, v1b1, v2, v2a1, v2b1, v2b2, v2c1, v2c2, v2c3])
                 @test name.(no_shapechange(v1)) == name.([v1a2, v2, v2a1, v2b1, v2b2, v2c1, v2c2, v2c3])
 
-                @test name.(no_shapechange(v1a1)) == name.([v2, v2a1, v2b1, v2b2, v2c1, v2c2, v2c3])
-                @test name.(no_shapechange(v1b1)) == name.([v2a1, v2b1, v2b2, v2c1, v2c2, v2c3])
+                @test name.(no_shapechange(v1a1)) == name.([v1b1, v2, v2a1, v2b1, v2b2, v2c1, v2c2, v2c3])
+                @test name.(no_shapechange(v1b1)) == name.([v1a1, v1a2, v2a1, v2b1, v2b2, v2c1, v2c2, v2c3])
 
-                @test name.(no_shapechange(v2a1)) == name.([v2a3, v3, v4])
-                @test name.(no_shapechange(v2b2)) == name.([v3, v4])
-                @test name.(no_shapechange(v2c3)) == name.([v4])
+                @test name.(no_shapechange(v2a1)) == name.([v2a3, v2b3, v3, v4])
+                @test name.(no_shapechange(v2b2)) == name.([v2a2, v2a3, v3, v4])
+                @test name.(no_shapechange(v2c3)) == name.([v2a2, v2a3, v2b3, v4])
             end
 
             @testset "With global pool and flatten" begin

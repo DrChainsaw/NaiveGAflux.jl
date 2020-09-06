@@ -320,15 +320,23 @@ default_mergefun(pconc = 0.5; rng=rng_default, traitfun = MutationShield ∘ Rem
     return concat(vin ,mutation=IoChange, traitfun = traitfun ∘ named(name(vin) * ".cat"), layerfun=layerfun)
 end
 
-function no_shapechange(vi, vc=vi, valid = [])
-    if vi != vc
-        if vi ∉ inputs(vc)
-            valid = vcat(valid, vc)
+function no_shapechange(vi)
+    # all_in_graph is not sorted, and we want some kind of topoligical order here so that earlier indices are closer to vi
+    allsorted = mapreduce(NaiveNASlib.flatten, vcat, filter(v -> isempty(outputs(v)), all_in_graph(vi))) |> unique
+    # All vertices which are after vi in the topology
+    vsafter = setdiff(allsorted, NaiveNASlib.flatten(vi), outputs(vi))
+    
+    vitrace = shapetrace(vi) 
+    viorder = allΔshapetypes(vitrace)
+    viΔshape = squashshapes(vitrace; order=viorder)
+
+    return filter(vsafter) do vafter
+        all(inputs(vafter)) do v
+        t = shapetrace(v)
+        vΔshape = squashshapes(t; order=union(viorder, allΔshapetypes(t)))
+        return viΔshape == vΔshape
         end
-        Δshapes(vc) |> squashshapes |> !isempty && return valid
     end
-    isempty(outputs(vc)) && return valid
-    return mapfoldl(vco -> no_shapechange(vi, vco, valid), vcat, outputs(vc)) |> unique
 end
 
 function (m::AddEdgeMutation)(vi::AbstractVertex)
