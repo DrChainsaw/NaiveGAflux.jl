@@ -503,7 +503,7 @@
 
                     @test default_pairgen(vsa, vsb; ind1=1) == (1, 1)
                     @test default_pairgen(vsa, vsb; ind1=3) == (3, 3)
-                    @test default_pairgen(vsa, vsb; ind1=length(vsa)+1) == nothing
+                    @test default_pairgen(vsa, vsb; ind1=length(vsa)+1) === nothing
                 end
 
                 @testset "Match larger" begin

@@ -1,7 +1,7 @@
 name = "NaiveGAflux"
 uuid = "81ede08e-ab29-11e9-16d3-79edd30a1d76"
 authors = ["DrChainsaw"]
-version = "0.6.1"
+version = "0.7.0"
 
 [deps]
 CUDA = "052768ef-5323-5732-b1bb-66c8b64840ba"

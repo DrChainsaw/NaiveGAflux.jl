@@ -279,7 +279,7 @@ end
 @testset "Optimizer trait" begin
     import NaiveGAflux: opttype, optmap, FluxOptimizer
 
-    @test opttype("Not an optimizer") == nothing
+    @test opttype("Not an optimizer") === nothing
     @test opttype(Descent()) == FluxOptimizer()
     @test opttype(Flux.Optimiser(Descent(), ADAM())) == FluxOptimizer()
 

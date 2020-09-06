@@ -182,7 +182,7 @@ batch(a::AbstractArray{T,4}, inds) where T = view(a, :,:,:,inds)
 batch(a::AbstractArray{T,5}, inds) where T = view(a, :,:,:,:,inds)
 batch(a::AbstractArray{T,N}, inds) where {T,N} = view(a, ntuple(i -> Colon(), N - 1)..., inds)
 
-Base.show(io::IO, itr::BatchIterator) where T = print(io, "BatchIterator(size=$(size(itr.base)), batchsize=$(itr.batchsize))")
+Base.show(io::IO, itr::BatchIterator) = print(io, "BatchIterator(size=$(size(itr.base)), batchsize=$(itr.batchsize))")
 
 """
     Flux.onehotbatch(itr::BatchIterator, labels)

@@ -5,6 +5,8 @@ ActivationContributionLow(l) = ActivationContribution(l, NeuronValueEvery(20))
 default_layerconf() = LayerVertexConf(ActivationContributionLow ∘ LazyMutable, NaiveGAflux.default_logging())
 # Global pool has its own config because it happens to not be compatible with LazyMutable. Should be fixed someday
 default_globpoolconf() = LayerVertexConf(ActivationContributionLow, MutationShield ∘ NaiveGAflux.default_logging())
+
+default_actfuns() = [identity, relu, elu, selu]
 function initial_archspace(inshape, outsize)
 
     layerconf = default_layerconf()
@@ -13,7 +15,7 @@ function initial_archspace(inshape, outsize)
         LayerVertexConf(layerconf.layerfun, OutShield ∘ layerconf.traitfun)
     end
 
-    acts = [identity, relu, elu, selu]
+    acts = default_actfuns()
 
     # Only use odd kernel sizes due to CuArrays issue# 356
     # Bias selection towards smaller number of large kernels in the beginning...
@@ -21,16 +23,13 @@ function initial_archspace(inshape, outsize)
     # Then larger number of small kernels
     conv2 = convspace(layerconf, 2 .^(5:9), 1:2:5, acts)
 
-    # Convblocks are repeated, forked or put in residual connections...
-    # ...and the procedure is repeated for the output space.
-    # Makes for some crazy architectures
-    rfr1 = rep_fork_res(conv1,2)
-    rfr2 = rep_fork_res(conv2,2)
+    # Convblocks are repeated, forked or put in residual connections.
+    rfr1 = rep_fork_res(conv1, 1)
+    rfr2 = rep_fork_res(conv2, 1)
 
-    # Each "block" is finished with a maxpool to downsample
-    maxpoolvertex = VertexSpace(layerconf, NamedLayerSpace("maxpool", MaxPoolSpace(PoolSpace2D([2]))))
-    red1 = ArchSpaceChain(rfr1, maxpoolvertex)
-    red2 = ArchSpaceChain(rfr2, maxpoolvertex)
+    # Each "block" is finished with downsampling
+    red1 = ArchSpaceChain(rfr1, downsamplingspace(layerconf, outsizes=2 .^(3:8), activations=acts))
+    red2 = ArchSpaceChain(rfr2, downsamplingspace(layerconf, outsizes=2 .^(5:9), activations=acts))
 
     # How many times can shape be reduced by a factor 2
     maxreps = min(6, floor(Int, log2(minimum(inshape))))
@@ -48,12 +47,12 @@ function initial_archspace(inshape, outsize)
     blockcout = ArchSpaceChain(convout, GlobalPoolSpace(gpconf))
 
     # Option 2: 1-3 Dense layers after the global pool
-    dense = VertexSpace(layerconf, NamedLayerSpace("dense", DenseSpace(2 .^(4:9), acts)))
+    dense = VertexSpace(layerconf, NamedLayerSpace("dense", DenseSpace(2 .^(8:12), acts)))
     drep = RepeatArchSpace(dense, 0:2)
     dout=VertexSpace(outconf, NamedLayerSpace("dense", DenseSpace(outsize, identity)))
     blockdout = ArchSpaceChain(GlobalPoolSpace(gpconf), drep, dout)
 
-    blockout = ArchSpace(ParSpace([blockdout, blockcout]))
+    blockout = ArchSpace(blockdout, blockcout)
 
     # Remember that each "block" here is a random and pretty big search space.
     # Basically the only constraint is to not randomly run out of GPU memory...
@@ -72,14 +71,15 @@ function rep_fork_res(s, n, min_rp=1;loglevel=Logging.Debug)
     fork = LoggingArchSpace(msgfun, ForkArchSpace(rep, min_rp:3, conf=concconf); level = loglevel)
     res = LoggingArchSpace(msgfun, ResidualArchSpace(rep, resconf); level = loglevel)
     # Manical cackling laughter...
-    return rep_fork_res(ArchSpace(ParSpace([rep, fork, res])), n-1, 0, loglevel=loglevel)
+    return rep_fork_res(ArchSpace(rep, fork, res), n-1, 0, loglevel=loglevel)
 end
 
 function convspace(conf, outsizes, kernelsizes, acts; loglevel=Logging.Debug)
-    # CoupledParSpace due to CuArrays issue# 356
     msgfun(v) = "Created $(name(v)), nin: $(nin(v)), nout: $(nout(v))"
-    conv2d = LoggingArchSpace(msgfun, VertexSpace(conf, NamedLayerSpace("conv2d", ConvSpace2D(outsizes, acts, kernelsizes))); level=loglevel)
-    bn = LoggingArchSpace(msgfun, VertexSpace(conf, NamedLayerSpace("batchnorm", BatchNormSpace(acts))); level=loglevel)
+    aswrap(vname, as) = LoggingArchSpace(msgfun, VertexSpace(conf, NamedLayerSpace(vname, as)); level=loglevel)
+    
+    conv2d = aswrap("conv2d", ConvSpace{2}(outsizes=outsizes, activations=acts, kernelsizes=kernelsizes))
+    bn = aswrap("batchnorm", BatchNormSpace(acts))
 
     # Make sure that each alternative has the option to change output size
     # This is important to make fork and res play nice together
@@ -87,4 +87,11 @@ function convspace(conf, outsizes, kernelsizes, acts; loglevel=Logging.Debug)
     bnconv = ArchSpaceChain(bn, conv2d)
 
     return ArchSpace(ParSpace([conv2d, convbn, bnconv]))
+end
+
+function downsamplingspace(conf; outsizes, sizes=2, strides=2, activations=identity)
+    maxpoolspace = NamedLayerSpace("maxpool", PoolSpace{2}(windowsizes=sizes, strides=strides, poolfuns=MaxPool))
+    meanpoolspace = NamedLayerSpace("meanpool", PoolSpace{2}(windowsizes=sizes, strides=strides, poolfuns=MeanPool))
+    convspace = NamedLayerSpace("stridedconv", ConvSpace{2}(outsizes=outsizes, kernelsizes=sizes, activations=activations, strides=strides, paddings=0))
+    return ArchSpace(maxpoolspace, meanpoolspace, convspace; conf=conf)
 end
