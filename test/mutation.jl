@@ -546,8 +546,8 @@
                 @test name.(no_shapechange(v0)) == name.([v1a1, v1a2, v1b1, v2, v2a1, v2b1, v2b2, v2c1, v2c2, v2c3])
                 @test name.(no_shapechange(v1)) == name.([v1a2, v2, v2a1, v2b1, v2b2, v2c1, v2c2, v2c3])
 
-                @test name.(no_shapechange(v1a1)) == name.([v1b1, v2, v2a1, v2b1, v2b2, v2c1, v2c2, v2c3])
-                @test name.(no_shapechange(v1b1)) == name.([v1a1, v1a2, v2a1, v2b1, v2b2, v2c1, v2c2, v2c3])
+                @test name.(no_shapechange(v1a1)) == name.([v2, v2a1, v2b1, v2b2, v2c1, v2c2, v2c3])
+                @test name.(no_shapechange(v1b1)) == name.([v1a2, v2a1, v2b1, v2b2, v2c1, v2c2, v2c3])
 
                 @test name.(no_shapechange(v2a1)) == name.([v2a3, v2b3, v3, v4])
                 @test name.(no_shapechange(v2b2)) == name.([v2a2, v2a3, v3, v4])
@@ -566,6 +566,8 @@
 
                 @test name.(no_shapechange(v0)) == name.([v2,v3,v4])
                 @test name.(no_shapechange(v1)) == name.([v3, v4])
+                @test name.(no_shapechange(v2)) == name.([v4])
+                @test name.(no_shapechange(v3)) == []
 
                 @test name.(no_shapechange(v4)) == name.([v6,v7])
                 @test name.(no_shapechange(v5)) == name.([v7])
@@ -612,6 +614,23 @@
             @test outputs(vm4) == [v6]
             @test inputs(vm4) == [v5, v4]
             @test size(g(indata)) == (2,2,2,2)
+        end
+
+        @testset "AddEdgeMutation first in path from multi-input capable" begin
+            v0 = inputvertex("in", 3, FluxConv{2}())
+            v1 = cl("v1", v0, 3)
+            v2 = "v2" >> v0 + v1
+            v2a1 = cl("v2a1", v2, 3)
+            v2b1 = cl("v2b1", v2, 3)
+            v3 = "v3" >> v2a1 + v2b1
+  
+            m = AddEdgeMutation(1.0,  mergefun = default_mergefun(0.0), valuefun = v -> 1:nout_org(v))
+            
+            m(v2a1)
+            # Synopsis: v2b1 is selected as a suitable candidate
+            # Since it is single input only, its inputs (v2) will be considered
+            # However, v2 is also input to v2a1 meaning it can not be used despite being multi input
+            @test name.(outputs(v2a1)) == [name(v3)]
         end
 
         @testset "AddEdgeMutation fail" begin
