@@ -323,8 +323,14 @@ end
 function no_shapechange(vi)
     # all_in_graph is not sorted, and we want some kind of topoligical order here so that earlier indices are closer to vi
     allsorted = mapreduce(NaiveNASlib.flatten, vcat, filter(v -> isempty(outputs(v)), all_in_graph(vi))) |> unique
+    
+    # Vertices which have the same input as vi and are singleinput
+    #   Reason is that this will cause a new vertex to be added between the target output vertex vo
+    #   and the input vertex to vi (vii) and this is detected as a size cycle which causes 
+    #   try_add_edge to fail.
+    inouts = filter(singleinput, mapreduce(outputs, vcat, inputs(vi); init=[]))
     # All vertices which are after vi in the topology
-    vsafter = setdiff(allsorted, NaiveNASlib.flatten(vi), outputs(vi))
+    vsafter = setdiff(allsorted, NaiveNASlib.flatten(vi), outputs(vi), inouts)
     
     vitrace = shapetrace(vi) 
     viorder = allΔshapetypes(vitrace)
@@ -362,7 +368,9 @@ function try_add_edge(vi, vo, mergefun, valuefun=default_neuronselect)
     cleanup_failed = () -> nothing
     if singleinput(vo)
         voi = inputs(vo)[1]
-        if singleinput(voi)
+        # If the input to vo is capable of multi input we don't need to create a new vertex
+        # We must also check that this input does not happen to be an input to vi as this would create a cycle in the graph
+        if singleinput(voi) || voi in NaiveNASlib.flatten(vi)
             vm = mergefun(voi)
             # Insert vm between voi and vo, i.e voi -> vo turns into voi -> vm -> vo
             # vs -> [vo] means only add the new vertex between voi and vo as voi could have other outputs
@@ -384,7 +392,7 @@ function try_add_edge(vi, vo, mergefun, valuefun=default_neuronselect)
     cleanup_failed()
 end
 # Need to override this one for strange types e.g. layers which support exactly 2 inputs or something.
-singleinput(v) = length(inputs(v)) == 1
+singleinput(v) = isempty(inputs(v)) || length(inputs(v)) == 1
 
 create_edge_strat(v::AbstractVertex, valuefun) = create_edge_strat(trait(v), valuefun)
 create_edge_strat(d::DecoratingTrait, valuefun) = create_edge_strat(base(d), valuefun)
