@@ -487,7 +487,7 @@ function (m::KernelSizeMutation{N})(v::AbstractVertex) where N
     currsize = size(NaiveNASflux.weights(l))[1:N]
     Δsize = Int.(clamp.(m.Δsizespace(m.rng), 1 .- currsize, m.maxsize(v) .- currsize)) # ensure new size is > 0 and < maxsize
     # This will eventually boil down to Setfield doing its thing, and that won't be using any convenience constructors
-    pad = Flux.calc_padding(m.pad, currsize .+ Δsize, dilation(l), stride(l))
+    pad = Flux.calc_padding(typeof(l), m.pad, currsize .+ Δsize, dilation(l), stride(l))
     mutate_weights(v, KernelSizeAligned(Δsize, pad))
     return v
 end
