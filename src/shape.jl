@@ -92,7 +92,7 @@ struct RevertΔShape{N,M,T<:ΔShape{N,M}} <: ΔShape{N,M}
     Δshape::T
 end
 
-fshape(s::Tuple{}, shape) = shape
+fshape(::Tuple{}, shape) = shape
 fshape(s::Tuple{ΔShape{N}, Vararg{ΔShape}}, shape::NTuple{N, Integer}) where N = foldr(fshape, reverse(s); init=shape)
 
 """
@@ -280,7 +280,7 @@ squashshapes(s1::Tuple{Vararg{ΔShape}}, s2::Tuple{Vararg{ΔShape}}; order=allΔ
 
 visitvertex(tr::ShapeTrace, v) = ShapeTrace(tr.origin, v, (tr.trace..., Δshapes(v)...))
 
-Base.merge(v::AbstractVertex, tr::ShapeTrace) = tr
+Base.merge(::AbstractVertex, tr::ShapeTrace) = tr
 Base.merge(v::AbstractVertex, trs::ShapeTrace...) = ShapeTrace(v, v, tuple(tuple((ShapeTrace(t.origin, v, (t.trace..., Δshapes(v)...)) for t in trs)...)))
 
 """
@@ -310,7 +310,7 @@ Return a tuple of `ΔShape`s describing the shape mapping of `v`.
 More concretely, if `xs = size(x)[sdims]` then `size(v(x))[sdims] == fshape(Δshapes(v), xs)` where `sdims` are the shape dimensions of `x`, e.g. the height and width in case of 2D convolutions.
 """
 Δshapes(v::AbstractVertex) = Δshapes(base(v))
-Δshapes(v::InputVertex) = tuple()
+Δshapes(::InputVertex) = tuple()
 Δshapes(v::MutationVertex) = Δshapes(trait(v), v)
 Δshapes(t::DecoratingTrait, v) = Δshapes(base(t), v)
 Δshapes(::MutationSizeTrait, v) = _Δshapes(layertype(v), v)
@@ -320,20 +320,20 @@ _Δshapes(t::Any, v) = tuple()
 function _Δshapes(::FluxConv{N}, v) where N
     c = layer(v)
     ks = size(NaiveNASflux.weights(c))[1:N]
-    Δwindow = Δshape_from_window(ks, c.dilation, c.pad)
+    Δwindow = Δshape_from_window(c, ks, c.dilation, c.pad)
     Δstride = ShapeDiv(c.stride)
     return Δwindow, Δstride
 end
 
 _Δshapes(::FluxNoParLayer, v) = _Δshapes(layer(v), v)
-_Δshapes(p::Union{MeanPool, MaxPool}, v) = Δshape_from_window(p.k, 1, p.pad), ShapeDiv(p.stride)
+_Δshapes(p::Union{MeanPool, MaxPool}, v) = Δshape_from_window(p, p.k, 1, p.pad), ShapeDiv(p.stride)
 _Δshapes(::Type{typeof(Flux.flatten)}, v) = _Δshapes_gp(actdim(v) .- 2)
 _Δshapes(::GlobalPool, v) = _Δshapes_gp(actdim(v) .- 2)
 
-Δshape_from_window(ws::NTuple{N}, dilation::Integer, pad) where N = Δshape_from_window(ws, ntuple(i -> dilation, N), pad)
-function Δshape_from_window(ws::NTuple{N}, dilation, pad) where N
+Δshape_from_window(l::LT, ws::NTuple{N}, dilation::Integer, pad) where {N, LT} = Δshape_from_window(l, ws, ntuple(i -> dilation, N), pad)
+function Δshape_from_window(::LT, ws::NTuple{N}, dilation, pad) where {LT, N}
     padact = length(pad) == N ? 2 .* pad : ntuple(i -> pad[2(i-1)+1] + pad[2(i-1)+2], N)
-    padref = ntuple(i -> sum(Flux.calc_padding(SamePad(), tuple(ws[i]), dilation[i], 1)), N)
+    padref = ntuple(i -> sum(Flux.calc_padding(LT, SamePad(), tuple(ws[i]), dilation[i], 1)), N)
     return ShapeAdd(padact .- padref)
 end
 
