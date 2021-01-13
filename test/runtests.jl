@@ -59,8 +59,12 @@ using Test
     @info "Testing visualization"
     include("visualization/callbacks.jl")
 
-    @info "Testing README examples"
-    include("examples.jl")
+    if VERSION === v"1.5.3"
+        @info "Testing README examples"
+        include("examples.jl")
+    else
+        @warn "README examples will only be tested in julia version 1.5.3. Skipping..."
+    end
 
     @info "Testing AutoFlux"
     include("app/autoflux.jl")
