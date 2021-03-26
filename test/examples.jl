@@ -4,9 +4,10 @@
 
     nlabels = 3
     ninputs = 5
-    inshape = inputvertex("input", ninputs, FluxDense())
+    inshape() = inputvertex("input", ninputs, FluxDense())
 
     # Step 1: Create initial models
+    # Search space: 2-4 dense layers of width 3-10
     layerspace = VertexSpace(DenseSpace(3:10, [identity, relu, elu, selu]))
     initial_hidden = RepeatArchSpace(layerspace, 1:3)
     # Output layer has fixed size and is shielded from mutation
@@ -14,11 +15,11 @@
     initial_searchspace = ArchSpaceChain(initial_hidden, outlayer)
 
     # Sample 5 models from the initial search space
-    models = [CompGraph(inshape, initial_searchspace(inshape)) for _ in 1:5]
-    @test nv.(models) == [5, 5, 3, 4, 3]
+    model(invertex) = CompGraph(invertex, initial_searchspace(invertex))
+    models = [model(inshape()) for _ in 1:5]
+    @test nv.(models) == [4, 3, 4, 5, 3]
 
-    # Workaround as losses fail with Flux.OneHotMatrix on Appveyor x86
-    onehot(y) = Float32.(Flux.onehotbatch(y, 1:nlabels))
+    onehot(y) = Flux.onehotbatch(y, 1:nlabels)
 
     # Some dummy data just to make stuff run
     batchsize = 4
@@ -41,6 +42,7 @@
 
     # Mutations
     mp(m, p) = VertexMutation(MutationProbability(m, p))
+    # Either add a layer (40% chance) or remove a layer (40% chance)
     # You probably want to use lower probabilities than this
     addlayer = mp(AddVertexMutation(layerspace), 0.4)
     remlayer = mp(RemoveVertexMutation(), 0.4)
@@ -68,11 +70,11 @@ end
     ps1d = ParSpace([2,4,6,10])
 
     # Draw from the search space
-    @test ps1d() == 4
-    @test ps1d() == 2
+    @test ps1d() == 6
+    @test ps1d() == 10
 
     # Possible to supply another rng than the default one
-    @test ps1d(MersenneTwister(0)) == 6
+    @test ps1d(MersenneTwister(0)) == 4
 
     # Can be of any dimension and type
     ps2d = ParSpace(["1","2","3"], ["4","5","6","7"])
@@ -80,7 +82,7 @@ end
     @test typeof(ps1d) == ParSpace{1, Int}
     @test typeof(ps2d) == ParSpace{2, String}
 
-    @test ps2d() == ("3", "5")
+    @test ps2d() == ("1", "4")
 end
 
 @testset "ConvSpace example" begin
@@ -91,7 +93,7 @@ end
     inputsize = 16
     convlayer = cs(inputsize)
 
-    @test string(convlayer) == "Conv((3, 9), 16=>14, relu)"
+    @test string(convlayer) == "Conv((8, 3), 16=>22, relu)"
 end
 
 @testset "ArchSpace example" begin
@@ -149,11 +151,11 @@ end
 
     # Sample one architecture from the search space
     graph1 = CompGraph(inputshape, archspace(inputshape))
-    @test nv(graph1) == 88
+    @test nv(graph1) == 79
 
     # And one more...
     graph2 = CompGraph(inputshape, archspace(inputshape))
-    @test nv(graph2) == 80
+    @test nv(graph2) == 128
 end
 
 @testset "Mutation examples" begin
@@ -293,8 +295,8 @@ end
     modelAnew = regraph(newA)
     modelBnew = regraph(newB)
 
-    @test name.(vertices(modelAnew)) == ["A.in", "A.layer1", "A.layer2", "B.layer3", "A.layer4"]
-    @test name.(vertices(modelBnew)) == ["B.in", "B.layer1", "B.layer2", "A.layer3", "B.layer4"]
+    @test name.(vertices(modelAnew)) == ["A.in", "A.layer1", "B.layer2", "B.layer3", "A.layer4"] 
+    @test name.(vertices(modelBnew)) == ["B.in", "B.layer1", "A.layer2", "A.layer3", "B.layer4"]
 
     @test modelA(indata) == modelB(indata) == modelAnew(indata) == modelBnew(indata)
 
@@ -302,8 +304,8 @@ end
     swapdeviation = CrossoverSwap(0.5)
     modelAnew2, modelBnew2 = regraph.(swapdeviation((swapA, swapB)))
 
-    @test name.(vertices(modelAnew2)) == ["A.in", "B.layer3", "A.layer4"]
-    @test name.(vertices(modelBnew2)) == ["B.in", "B.layer1", "B.layer2", "A.layer1", "A.layer2", "A.layer3", "B.layer4"]
+    @test name.(vertices(modelAnew2)) == ["A.in", "A.layer1", "A.layer2", "B.layer1", "B.layer2", "B.layer3", "A.layer4"] 
+    @test name.(vertices(modelBnew2)) == ["B.in", "A.layer3", "B.layer4"]
 
     # VertexCrossover applies the wrapped crossover operation to all vertices in a CompGraph
     # It in addtion, it selects compatible pairs for us (i.e swapA and swapB).
@@ -313,14 +315,14 @@ end
     modelAnew3, modelBnew3 = crossoverall((modelA, modelB))
 
     # I guess things got swapped back and forth so many times not much changed in the end
-    @test name.(vertices(modelAnew3)) == ["A.in", "B.layer3", "A.layer3", "B.layer1"]
-    @test name.(vertices(modelBnew3)) == ["B.in", "B.layer2", "A.layer4", "A.layer1", "B.layer4", "A.layer2"]
+    @test name.(vertices(modelAnew3)) == ["A.in", "A.layer2", "A.layer4"]
+    @test name.(vertices(modelBnew3)) ==  ["B.in", "B.layer3", "B.layer1", "B.layer2", "A.layer1", "A.layer3", "B.layer4"] 
 
     # As advertised above, crossovers interop with most mutation utilities, just remember that input is a tuple
     # Perform the swapping operation with a 30% probability for each valid vertex pair.
     crossoversome = VertexCrossover(MutationProbability(LogMutation(((v1,v2)::Tuple) -> "Swap $(name(v1)) and $(name(v2))", swapdeviation), 0.3))
 
-    @test_logs (:info, "Swap A.layer4 and B.layer4") crossoversome((modelA, modelB))
+    @test_logs (:info, "Swap A.layer1 and B.layer1") (:info, "Swap A.layer2 and B.layer2") crossoversome((modelA, modelB))
 end
 
 @testset "Fitness functions" begin
@@ -491,7 +493,7 @@ end
     optimizer(c::CandidateModel) = typeof(c.opt)
 
     @test optimizer(cachinghostcand) == ADAM
-    @test optimizer(evolvedcand) == Descent
+    @test optimizer(evolvedcand) == Nesterov
 end
 
 @testset "Evolution strategies" begin
