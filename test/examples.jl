@@ -414,7 +414,7 @@ end
     @test training_guarded(ones(3,1)) == validation_guarded(ones(3,1)) == candidate2(ones(3,1))
 
     # Now the model gets corrupted somehow...
-    candidate2.W[1,1] = NaN
+    candidate2.weight[1,1] = NaN
 
     @test any(isnan, candidate2(ones(3,1)))
 
@@ -425,7 +425,7 @@ end
     @test fitness(nanguard, candidate2) == 0
 
     # After a Nan is detected the function will no longer be evaluated until reset
-    candidate2.W[1,1] = 1
+    candidate2.weight[1,1] = 1
 
     @test !any(isnan, candidate2(ones(3,1)))
     @test training_guarded(ones(3,1)) == zeros(3,1)
