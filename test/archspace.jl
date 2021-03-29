@@ -1,4 +1,5 @@
 @testset "Architecture Spaces" begin
+    import NaiveNASflux: weights
 
     @testset "BasicLayerSpace" begin
         import NaiveGAflux: outsize, activation
@@ -46,11 +47,11 @@
         l2 = s2(3, rng)
 
         @test l1.σ == l2.σ
-        @test size(l1.W) == size(l2.W)
+        @test size(weights(l1)) == size(weights(l2))
 
         l1 = s1(3, rng, outsize = 4)
         l2 = s2(3, rng, outsize = 4)
-        @test size(l1.W) == size(l2.W)
+        @test size(weights(l1)) == size(weights(l2))
     end
 
     @testset "LoggingLayerSpace" begin
@@ -64,12 +65,12 @@
         l2 = (@test_logs (:debug, "Create Dense(3, 2) from test") min_level=Logging.Debug s2(3,rng))
 
         @test l1.σ == l2.σ
-        @test size(l1.W) == size(l2.W)
+        @test size(weights(l1)) == size(weights(l2))
 
         l1 = s1(3, rng, outsize = 4)
         l2 = (@test_logs s2(3,rng, outsize = 4))
 
-        @test size(l1.W) == size(l2.W)
+        @test size(weights(l1)) == size(weights(l2))
     end
 
     @testset "DenseSpace" begin
@@ -77,27 +78,27 @@
         space = DenseSpace(3, σ)
         l = space(2, rng)
         @test l.σ == σ
-        @test size(l.W) == (3,2)
+        @test size(weights(l)) == (3,2)
         l = space(3, rng,outsize=2)
         @test l.σ == σ
-        @test size(l.W) == (2,3)
+        @test size(weights(l)) == (2,3)
     end
 
     @testset "ConvSpace" begin
         rng = SeqRng()
         space = ConvSpace{2}(outsizes=5, activations=relu, kernelsizes=2:5)
         l = space(4, rng)
-        @test size(l.weight) == (2,3,4,5)
+        @test size(weights(l)) == (2,3,4,5)
         @test size(l(ones(Float32, 5,5,4,1))) == (5,5,5,1)
 
         rng.ind = 0
         space = ConvSpace{1}(outsizes=4, activations=elu, kernelsizes=2:5)
         l = space(3, rng)
-        @test size(l.weight) == (2,3,4)
+        @test size(weights(l)) == (2,3,4)
         @test size(l(ones(Float32, 5,3,1))) == (5,4,1)
 
         l = space(4, rng, outsize=3)
-        @test size(l.weight) == (3,4,3)
+        @test size(weights(l)) == (3,4,3)
         @test size(l(ones(Float32, 5,4,1))) == (5,3,1)
     end
 

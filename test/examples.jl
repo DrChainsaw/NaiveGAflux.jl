@@ -328,7 +328,7 @@ end
 @testset "Fitness functions" begin
     # Function to compute fitness for does not have to be a CompGraph, or even a neural network
     candidate1 = x -> 3:-1:1
-    candidate2 = Dense(ones(3,3), 1:3)
+    candidate2 = Dense(ones(Float32, 3,3), collect(Float32, 1:3))
 
     # Fitness is accuracy on the provided data set
     accfitness = AccuracyFitness([(ones(3, 1), 1:3)])
