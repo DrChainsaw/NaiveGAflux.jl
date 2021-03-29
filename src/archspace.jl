@@ -203,9 +203,9 @@ DenseSpace(outsizes, activations) = DenseSpace(BaseLayerSpace(outsizes, activati
 (s::DenseSpace)(in::Integer,rng=rng_default; outsize=outsize(s.base,rng), wi=DefaultWeightInit(), densefun=Dense) = densefun(in, outsize, activation(s.base,rng); denseinitW(wi)...)
 
 denseinitW(::DefaultWeightInit) = ()
-denseinitW(::IdentityWeightInit) = (initW = idmapping,)
-denseinitW(wi::PartialIdentityWeightInit) = (initW = (args...) -> circshift(idmapping_nowarn(args...),(wi.outoffset, wi.inoffset)),)
-denseinitW(::ZeroWeightInit) = (initW = zeros,)
+denseinitW(::IdentityWeightInit) = (init = idmapping,)
+denseinitW(wi::PartialIdentityWeightInit) = (init = (args...) -> circshift(idmapping_nowarn(args...),(wi.outoffset, wi.inoffset)),)
+denseinitW(::ZeroWeightInit) = (init = zeros,)
 
 """
     ConvSpace{N} <:AbstractLayerSpace
