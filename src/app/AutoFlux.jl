@@ -22,7 +22,10 @@ Keyword `cb` can be used to supply a callback function which will be called each
 Keyword `mdir` is a directory which will be searched for serialized state from which the optimization will resume operations. Particularly useful in combination with `cb=persist`.
 """
 function fit(x, y; cb=identity, mdir=missing)
-    ndims(x) == 4 && return fit(ImageClassifier(), x, y;cb=identity, mdir=modeldir(mdir, "ImageClassifier"))
+    if ndims(x) == 4 
+        outsize = ndims(y) == 1 ? length(unique(y)) : size(y, 1)
+        return fit(ImageClassifier(insize=size(x), outsize, mdir=defaultdir(mdir, "ImageClassifier")), x, y; cb=identity)
+    end
     error("No model for $(ndims(x))D data")
 end
 fit((x,y)::Tuple; cb=identity, mdir=missing) = fit(x, y; cb=identity, mdir=mdir)

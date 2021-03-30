@@ -2,31 +2,31 @@
 
     @testset "ImageClassifier smoketest" begin
         using NaiveGAflux.AutoFlux
-        import NaiveGAflux.AutoFlux.ImageClassification: TrainSplitAccuracy, TrainIterStrategy, TrainAccuracyVsSize, EliteAndTournamentSelection, EliteAndSusSelection, GlobalOptimizerMutation, modelname
+        import NaiveGAflux.AutoFlux.ImageClassification: TrainSplitAccuracy, TrainIterConfig, BatchedIterConfig, ShuffleIterConfig, AccuracyVsSize, TrainAccuracyVsSize, EliteAndTournamentSelection, EliteAndSusSelection, GlobalOptimizerMutation, modelname
         using Random
-
-        # Workaround as losses fail with Flux.OneHotMatrix on Appveyor x86 (works everywhere else)
-        onehot(y) = Float32.(Flux.onehotbatch(y, 0:5))
 
         rng = MersenneTwister(123)
         x = randn(rng, Float32, 32,32,2,4)
-        y = onehot(rand(rng, 0:5,4))
-
-        c = ImageClassifier(popsize = 5, seed=1)
-        f = TrainSplitAccuracy(nexamples=1, batchsize=1)
-        t = TrainIterStrategy(nepochs=1, batchsize=1, nbatches_per_gen=1)
+        y = Float32.(Flux.onehotbatch(rand(rng, 0:5,4), 0:5))
 
         dummydir = joinpath(NaiveGAflux.modeldir, "ImageClassifier_smoketest")
+        c = ImageClassifier(popsize = 5, seed=1, mdir=dummydir, insize=size(x), outsize=size(y,1))
+
+        f = TrainSplitAccuracy(;split=0.25, 
+            accuracyconfig=BatchedIterConfig(batchsize=1),
+            accuracyfitness=data -> AccuracyVsSize(data, 3;accwrap=EwmaFitness),
+            trainconfig=TrainIterConfig(nbatches_per_gen=1, baseconfig=ShuffleIterConfig(batchsize=1))) 
+
 
         # Logs are mainly to prevent CI timeouts
         @info "\tSmoke test with TrainSplitAccuracy and EliteAndSusSelection"
-        pop = @test_logs (:info, "Begin generation 1") (:info, "Begin generation 2") (:info, "Begin generation 3") (:info, r"Mutate model") match_mode=:any fit(c, x, y, fitnesstrategy=f, trainstrategy=t, evolutionstrategy = GlobalOptimizerMutation(EliteAndSusSelection(popsize=c.popsize, nelites=1)), mdir = dummydir)
+        pop = @test_logs (:info, "Begin generation 1") (:info, "Begin generation 2") (:info, "Begin generation 3") (:info, r"Mutate model") match_mode=:any fit(c, x, y, fitnesstrategy=f, evolutionstrategy = GlobalOptimizerMutation(EliteAndSusSelection(popsize=c.popsize, nelites=1)), stopcriterion = pop -> generation(pop) == 3)
 
         @test length(pop) == c.popsize
         @test modelname.(pop) == ["model$i" for i in 1:length(pop)]
 
         globallearningrate(c::AbstractCandidate) = globallearningrate(c.c)
-        globallearningrate(c::CandidateModel) = globallearningrate(c.opt)
+        globallearningrate(c::CandidateOptModel) = globallearningrate(c.opt)
         globallearningrate(o::Flux.Optimiser) = prod(globallearningrate.(o.os))
         globallearningrate(o) = 1
         globallearningrate(o::ShieldedOpt{Descent}) = o.opt.eta
@@ -36,7 +36,7 @@
 
         # Now try TrainAccuracyVsSize and EliteAndTournamentSelection
         @info "\tSmoke test with TrainAccuracyVsSize and EliteAndTournamentSelection"
-        pop = @test_logs (:info, "Begin generation 1") (:info, "Begin generation 2") (:info, "Begin generation 3") (:info, r"Mutate model") match_mode=:any fit(c, x, y, fitnesstrategy=TrainAccuracyVsSize(), trainstrategy=t, evolutionstrategy = GlobalOptimizerMutation(EliteAndTournamentSelection(popsize=c.popsize, nelites=1, k=2)), mdir = dummydir)
+        pop = @test_logs (:info, "Begin generation 1") (:info, "Begin generation 2") (:info, "Begin generation 3") (:info, r"Mutate model") match_mode=:any fit(c, x, y, fitnesstrategy=TrainAccuracyVsSize(), trainstrategy=t, evolutionstrategy = GlobalOptimizerMutation(EliteAndTournamentSelection(popsize=c.popsize, nelites=1, k=2)), stopcriterion = pop -> generation(pop) == 3)
 
         @test length(pop) == c.popsize
         @test modelname.(pop) == ["model$i" for i in 1:length(pop)]

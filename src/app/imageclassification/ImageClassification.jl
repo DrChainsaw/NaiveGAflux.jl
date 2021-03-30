@@ -60,12 +60,18 @@ Return a population of image classifiers fitted to the given data.
 
 - `evolutionstrategy::AbstractEvolutionStrategy=EliteAndTournamentSelection(popsize=c.popsize)`: Strategy for evolution. See [`ImageClassification.AbstractEvolutionStrategy`](@ref)
 
+- `stopcriterion`: Takes the current population and returns true if fitting shall stop. Candidate fitness is available by calling `fitness(c)` where `c` is a member of the population.
+
 """
-function AutoFlux.fit(c::ImageClassifier, x::AbstractArray, y::AbstractArray; cb=identity, fitnesstrategy::AbstractFitnessStrategy=TrainSplitAccuracy(), evolutionstrategy::AbstractEvolutionStrategy=EliteAndTournamentSelection(popsize=c.popsize))
+function AutoFlux.fit(c::ImageClassifier, x::AbstractArray, y::AbstractArray; 
+                            cb=identity, 
+                            fitnesstrategy::AbstractFitnessStrategy=TrainSplitAccuracy(), 
+                            evolutionstrategy::AbstractEvolutionStrategy=EliteAndTournamentSelection(popsize=c.popsize),
+                            stopcriterion = pop -> generation(pop) > 100)
     ndims(x) == 4 || error("Must use 4D data, got $(ndims(x))D data")
 
     inshape = size(x)[1:2]
-    return fit(c, fitnessfun(fitnesstrategy, x, y), evostrategy(evolutionstrategy, inshape); cb)
+    return fit(c, fitnessfun(fitnesstrategy, x, y), evostrategy(evolutionstrategy, inshape), stopcriterion; cb)
 end
 
 """
@@ -84,7 +90,7 @@ Lower level version of `fit` to use when `fit(c::ImageClassifier, x, y)` doesn't
 
 - `cb=identity`: Callback function. After training and evaluating each generation but before evolution `cb(population)` will be called where `population` is the array of candidates. Useful for persistence and plotting.
 """
-function AutoFlux.fit(c::ImageClassifier, fitnesstrategy::AbstractFitness, evostrategy::AbstractEvolution; cb = identity)
+function AutoFlux.fit(c::ImageClassifier, fitnesstrategy::AbstractFitness, evostrategy::AbstractEvolution, stopcriterion; cb = identity)
     Random.seed!(NaiveGAflux.rng_default, c.seed)
     @info "Start training with baseseed: $(c.seed)"
 
@@ -95,7 +101,7 @@ function AutoFlux.fit(c::ImageClassifier, fitnesstrategy::AbstractFitness, evost
 
     logfitness = LogFitness(;currgen=generation(population), fitnesstrategy)
 
-    return evolutionloop(population, evostrategy, logfitness, pop -> generation(pop) > 100, cb)
+    return evolutionloop(population, evostrategy, logfitness, stopcriterion, cb)
 end
 
 function evolutionloop(population, evostrategy, fitnesstrategy, stop, cb)
@@ -104,11 +110,10 @@ function evolutionloop(population, evostrategy, fitnesstrategy, stop, cb)
         
         fittedpopulation = fitness(population, fitnesstrategy)
         cb(fittedpopulation)
-        stop(fittedpopulation) && break
+        stop(fittedpopulation) && return fittedpopulation
 
         population = evolve(evostrategy, fittedpopulation)
     end
-    return fittedpopulation
 end
 
 function generate_persistent(nr, newpop, mdir, insize, outsize, cwrap=identity, archspace = initial_archspace(insize[1:2], outsize))
