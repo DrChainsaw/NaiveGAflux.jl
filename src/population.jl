@@ -45,7 +45,11 @@ wrappedpop(p::Population) = p.members
 
 generation(p::Population) = p.gen
 
-evolve!(e::AbstractEvolution, p::Population) = Population(p.gen + 1, evolve!(e, wrappedpop(p)))
+fitness(p::Population, f::AbstractFitness) = Population(p.gen, map(wrappedpop(p)) do cand
+    FittedCandidate(cand, f, p.gen)
+end)
+evolve(e::AbstractEvolution, p::Population) = Population(p.gen + 1, evolve(e, wrappedpop(p)))
+
 
 function persist(p::Population{N, <:PersistentArray}) where N
     persist(wrappedpop(p))

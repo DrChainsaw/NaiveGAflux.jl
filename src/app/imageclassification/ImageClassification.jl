@@ -4,6 +4,7 @@ using ...NaiveGAflux
 using ..AutoFlux: fit
 import NaiveGAflux: GlobalPool
 import NaiveGAflux: shapetrace, squashshapes, fshape, ndimsout
+import NaiveGAflux: StatefulGenerationIter
 using Random
 import Logging
 using Statistics
@@ -22,10 +23,12 @@ include("archspace.jl")
 
 """
     ImageClassifier
-    ImageClassifier(popinit, seed)
-    ImageClassifier(;popsize=50, seed=1, newpop=false)
+    ImageClassifier(popinit, popsize, seed)
+    ImageClassifier(;popsize=50, seed=1, newpop=false; insize, outsize)
 
 Type to make `AutoFlux.fit` train an image classifier using initial population size `popsize` using random seed `seed`.
+
+Load models from `mdir` if directory contains models. If persistence is used (e.g. by providing `cb=persist`) candidates will be stored in this directory.
 
 If `newpop` is `true` the process will start with a new population and existing state in the specified directory will be overwritten.
 """
@@ -34,13 +37,13 @@ struct ImageClassifier{F}
     popsize::Int
     seed::Int
 end
-function ImageClassifier(;popsize=50, seed=1, newpop=false)
-    popinit = (mdir, fitnessgen, insize, outsize) -> generate_persistent(popsize, newpop, mdir, fitnessgen, insize, outsize)
+function ImageClassifier(;popsize=50, seed=1, newpop=false, mdir=defaultdir("ImageClassifier"), insize, outsize)
+    popinit = () -> generate_persistent(popsize, newpop, mdir, insize, outsize)
     return ImageClassifier(popinit, popsize, seed)
 end
 
 """
-    fit(c::ImageClassifier, x, y; cb, fitnesstrategy, trainstrategy, evolutionstrategy, mdir)
+    fit(c::ImageClassifier, x, y; cb, fitnesstrategy, evolutionstrategy)
 
 Return a population of image classifiers fitted to the given data.
 
@@ -53,26 +56,20 @@ Return a population of image classifiers fitted to the given data.
 
 - `cb=identity`: Callback function. After training and evaluating each generation but before evolution `cb(population)` will be called where `population` is the array of candidates. Useful for persistence and plotting.
 
-- `fitnesstrategy::AbstractFitnessStrategy=TrainSplitAccuracy()`: Strategy for fitness. See: [`ImageClassification.AbstractFitnessStrategy`](@ref).
-
-- `trainstrategy::AbstractTrainStrategy=TrainStrategy()`: Strategy for training. See [`ImageClassification.AbstractTrainStrategy`](@ref)
+- `fitnesstrategy::AbstractFitnessStrategy=TrainSplitAccuracy()`: Strategy for fitness from data. See: [`ImageClassification.AbstractFitnessStrategy`](@ref).
 
 - `evolutionstrategy::AbstractEvolutionStrategy=EliteAndTournamentSelection(popsize=c.popsize)`: Strategy for evolution. See [`ImageClassification.AbstractEvolutionStrategy`](@ref)
 
-- `mdir`: Load models from this directory if present. If persistence is used (e.g. by providing `cb=persist`) candidates will be stored in this directory.
-
 """
-function AutoFlux.fit(c::ImageClassifier, x, y; cb=identity, fitnesstrategy::AbstractFitnessStrategy=TrainSplitAccuracy(), trainstrategy::AbstractTrainStrategy=TrainStrategy(), evolutionstrategy::AbstractEvolutionStrategy=EliteAndTournamentSelection(popsize=c.popsize), mdir)
+function AutoFlux.fit(c::ImageClassifier, x::AbstractArray, y::AbstractArray; cb=identity, fitnesstrategy::AbstractFitnessStrategy=TrainSplitAccuracy(), evolutionstrategy::AbstractEvolutionStrategy=EliteAndTournamentSelection(popsize=c.popsize))
     ndims(x) == 4 || error("Must use 4D data, got $(ndims(x))D data")
 
-    x, y, fitnessgen = fitnessfun(fitnesstrategy, x, y)
-    fit_iter = trainiter(trainstrategy, x, y)
     inshape = size(x)[1:2]
-    return fit(c, fit_iter, fitnessgen, evostrategy(evolutionstrategy, inshape); cb=cb, mdir=mdir)
+    return fit(c, fitnessfun(fitnesstrategy, x, y), evostrategy(evolutionstrategy, inshape); cb)
 end
 
 """
-    fit(c::ImageClassifier, fit_iter, fitnessgen, evostrategy; cb, mdir)
+    fit(c::ImageClassifier, fitnesstrategy::AbstractFitness, evostrategy::AbstractEvolution; cb)
 
 Return a population of image classifiers fitted to the given data.
 
@@ -81,68 +78,54 @@ Lower level version of `fit` to use when `fit(c::ImageClassifier, x, y)` doesn't
 # Arguments
 - `c::ImageClassifier`: Type of models to train. See [`ImageClassifier`](@ref).
 
-- `fit_iter`: Iterator for fitting the models. Expected to produce iterators over some subset of the training data. The produced iterators are in turn expected to produce batches of input-output tuples. See [`RepeatPartitionIterator`](@ref) for an example an iterator which fits the bill.
+- `fitnessstrategy`: An `AbstractFitness` used to compute the fitness metric for a candidate.
 
-- `fitnessgen`: Return an `AbstractFitness` when called with no arguments. May or may not produce the same instance depending on whether stateful fitness is used.
-
-- `evostrategy::AbstractEvolution`: Evolution strategy to use. Population `p` will be evolved through `p = evolve!(evostrategy, p)`.
+- `evostrategy::AbstractEvolution`: Evolution strategy to use. Population `p` will be evolved through `p = evolve(evostrategy, p)`.
 
 - `cb=identity`: Callback function. After training and evaluating each generation but before evolution `cb(population)` will be called where `population` is the array of candidates. Useful for persistence and plotting.
-
-- `mdir`: Load models from this directory if present. If persistence is used (e.g. by providing `cb=persist`) candidates will be stored in this directory.
 """
-function AutoFlux.fit(c::ImageClassifier, fit_iter, fitnessgen, evostrategy::AbstractEvolution; cb = identity, mdir)
+function AutoFlux.fit(c::ImageClassifier, fitnesstrategy::AbstractFitness, evostrategy::AbstractEvolution; cb = identity)
     Random.seed!(NaiveGAflux.rng_default, c.seed)
     @info "Start training with baseseed: $(c.seed)"
 
-    insize, outsize = datasize(fit_iter)
-
-    population = c.popinit(mdir, fitnessgen, insize, outsize[1])
+    population = c.popinit()
 
     # If experiment was resumed we should start by evolving as population is persisted right before evolution
-    population = generation(population) > 1 ? evolve!(evostrategy, population) : population
+    population = generation(population) > 1 ? evolve(evostrategy, population) : population
 
-    return evolutionloop(population, evostrategy, fit_iter, cb)
+    logfitness = LogFitness(;currgen=generation(population), fitnesstrategy)
+
+    return evolutionloop(population, evostrategy, logfitness, pop -> generation(pop) > 100, cb)
 end
 
-datasize(itr) = datasize(first(itr))
-datasize(t::Tuple) = datasize.(t)
-datasize(a::AbstractArray) = size(a)
-
-function evolutionloop(population, evostrategy, trainingiter, cb)
-    for iter in trainingiter
+function evolutionloop(population, evostrategy, fitnesstrategy, stop, cb)
+    fittedpopulation = population
+    while true
         @info "Begin generation $(generation(population))"
+        
+        fittedpopulation = fitness(population, fitnesstrategy)
+        cb(fittedpopulation)
+        stop(fittedpopulation) && break
 
-        for (i, cand) in enumerate(population)
-            @info "\tTrain candidate $i with $(NaiveGAflux.graph(cand, nv)) vertices"
-            Flux.train!(cand, iter)
-        end
-
-        # TODO: Bake into evolution? Would anyways like to log selected models...
-        for (i, cand) in enumerate(population)
-            @info "\tFitness candidate $i: $(fitness(cand))"
-        end
-        cb(population)
-
-        population = evolve!(evostrategy, population)
+        population = evolve(evostrategy, fittedpopulation)
     end
-    return population
+    return fittedpopulation
 end
 
-function generate_persistent(nr, newpop, mdir, fitnessgen, insize, outsize, cwrap=HostCandidate, archspace = initial_archspace(insize[1:2], outsize))
+function generate_persistent(nr, newpop, mdir, insize, outsize, cwrap=identity, archspace = initial_archspace(insize[1:2], outsize))
     if newpop
         rm(mdir, force=true, recursive=true)
     end
 
     iv(i) = inputvertex(join(["model", i, ".input"]), insize[3], FluxConv{2}())
-    return Population(PersistentArray(mdir, nr, i -> create_model(join(["model", i]), archspace, iv(i), fitnessgen, cwrap)))
+    return Population(PersistentArray(mdir, nr, i -> create_model(join(["model", i]), archspace, iv(i), cwrap)))
 end
-function create_model(name, as, in, fg, cwrap)
+function create_model(name, as, in, cwrap)
     optselect = optmutation(1.0)
     opt = optselect(Descent(rand() * 0.099 + 0.01))
     # Always cache even if not strictly needed for all fitnessfunctions because consequence is so bad if one forgets
     # it when needed. Users who know what they are doing can unwrap if caching is not wanted.
-    CacheCandidate(cwrap(CandidateModel(CompGraph(in, as(name, in)), opt, Flux.Losses.logitcrossentropy, fg())))
+    cwrap(CandidateOptModel(CompGraph(in, as(name, in)), opt))
 end
 
 end

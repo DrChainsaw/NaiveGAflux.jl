@@ -3,7 +3,7 @@
     function test_interface(p, members)
         test_iterator(p, members)
 
-        ep = evolve!(NoOpEvolution(), p)
+        ep = evolve(NoOpEvolution(), p)
         test_iterator(ep, p)
 
         @test generation(ep) == generation(p) + 1
@@ -22,7 +22,7 @@
         mems = PersistentArray(testdir, 4, identity)
         pop1 = Population(mems)
         @test generation(pop1) == 1
-        pop2 = evolve!(NoOpEvolution(), pop1)
+        pop2 = evolve(NoOpEvolution(), pop1)
         @test generation(pop2) == 2
 
         try
@@ -32,7 +32,7 @@
 
             @test generation(pop2) == 2
 
-            pop3 = evolve!(NoOpEvolution(), pop2)
+            pop3 = evolve(NoOpEvolution(), pop2)
             @test generation(pop3) == 3
 
             persist(pop3)

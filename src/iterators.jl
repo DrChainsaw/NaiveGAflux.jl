@@ -1,3 +1,5 @@
+itergeneration(itr, gen) = itr
+
 """
     RepeatPartitionIterator
     RepeatPartitionIterator(base, nrep)
@@ -33,7 +35,7 @@ function Base.iterate(itr::RepeatPartitionIterator, reset=true)
     if reset
         Iterators.reset!(itr.base, itr.base.itr)
     end
-    length(itr) == 0 && return nothing
+    Base.IteratorSize(itr) !== Base.IsInfinite() && length(itr) == 0 && return nothing
     return Iterators.take(RepeatStatefulIterator(itr.base), itr.ntake), false
 end
 
@@ -68,6 +70,32 @@ Base.size(itr::RepeatStatefulIterator) = size(itr.base.itr)
 
 Base.IteratorSize(itr::RepeatStatefulIterator) = Base.IteratorSize(itr.base.itr)
 Base.IteratorEltype(itr::RepeatStatefulIterator) = Base.HasEltype()
+
+"""
+    StatefulGenerationIter{T, VS}
+
+Uses a `RepeatPartitionIterator` to ensure that the same `RepeatStatefulIterator` is returned for the same generation number.
+"""
+struct StatefulGenerationIter{I, T, VS}
+    currgen::Ref{Int}
+    curriter::Ref{I}
+    iter::RepeatPartitionIterator{T, VS}
+end
+# TODO : This is a bit of cludge-on-cludge. Try to refactor someday to a more straighforward design, perhaps use LearnBase.getobs
+StatefulGenerationIter(iter::RepeatPartitionIterator, gen=0) = StatefulGenerationIter(Ref(gen), Ref(first(iterate(iter))), iter)
+
+function itergeneration(itr::StatefulGenerationIter, gen)
+    if gen != itr.currgen[]
+        itr.currgen[] = gen
+        newiterstate = iterate(itr.iter, false)
+        if newiterstate === nothing
+            newiterstate = iterate(itr.iter)
+        end
+        itr.curriter[] = first(newiterstate)
+    end
+    return itr.curriter[]
+end
+
 
 """
     SeedIterator

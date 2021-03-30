@@ -1,39 +1,66 @@
+
+
+mutable struct LogFitness{F, MF} <: AbstractFitness
+    currgen::Int
+    candcnt::Int
+    fitstrat::F
+    msgfun::MF
+end
+LogFitness(;currgen=0, candcnt=0, fitnesstrategy, msgfun=default_fitnessmsgfun) = LogFitness(currgen, candcnt, fitnesstrategy, msgfun)
+
+function fitness(lf::LogFitness, c::AbstractCandidate, gen)
+    f = fitness(lf.fitstrat, c, gen)
+    if gen != lf.currgen
+        lf.candcnt = 0
+        lf.currgen = gen
+    end
+    lf.candcnt += 1
+    lf.msgfun(lf.candcnt, c, f)
+    return f
+end
+
+function default_fitnessmsgfun(i, c, f; level::Logging.LogLevel = Logging.Info)
+    nvs, nps = graph(c, g -> (nv(g), nparams(g)))
+    if nps > 1e5
+        nps = string(round(nps / 1e6; sigdigits=3), "M")
+    else
+        nps = string(round(nps / 1e3; sigdigits=3), "k")
+    end
+    @logmsg level "\tCandidate: $i\tvertices: $nvs\tparams: $nps\tfitness: $f"
+end
+
+
 """
-    AbstractFitness
+    GpuFitness{F} <: AbstractFitness
+    GpuFitness(fitnesstrategy)
 
-Abstract type for fitness functions
+Move candidates to `gpu` before calculating their fitness according to `fitnessstrategy`.
+
+After fitness has been calculated the candidate is moved back to `cpu`.
+
+Note that if no `gpu` is available this should be a noop.
+
+Note: Only works for mutable models, such as `CompGraph` since it can't change the candidate itself. Consider using a `MutableCandidate` if dealing with immutable models.
 """
-abstract type AbstractFitness end
+struct GpuFitness{F} <: AbstractFitness
+    f::F
+end
+function fitness(s::GpuFitness, c::AbstractCandidate, gen)
+    NaiveNASflux.forcemutation(graph(c)) # Optimization: If there is a LazyMutable somewhere, we want it to do its thing now so we don't end up copying the model to the GPU only to then trigger another copy when the mutations are applied.
+    fitval = fitness(s.f, c |> gpu, gen)
+    c |> cpu # As some parts, namely CompGraph change internal state when mapping to GPU
+    gpu_gc()
+    return fitval
+end
 
-"""
-    AbstractFunLabel
-
-Puts a label on a function for use with [`instrument`](@ref).
-"""
-abstract type AbstractFunLabel end
-struct Train <: AbstractFunLabel end
-struct TrainLoss <: AbstractFunLabel end
-struct Validate <: AbstractFunLabel end
-
-"""
-    instrument(l::AbstractFunLabel, s::AbstractFitness, f)
-
-Instrument `f` for fitness measurement `s`.
-
-Argument `l` gives some context to `f` to enable different instrumentation for different operations.
-
-Example is to use the result of `f` for fitness calculation, or to add a measurement of the average time it takes to evalute as used with [`TimeFitness`](@ref).
-
-Basically a necessary (?) evil which complicates things around it quite a bit.
-"""
-instrument(::AbstractFunLabel, ::AbstractFitness, f) = f
-
-"""
-    reset!(s::AbstractFitness)
-
-Reset all state of `s`. Typically needs to be performed after new candidates are selected.
-"""
-function reset!(::AbstractFitness) end
+const gpu_gc = if CUDA.functional()
+    function()
+        GC.gc()
+        CUDA.reclaim()
+    end
+else
+    () -> nothing
+end
 
 """
     AccuracyFitness <: AbstractFitness
@@ -43,17 +70,65 @@ Measure fitness as the accuracy on a dataset.
 
 You probably want to use this with a `FitnessCache` or a `CacheCandidate`.
 """
-struct AccuracyFitness <: AbstractFitness
-    dataset
+struct AccuracyFitness{D} <: AbstractFitness
+    dataset::D
 end
-function fitness(s::AccuracyFitness, f)
+function fitness(s::AccuracyFitness, c::AbstractCandidate, gen)
     acc,cnt = 0, 0
+    model = graph(c)
     for (x,y) in s.dataset
-        correct = Flux.onecold(cpu(f(x))) .== Flux.onecold(cpu(y))
+        correct = Flux.onecold(cpu(model(x))) .== Flux.onecold(cpu(y))
         acc += sum(correct)
         cnt += length(correct)
     end
     return acc / cnt
+end
+
+struct TrainThenFitness{I,L,O,F} <: AbstractFitness
+    dataiter::I
+    defaultloss::L
+    defaultopt::O
+    fitstrat::F
+end
+function fitness(s::TrainThenFitness, c::AbstractCandidate, gen)
+    loss = lossfun(c; default=s.defaultloss)
+    model = graph(c)
+    ninput = ninputs(model)
+
+    valid = let valid = true
+        nanguard = function(data...)
+            inputs = data[1:ninput]
+            ŷ = model(inputs...)
+
+            y = data[ninput+1:end]
+            l = loss(ŷ, y...)   
+            
+            checkvalid(l) do badval
+                @warn "$badval loss detected when training!"
+                valid = false
+                Flux.stop()
+            end
+            return l
+        end
+        iter = itergeneration(s.dataiter, gen)
+        o = opt(c; default=s.defaultopt)
+        Flux.train!(nanguard, params(model), iter, o)
+        cleanopt(o)
+        valid
+    end
+    return valid ? fitness(s.fitstrat, c, gen) : 0.0
+end
+
+function checkvalid(ifnot, x)
+    anynan = any(isnan, x)
+    anyinf = any(isinf, x)
+    
+    if anynan || anyinf
+        badval = anynan ? "NaN" : "Inf"
+        ifnot(badval)
+        return false
+    end
+    return true
 end
 
 """
@@ -66,7 +141,8 @@ Parameter `drop` determines the fraction of examples to drop for fitness measure
 
 Advantage vs `AccuracyFitness` is that one does not have to run through another data set. Disadvantage is that evolution will likely favour candidates which overfit.
 """
-mutable struct TrainAccuracyFitness <: AbstractFitness
+# TODO: Reimplement...
+#= mutable struct TrainAccuracyFitness <: AbstractFitness
     acc::AbstractArray
     ŷ::AbstractArray
     drop::Real
@@ -95,7 +171,7 @@ function reset!(s::TrainAccuracyFitness)
     s.acc = []
     s.ŷ = []
 end
-
+ =#
 """
     MapFitness <: AbstractFitness
     MapFitness(mapping::Function, base::AbstractFitness)
@@ -106,9 +182,7 @@ struct MapFitness <: AbstractFitness
     mapping::Function
     base::AbstractFitness
 end
-fitness(s::MapFitness, f) = fitness(s.base, f) |> s.mapping
-instrument(l::AbstractFunLabel,s::MapFitness,f) = instrument(l, s.base, f)
-reset!(s::MapFitness) = reset!(s.base)
+fitness(s::MapFitness, c::AbstractCandidate, gen) = fitness(s.base, c, gen) |> s.mapping
 
 
 """
@@ -133,8 +207,7 @@ end
 
 
 """
-    TimeFitness{T} <: AbstractFitness where T <: AbstractFunLabel
-    TimeFitness(t::T, nskip=0) where T <: AbstractFunLabel
+    TimeFitness{T} <: AbstractFitness
 
 Measure fitness as time to evaluate a function.
 
@@ -142,30 +215,16 @@ Time for first `nskip` evaluations will be discarded.
 
 Function needs to be instrumented using [`instrument`](@ref).
 """
-mutable struct TimeFitness{T} <: AbstractFitness where T <: AbstractFunLabel
-    totaltime
-    neval::Int
-    nskip::Int
+struct TimeFitness{T} <: AbstractFitness
+    fitstrat::T
 end
-TimeFitness(t::T, nskip = 0) where T = TimeFitness{T}(0.0, 0, nskip)
-fitness(s::TimeFitness, f) = s.neval <= s.nskip ? 0 : s.totaltime / (s.neval-s.nskip)
-
-function instrument(::T, s::TimeFitness{T}, f) where T <: AbstractFunLabel
-    return function(x...)
-        res, t, bytes, gctime = @timed f(x...)
-        # Skip first time(s) e.g. due to compilation
-        if s.neval >= s.nskip
-            s.totaltime += t - gctime
-        end
-        s.neval += 1
-        return res
-    end
+TimeFitness(fitstrat::AbstractFitness) = TimeFitness(fitstrat)
+function fitness(s::TimeFitness, c::AbstractCandidate, gen)
+    res, t, bytes, gctime = @timed fitness(s.fitstrat, c, gen)
+    totaltime += t - gctime
+    return totaltime, res
 end
 
-function reset!(s::TimeFitness)
-    s.totaltime = 0.0
-    s.neval = 0
-end
 
 """
     SizeFitness <: AbstractFitness
@@ -177,127 +236,9 @@ Note: relies on Flux.params which does not work for functions which have been in
 
 To handle intrumentation, an attempt to extract the size is also made when instrumenting for `Validation`. Whether this works or not depends on the order in which fitness functions are combined.
 """
-mutable struct SizeFitness <: AbstractFitness
-    size::Int
-end
-SizeFitness() = SizeFitness(0)
-
-function fitness(s::SizeFitness, f)
-    fsize = mapreduce(prod ∘ size, +, params(f).order, init=0)
-    # Can't do params(f) as f typically is instrumented
-    if fsize == s.size == 0
-        @warn "SizeFitness got zero parameters! Check your fitness function!"
-    end
-
-    return fsize == 0 ? s.size : fsize
-end
-function instrument(l::Validate, s::SizeFitness, f)
-    s.size = mapreduce(prod ∘ size, +, params(f).order, init=0)
-    return f
-end
-
-"""
-    FitnessCache <: AbstractFitness
-
-Caches fitness values so that they don't need to be recomputed.
-
-Needs to be `reset!` manually when cache is stale (e.g. after training the model some more).
-"""
-mutable struct FitnessCache <: AbstractFitness
-    base::AbstractFitness
-    cache
-end
-FitnessCache(f::AbstractFitness) = FitnessCache(f, nothing)
-function fitness(s::FitnessCache, f)
-    if isnothing(s.cache)
-        val = fitness(s.base, f)
-        s.cache = val
-    end
-    return s.cache
-end
-
-function reset!(s::FitnessCache)
-    s.cache = nothing
-    reset!(s.base)
-end
-
-instrument(l::AbstractFunLabel, s::FitnessCache, f) = instrument(l, s.base, f)
-
-"""
-    NanGuard{T} <: AbstractFitness where T <: AbstractFunLabel
-    NanGuard(base::AbstractFitness, replaceval = 0.0)
-    NanGuard(t::T, base::AbstractFitness, replaceval = 0.0) where T <: AbstractFunLabel
-
-Instruments functions labeled with type `T` with a NaN guard.
-
-The NaN guard checks for NaNs or Infs in the output of the instrumented function and
-
-    1. Replaces the them with a configured value (default 0.0).
-    2. Prevents the function from being called again. Returns the same output as last time.
-    3. Returns fitness value of 0.0 without calling the base fitness function.
-
-Rationale for 2 is that models tend to become very slow to evalute if when producing NaN/Inf.
-"""
-mutable struct NanGuard{T} <: AbstractFitness where T <: AbstractFunLabel
-    base::AbstractFitness
-    shield::Bool
-    replaceval
-    lastout::IdDict
-end
-NanGuard(base::AbstractFitness, replaceval = 0.0) = foldl((b, l) -> NanGuard(l, b, replaceval), (Train(), TrainLoss(), Validate()), init=base)
-NanGuard(t::T, base::AbstractFitness, replaceval = 0.0) where T <: AbstractFunLabel = NanGuard{T}(base, false, replaceval, IdDict())
-
-fitness(s::NanGuard, f) = s.shield ? 0.0 : fitness(s.base, f)
-
-function reset!(s::NanGuard)
-    s.shield = false
-    reset!(s.base)
-end
-
-function NaiveGAflux.instrument(l::T, s::NanGuard{T}, f) where T <: NaiveGAflux.AbstractFunLabel
-    fi = NaiveGAflux.instrument(l, s.base, f)
-    return function(x...)
-        if s.shield
-            lastout = nograd() do
-                get(s.lastout, size.(x), nothing)
-            end
-
-            !isnothing(lastout) && return lastout(s.replaceval)
-        end
-        y = fi(x...)
-
-        wasshield = s.shield
-        anynan = nograd() do
-            # Broadcast to avoid scalar operations when using CuArrays
-            anynan = any(isnan.(y))
-            anyinf = any(isinf.(y))
-
-            s.shield = anynan || anyinf
-            tt = typeof(y)
-            ss = size(y)
-
-            s.lastout[size.(x)] = val -> NaiveGAflux.dummyvalue(tt, ss, val)
-            return anynan
-        end
-
-        if s.shield
-            nograd() do
-                if !wasshield
-                    badval = anynan ? "NaN" : "Inf"
-                    @warn "$badval detected for function with label $l for x of size $(size.(x))"
-                end
-            end
-            return s.lastout[size.(x)](s.replaceval)
-        end
-        return y
-    end
-end
-instrument(l::AbstractFunLabel, s::NanGuard, f) = instrument(l, s.base, f)
-
-
-dummyvalue(::Type{<:AT}, shape, val) where AT <: AbstractArray = fill!(similar(AT, shape), val)
-dummyvalue(::Type{T}, shape, val) where T <: Number = T(val)
-Flux.Zygote.@nograd dummyvalue
+struct SizeFitness <: AbstractFitness end
+fitness(s::SizeFitness, c::AbstractCandidate, gen) = nparams(c)
+    
 
 """
     AggFitness <: AbstractFitness
@@ -305,15 +246,11 @@ Flux.Zygote.@nograd dummyvalue
 
 Aggreagate fitness value from all `fitnesses` using `aggfun`
 """
-struct AggFitness <: AbstractFitness
+struct AggFitness{T} <: AbstractFitness
     aggfun::Function
-    fitnesses
+    fitnesses::T
 end
 AggFitness(aggfun) = error("Must supply an aggregation function an at least one fitness")
 AggFitness(aggfun, fitnesses::AbstractFitness...) = AggFitness(aggfun, fitnesses)
 
-fitness(s::AggFitness, f) = mapfoldl(ff -> fitness(ff, f), s.aggfun, s.fitnesses)
-
-reset!(s::AggFitness) = foreach(reset!, s.fitnesses)
-
-instrument(l::AbstractFunLabel, s::AggFitness, f) = foldl((ifun, fit) -> instrument(l, fit, ifun), s.fitnesses, init = f)
+fitness(s::AggFitness, c::AbstractCandidate, gen) = mapfoldl(fs -> fitness(fs, c, gen), s.aggfun, s.fitnesses)

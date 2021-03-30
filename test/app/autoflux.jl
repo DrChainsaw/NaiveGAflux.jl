@@ -2,7 +2,7 @@
 
     @testset "ImageClassifier smoketest" begin
         using NaiveGAflux.AutoFlux
-        import NaiveGAflux.AutoFlux.ImageClassification: TrainSplitAccuracy, TrainStrategy, TrainAccuracyVsSize, EliteAndTournamentSelection, EliteAndSusSelection, GlobalOptimizerMutation, modelname
+        import NaiveGAflux.AutoFlux.ImageClassification: TrainSplitAccuracy, TrainIterStrategy, TrainAccuracyVsSize, EliteAndTournamentSelection, EliteAndSusSelection, GlobalOptimizerMutation, modelname
         using Random
 
         # Workaround as losses fail with Flux.OneHotMatrix on Appveyor x86 (works everywhere else)
@@ -14,7 +14,7 @@
 
         c = ImageClassifier(popsize = 5, seed=1)
         f = TrainSplitAccuracy(nexamples=1, batchsize=1)
-        t = TrainStrategy(nepochs=1, batchsize=1, nbatches_per_gen=1)
+        t = TrainIterStrategy(nepochs=1, batchsize=1, nbatches_per_gen=1)
 
         dummydir = joinpath(NaiveGAflux.modeldir, "ImageClassifier_smoketest")
 
@@ -117,15 +117,15 @@
         @test fitness(testfitness, SizeVsTestFakeModel(100_000)) ≈ 0.12351
     end
 
-    @testset "TrainStrategy" begin
-        import NaiveGAflux.AutoFlux.ImageClassification: TrainStrategy, trainiter
+    @testset "TrainIterStrategy" begin
+        import NaiveGAflux.AutoFlux.ImageClassification: TrainIterStrategy, trainiter
         nexamples = 10
         x = randn(Float32, 4,4,3, nexamples)
         y = rand(0:7, nexamples)
 
         @testset "Test $ne epochs and $nbpg batches per generation" for ne in (1, 2, 10), nbpg in (2, 10)
             bs = 3
-            s = TrainStrategy(nepochs=ne, batchsize=bs, nbatches_per_gen=nbpg)
+            s = TrainIterStrategy(nepochs=ne, batchsize=bs, nbatches_per_gen=nbpg)
             itr = trainiter(s, x, y)
 
             totsize = ne * ceil(nexamples / bs)

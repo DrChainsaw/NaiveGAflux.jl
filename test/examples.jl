@@ -55,7 +55,7 @@
     selection = CombinedEvolution(elites, mutate)
 
     # And evolve
-    newpopulation = evolve!(selection, population)
+    newpopulation = evolve(selection, population)
     @test newpopulation != population
 
     # Repeat steps 2 and 3 until a model with the desired fitness is found.
@@ -509,32 +509,32 @@ end
 
     # EliteSelection selects the n best candidates
     elitesel = EliteSelection(2)
-    @test evolve!(elitesel, Cand.(1:10)) == Cand.([10, 9])
+    @test evolve(elitesel, Cand.(1:10)) == Cand.([10, 9])
 
     # EvolveCandidates maps candidates to new candidates (e.g. through mutation)
     evocands = EvolveCandidates(c -> Cand(fitness(c) + 0.1))
-    @test evolve!(evocands, Cand.(1:10)) == Cand.(1.1:10.1)
+    @test evolve(evocands, Cand.(1:10)) == Cand.(1.1:10.1)
 
     # SusSelection selects n random candidates using stochastic uniform sampling
     # Selected candidates will be forwarded to the wrapped evolution strategy before returned
     sussel = SusSelection(5, evocands, FakeRng())
-    @test evolve!(sussel, Cand.(1:10)) == Cand.([4.1, 6.1, 8.1, 9.1, 10.1])
+    @test evolve(sussel, Cand.(1:10)) == Cand.([4.1, 6.1, 8.1, 9.1, 10.1])
 
     # CombinedEvolution combines the populations from several evolution strategies
     comb = CombinedEvolution(elitesel, sussel)
-    @test evolve!(comb, Cand.(1:10)) == Cand.(Any[10, 9, 4.1, 6.1, 8.1, 9.1, 10.1])
+    @test evolve(comb, Cand.(1:10)) == Cand.(Any[10, 9, 4.1, 6.1, 8.1, 9.1, 10.1])
 
     # AfterEvolution calls a function after evolution is completed
     afterfun(pop) = map(c -> Cand(2fitness(c)), pop)
     afterevo = AfterEvolution(comb, afterfun)
-    @test evolve!(afterevo, Cand.(1:10)) == Cand.(Any[20, 18, 8.2, 12.2, 16.2, 18.2, 20.2])
+    @test evolve(afterevo, Cand.(1:10)) == Cand.(Any[20, 18, 8.2, 12.2, 16.2, 18.2, 20.2])
 
     # Its mainly intended for resetting
     ntest = 0
     NaiveGAflux.reset!(::Cand) = ntest += 1
 
     resetafter = ResetAfterEvolution(comb)
-    @test evolve!(resetafter, Cand.(1:10)) == Cand.(Any[10, 9, 4.1, 6.1, 8.1, 9.1, 10.1])
+    @test evolve(resetafter, Cand.(1:10)) == Cand.(Any[10, 9, 4.1, 6.1, 8.1, 9.1, 10.1])
     @test ntest == 7
 end
 

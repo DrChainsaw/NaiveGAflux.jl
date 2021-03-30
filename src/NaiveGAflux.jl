@@ -19,13 +19,13 @@ const rng_default = MersenneTwister(abs(rand(Int)))
 const modeldir = "models"
 
 # Fitness
-export fitness, instrument, reset!, AbstractFitness, AccuracyFitness, TrainAccuracyFitness, MapFitness, EwmaFitness, TimeFitness, SizeFitness, FitnessCache, NanGuard, AggFitness
+export fitness, instrument, reset!, AbstractFitness, LogFitness, GpuFitness, AccuracyFitness, TrainThenFitness, TrainAccuracyFitness, MapFitness, EwmaFitness, TimeFitness, SizeFitness, AggFitness
 
 # Candidate
-export evolvemodel, AbstractCandidate, CandidateModel, HostCandidate, CacheCandidate
+export evolvemodel, AbstractCandidate, CandidateModel, CandidateOptModel
 
 # Evolution
-export evolve!, AbstractEvolution, NoOpEvolution, AfterEvolution, ResetAfterEvolution, EliteSelection, SusSelection, TournamentSelection, CombinedEvolution, EvolutionChain, PairCandidates, ShuffleCandidates, EvolveCandidates
+export evolve, AbstractEvolution, NoOpEvolution, AfterEvolution, ResetAfterEvolution, EliteSelection, SusSelection, TournamentSelection, CombinedEvolution, EvolutionChain, PairCandidates, ShuffleCandidates, EvolveCandidates
 
 # Population
 export Population, generation
@@ -71,8 +71,8 @@ include("shape.jl")
 include("archspace.jl")
 include("mutation.jl")
 include("crossover.jl")
-include("fitness.jl")
 include("candidate.jl")
+include("fitness.jl")
 include("evolve.jl")
 include("population.jl")
 include("iterators.jl")
