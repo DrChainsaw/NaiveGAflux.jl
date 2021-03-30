@@ -132,3 +132,12 @@ end
         end
     end
 end
+
+@testset "StatefulGenerationIter" begin
+    import NaiveGAflux: itergeneration, StatefulGenerationIter
+    ritr = RepeatPartitionIterator(BatchIterator(1:20, 3), 4)
+    sitr = RepeatPartitionIterator(BatchIterator(1:20, 3), 4) |> StatefulGenerationIter
+    for (i, itr) in enumerate(ritr)
+        @test collect(itr) == collect(itergeneration(sitr, i))
+    end
+end
