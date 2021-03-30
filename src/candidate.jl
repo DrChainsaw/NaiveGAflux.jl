@@ -167,7 +167,7 @@ struct FittedCandidate{F, C} <: AbstractWrappingCandidate
     c::C
 end
 FittedCandidate(c::AbstractCandidate, f::AbstractFitness, gen) = FittedCandidate(gen, fitness(c, f, gen), c)
-FittedCandidate(c::FittedCandidate, f::AbstractFitness, gen) = FittedCandidate(wrappedcand(f), f ,gen)
+FittedCandidate(c::FittedCandidate, f::AbstractFitness, gen) = FittedCandidate(wrappedcand(c), f ,gen)
 
 fitness(c::FittedCandidate) = c.fitness
 

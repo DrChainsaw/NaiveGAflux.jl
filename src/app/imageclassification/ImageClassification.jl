@@ -99,7 +99,6 @@ function AutoFlux.fit(c::ImageClassifier, fitnesstrategy::AbstractFitness, evost
 end
 
 function evolutionloop(population, evostrategy, fitnesstrategy, stop, cb)
-    fittedpopulation = population
     while true
         @info "Begin generation $(generation(population))"
         

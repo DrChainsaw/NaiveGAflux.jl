@@ -9,6 +9,7 @@ using Statistics
 import CUDA
 import MemPool
 import IterTools
+using Printf
 
 using Setfield
 

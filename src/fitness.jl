@@ -21,12 +21,15 @@ end
 
 function default_fitnessmsgfun(i, c, f; level::Logging.LogLevel = Logging.Info)
     nvs, nps = graph(c, g -> (nv(g), nparams(g)))
-    if nps > 1e5
-        nps = string(round(nps / 1e6; sigdigits=3), "M")
+    if nps > 1e8
+        nps = @sprintf "%5.2fG" (nps / 1e9)
+    elseif nps > 1e5
+        nps = @sprintf "%5.2fM" (nps / 1e6)
     else
-        nps = string(round(nps / 1e3; sigdigits=3), "k")
+        nps = @sprintf "%5.2fk" (nps / 1e3)
     end
-    @logmsg level "\tCandidate: $i\tvertices: $nvs\tparams: $nps\tfitness: $f"
+    msg = @sprintf "  Candidate: %i\tvertices: %i\tparams: %s\tfitness: %f" i nvs nps f
+    @logmsg level msg
 end
 
 
