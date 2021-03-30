@@ -173,7 +173,7 @@ fitness(c::FittedCandidate) = c.fitness
 
 
 nparams(c::AbstractCandidate) = graph(c, nparams)
-nparams(g::CompGraph) = mapreduce(prod ∘ size, +, params(g).order)
+nparams(x) = mapreduce(prod ∘ size, +, params(x).order)
 
 """
     evolvemodel(m::AbstractMutation{CompGraph}, mapothers=deepcopy)

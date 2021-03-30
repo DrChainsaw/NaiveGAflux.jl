@@ -1,11 +1,18 @@
 
+"""
+    LogFitness{F, MF} <: AbstractFitness
+    LogFitness(fitnesstrategy::AbstractFitness) = LogFitness(;fitnesstrategy)
+    LogFitness(;currgen=0, candcnt=0, fitnesstrategy, msgfun=default_fitnessmsgfun)
 
+Logs the fitness of `fitnessstrategy` along with some candiate information.
+"""
 mutable struct LogFitness{F, MF} <: AbstractFitness
     currgen::Int
     candcnt::Int
     fitstrat::F
     msgfun::MF
 end
+LogFitness(fitnesstrategy::AbstractFitness) = LogFitness(;fitnesstrategy)
 LogFitness(;currgen=0, candcnt=0, fitnesstrategy, msgfun=default_fitnessmsgfun) = LogFitness(currgen, candcnt, fitnesstrategy, msgfun)
 
 function fitness(lf::LogFitness, c::AbstractCandidate, gen)
@@ -37,7 +44,7 @@ end
     GpuFitness{F} <: AbstractFitness
     GpuFitness(fitnesstrategy)
 
-Move candidates to `gpu` before calculating their fitness according to `fitnessstrategy`.
+Move candidates to `gpu` before calculating their fitness according to `fitnesstrategy`.
 
 After fitness has been calculated the candidate is moved back to `cpu`.
 
@@ -70,8 +77,6 @@ end
     AccuracyFitness(dataset)
 
 Measure fitness as the accuracy on a dataset.
-
-You probably want to use this with a `FitnessCache` or a `CacheCandidate`.
 """
 struct AccuracyFitness{D} <: AbstractFitness
     dataset::D
@@ -221,11 +226,9 @@ Function needs to be instrumented using [`instrument`](@ref).
 struct TimeFitness{T} <: AbstractFitness
     fitstrat::T
 end
-TimeFitness(fitstrat::AbstractFitness) = TimeFitness(fitstrat)
 function fitness(s::TimeFitness, c::AbstractCandidate, gen)
     res, t, bytes, gctime = @timed fitness(s.fitstrat, c, gen)
-    totaltime += t - gctime
-    return totaltime, res
+    return t - gctime, res
 end
 
 
