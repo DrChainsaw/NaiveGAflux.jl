@@ -16,6 +16,25 @@
         @test @test_logs (:info, "  Candidate: 1\tvertices: 2\tparams:  0.01k\tfitness: 3.000000") fitness(LogFitness(MockFitness(3)), c) == 3
     end
 
+    @testset "GpuFitness" begin
+        label = Val(:GpuTest)
+        wasgpumapped = false
+        function Flux.gpu(x::MockCandidate{Val{:GpuTest}}) 
+            wasgpumapped = true
+            return x
+        end
+        
+        wascpumapped = false
+        function Flux.cpu(x::MockCandidate{Val{:GpuTest}}) 
+            wascpumapped = true
+            return x
+        end
+
+        @test fitness(GpuFitness(MockFitness(4)), MockCandidate(label)) == 4
+        @test wasgpumapped
+        @test wascpumapped
+    end
+
     @testset "AccuracyFitness" begin
         struct DummyIter end
         Base.iterate(::DummyIter) = (([0 1 0 0; 1 0 0 1; 0 0 1 0], [1 0 0 0; 1 0 0 1; 0 0 1 0]), 1)
