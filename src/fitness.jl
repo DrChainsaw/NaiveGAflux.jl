@@ -160,46 +160,60 @@ function checkvalid(ifnot, x)
 end
 
 """
+    TrainAccuracyCandidate{C} <: AbstractWrappingCandidate
+
+Collects training accuracy through a spying loss function. Only intended for use by [`TrainAccuracyFitness`](@ref).
+"""
+struct TrainAccuracyCandidate{C} <: AbstractWrappingCandidate
+    acc::BitVector
+    c::C
+end
+TrainAccuracyCandidate(c::AbstractCandidate) = TrainAccuracyCandidate(falses(0), c)
+function lossfun(c::TrainAccuracyCandidate; default=nothing)
+    actualloss = lossfun(c.c; default)
+    return function(ŷ,y)
+        nograd() do
+            append!(c.acc, Flux.onecold(cpu(ŷ)) .== Flux.onecold(cpu(y)))
+        end
+        return actualloss(ŷ, y)
+    end
+end
+
+"""
+    TrainAccuracyFitnessInner <: AbstractFitness
+
+Fetches `acc` from a `TrainAccuracyCandidate`. Only intended for use by [`TrainAccuracyFitness`](@ref).
+"""
+struct TrainAccuracyFitnessInner{D} <: AbstractFitness 
+    drop::D
+end
+
+function fitness(s::TrainAccuracyFitnessInner, c::TrainAccuracyCandidate, gen)
+    startind = max(1, 1+floor(Int, s.drop * length(c.acc)))
+    return mean(@view c.acc[startind:end])
+end
+
+"""
     mutable struct TrainAccuracyFitness <: AbstractFitness
-    TrainAccuracyFitness(drop=0.5)
+    TrainAccuracyFitness(;drop=0.5, kwargs...)
 
 Measure fitness as the accuracy on the training data set. Beware of overfitting!
 
 Parameter `drop` determines the fraction of examples to drop for fitness measurement. This mitigates the penalty for newly mutated candidates as the first part of the training examples are not used for fitness.
 
+Other keyword arguments are passed to `TrainThenFitness` constructor. Note that `fitstrat` should generally be
+left to default value.
+
 Advantage vs `AccuracyFitness` is that one does not have to run through another data set. Disadvantage is that evolution will likely favour candidates which overfit.
 """
-# TODO: Reimplement...
-#= mutable struct TrainAccuracyFitness <: AbstractFitness
-    acc::AbstractArray
-    ŷ::AbstractArray
-    drop::Real
+struct TrainAccuracyFitness{T} <: AbstractFitness
+    train::T
 end
-TrainAccuracyFitness(drop = 0.5) = TrainAccuracyFitness([], [], drop)
-instrument(::Train,s::TrainAccuracyFitness,f) = function(x...)
-    ŷ = f(x...)
-    s.ŷ = ŷ |> cpu
-    return ŷ
-end
-instrument(::TrainLoss,s::TrainAccuracyFitness,f) = function(x...)
-    y = x[2]
-    ret = f(x...)
-    nograd() do
-        # Assume above call has also been instrument with Train, so now we have ŷ
-        append!(s.acc, Flux.onecold(s.ŷ) .== Flux.onecold(cpu(y)))
-    end
-    return ret
-end
-function fitness(s::TrainAccuracyFitness, f)
-    @assert !isempty(s.acc) "No accuracy metric reported! Please make sure you have instrumented the correct methods and that training has been run."
-    startind = max(1, 1+floor(Int, s.drop * length(s.acc)))
-    mean(s.acc[startind:end])
-end
-function reset!(s::TrainAccuracyFitness)
-    s.acc = []
-    s.ŷ = []
-end
- =#
+TrainAccuracyFitness(;drop=0.5, fitstrat=TrainAccuracyFitnessInner(drop), kwargs...,) =  TrainAccuracyFitness( TrainThenFitness(;fitstrat, kwargs...)) 
+
+fitness(s::TrainAccuracyFitness, c::AbstractCandidate, gen) = fitness(s.train, TrainAccuracyCandidate(c), gen)
+
+
 """
     MapFitness <: AbstractFitness
     MapFitness(mapping::Function, base::AbstractFitness)

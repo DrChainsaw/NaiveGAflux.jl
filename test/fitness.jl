@@ -67,22 +67,14 @@
     end
 
     @testset "TrainAccuracyFitness" begin
-        import NaiveGAflux: Train, TrainLoss
-        x = nothing
-        f(x) = [0 1 0; 1 0 0; 0 0 1]
-        y =    [0 0 0; 1 1 0; 0 0 1]
+        dataiter  = [([0 1 0; 1 0 0; 0 0 1], [0 0 0; 1 1 0; 0 0 1])]
+        iv = inputvertex("in", 3)
+        idgraph = CompGraph(iv, iv)
 
-        taf = TrainAccuracyFitness()
-        @test_throws AssertionError fitness(taf, (args...) -> error("shall not be called"))
+        taf = TrainAccuracyFitness(;drop=0.5,dataiter, defaultloss = Flux.Losses.mse, defaultopt = Descent(0.001))
 
-        fi = instrument(Train(), taf, f)
-        li = instrument(TrainLoss(), taf, Flux.Losses.mse)
-
-        @test li(fi(x), y) ≈ 2/9
-        @test fitness(taf, (args...) -> error("shall not be called")) == 0.5
-
-        reset!(taf)
-        @test_throws AssertionError fitness(taf, (args...) -> error("shall not be called"))
+        # Note: First example will be dropped
+        @test fitness(CandidateModel(idgraph), taf, 0)  == 0.5
     end
 
     @testset "MapFitness" begin
