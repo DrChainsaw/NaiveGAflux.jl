@@ -92,12 +92,32 @@ function fitness(s::AccuracyFitness, c::AbstractCandidate, gen)
     return acc / cnt
 end
 
-struct TrainThenFitness{I,L,O,F} <: AbstractFitness
+"""
+    TrainThenFitness{I,L,O,F} <: AbstractFitness
+    TrainThenFitness(;dataiter, defaultloss, defaultopt, fitstrat, invalidfitness=0.0)
+
+Measure fitness using `fitstrat` after training the model using `dataiter`.
+
+Loss function and optimizer may be provided by the candidate if `lossfun(c; defaultloss)` 
+and `opt(c; defaultopt)` are implemented, otherwise `defaultloss` and `defaultopt` will 
+be used.
+
+The data used for training is the result of `itergeneration(dataiter, gen)` where `gen`
+is the generation number. This defaults to returning `dataiter` but allows for more 
+complex iterators such as [`StatefulGenerationIter`](@gen).
+
+If the model loss is ever `NaN` or `Inf` the training will be stopped and `invalidfitness`
+will be returned without calculating the fitness using `fitstrat`. 
+"""
+struct TrainThenFitness{I,L,O,F, IF} <: AbstractFitness
     dataiter::I
     defaultloss::L
     defaultopt::O
     fitstrat::F
+    invalidfitness::IF
 end
+TrainThenFitness(;dataiter, defaultloss, defaultopt, fitstrat, invalidfitness=0.0) = TrainThenFitness(dataiter, defaultloss, defaultopt, fitstrat, invalidfitness)
+
 function fitness(s::TrainThenFitness, c::AbstractCandidate, gen)
     loss = lossfun(c; default=s.defaultloss)
     model = graph(c)
@@ -124,7 +144,7 @@ function fitness(s::TrainThenFitness, c::AbstractCandidate, gen)
         cleanopt(o)
         valid
     end
-    return valid ? fitness(s.fitstrat, c, gen) : 0.0
+    return valid ? fitness(s.fitstrat, c, gen) : s.invalidfitness
 end
 
 function checkvalid(ifnot, x)

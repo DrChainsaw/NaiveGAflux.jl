@@ -43,6 +43,29 @@
         @test fitness(AccuracyFitness(DummyIter()), IdCand()) == 0.5
     end
 
+    @testset "TrainThenFitness" begin
+        iv = inputvertex("in", 2)
+        ov = mutable(Dense(2, 2), iv)
+        cand = CandidateModel(CompGraph(iv, ov))
+
+        ttf = TrainThenFitness(
+            dataiter = [(ones(Float32, 2, 1), ones(Float32, 2, 1))],
+            defaultloss=Flux.mse,
+            defaultopt = Descent(0.0001),
+            fitstrat = MockFitness(17),
+            invalidfitness = 123.456)
+
+        @test fitness(cand, ttf, 0) === 17
+
+        struct NaNCandidateModel <: AbstractCandidate end
+        NaiveGAflux.ninputs(::NaNCandidateModel) = 1
+        NaiveGAflux.graph(f::NaNCandidateModel) = f 
+        (::NaNCandidateModel)(x) = x
+        NaiveGAflux.lossfun(::NaNCandidateModel; default) = (args...) -> NaN32
+
+        @test @test_logs (:warn, "NaN loss detected when training!") fitness(NaNCandidateModel(), ttf, 0) == 123.456
+    end
+
     @testset "TrainAccuracyFitness" begin
         import NaiveGAflux: Train, TrainLoss
         x = nothing
