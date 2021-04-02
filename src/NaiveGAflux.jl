@@ -32,7 +32,10 @@ export evolve, AbstractEvolution, NoOpEvolution, AfterEvolution, ResetAfterEvolu
 export Population, generation
 
 # misc types
-export Probability, MutationShield, ApplyIf, RemoveIfSingleInput, RepeatPartitionIterator, SeedIterator, MapIterator, GpuIterator, BatchIterator, ShuffleIterator, PersistentArray, ShieldedOpt
+export Probability, MutationShield, ApplyIf, RemoveIfSingleInput, PersistentArray, ShieldedOpt
+
+# Iterators. These should preferably come from somewhere else, but I haven't found anything which fits the bill w.r.t repeatability over subsets
+export RepeatPartitionIterator, SeedIterator, MapIterator, GpuIterator, BatchIterator, ShuffleIterator, TimedIterator, StatefulGenerationIter
 
 # Persistence
 export persist

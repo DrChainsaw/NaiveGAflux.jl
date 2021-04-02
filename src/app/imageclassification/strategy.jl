@@ -125,31 +125,6 @@ function fitnessfun(s::TrainAccuracyVsSize, x, y)
 end
 
 """
-    struct PruneLongRunning{T <: AbstractFitnessStrategy, D <: Real} <: AbstractFitnessStrategy
-    PruneLongRunning(s::AbstractFitnessStrategy, t1, t2)
-
-Produces an `AbstractFitness` which multiplies the fitness produced by `s` with a factor `f < 1` if training time takes longer than `t1`. If training time takes longer than t2, fitness will be zero.
-
-As the name suggests, the purpose is to get rid of models which take too long to train.
-"""
-struct PruneLongRunning{T <: AbstractFitnessStrategy, D <: Real} <: AbstractFitnessStrategy
-    s::T
-    t1::D
-    t2::D
-end
-function fitnessfun(s::PruneLongRunning, x, y)
-    fitstrat = fitnessfun(s.s, x, y)
-    return prunelongrunning(fitstrat, s.t1, s.t2)
-end
-
-function prunelongrunning(s::AbstractFitness, t1, t2)
-    mapping(t) = 1 - (t - t1) / (t2 - t1)
-    scaled = MapFitness(t -> clamp(mapping(t), 0, 1), TimeFitness(NaiveGAflux.Train(), 1))
-    return AggFitness(*, scaled, s)
-end
-
-
-"""
     struct BatchedIterConfig{T, V}
     BatchedIterConfig(;batchsize=32, dataaug=identity, iterwrap=GpuIterator) 
 

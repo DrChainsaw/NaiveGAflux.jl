@@ -255,3 +255,67 @@ end
 Base.show(io::IO, itr::ShuffleIterator) = print(io, "ShuffleIterator(size=$(size(itr.base)), batchsize=$(itr.batchsize))")
 
 Flux.onehotbatch(itr::ShuffleIterator, labels) = MapIterator(x -> Flux.onehotbatch(x, labels), itr)
+
+"""
+    TimedIterator{F,A,I}
+    TimedIterator(;timelimit, patience, timeoutaction, accumulate_timeouts, base)
+
+Measures time between iterations and calls `timeoutaction()` if this time is longer than `timelimit` `patience` number of times.
+
+Intended use is to quickly abort training of models which take very long time to train, typically also assigning them a very low fitness in case of a timeout.
+
+By default, calling `timeoutaction()` will not stop the iteration as this would break otherwise convenient functions like `length`, `collect` and `map`. Let `timeoutaction()` return `TimedIteratorStop` to stop iteration.
+
+If `accumulate_timeouts` is `false` then counting will reset every when time between iterations is shorter than `timelimit`, otherwise it will not.
+""" 
+struct TimedIterator{F,A,I}
+    timelimit::F
+    patience::Int
+    timeoutaction::A
+    accumulate_timeouts::Bool
+    base::I
+end
+TimedIterator(;timelimit, patience=5, timeoutaction, accumulate_timeouts=false, base) = TimedIterator(timelimit, patience, timeoutaction, accumulate_timeouts, base)
+"""
+    TimedIteratorStop
+
+Special type for stopping a `TimedIterator` if returned from `timeoutaction()`.
+"""
+struct TimedIteratorStop
+    TimedIteratorStop() = throw(DomainError("You typically do not want to instantiate this as `TimedIterator` expects the type and not a value, i.e `return TimedIteratorStop` instead of `return TimedIteratorStop()`. Call TimedIteratorStop(true) if you really want to instantiate"))
+    TimedIteratorStop(::Bool) = new()
+end
+
+Base.length(itr::TimedIterator) = length(itr.base)
+Base.size(itr::TimedIterator) = size(itr.base)
+
+Base.IteratorSize(itr::TimedIterator) = Base.IteratorSize(itr.base)
+Base.IteratorEltype(itr::TimedIterator) = Base.IteratorEltype(itr.base)
+
+function Base.iterate(itr::TimedIterator)
+    val, bstate = IterTools.@ifsomething iterate(itr.base)
+    tstamp = NaN #Always skip first due to compilation times etc
+    return val, (tstamp, 0, bstate)
+end
+
+function Base.iterate(itr::TimedIterator, (tstamp, ntimeout, bstate)::Tuple)
+    duration = time() - tstamp
+    ntimeout = if duration > itr.timelimit 
+        ntimeout + 1 
+    else
+         itr.accumulate_timeouts ? ntimeout : 0
+    end
+
+    if ntimeout >= itr.patience
+        stop = itr.timeoutaction()
+        # Note: we allow users to return e.g. nothing here to continue
+        stop === TimedIteratorStop && return nothing
+    end
+
+    val, bstate = IterTools.@ifsomething iterate(itr.base, bstate)
+    tstamp = time()
+    return val, (tstamp, ntimeout, bstate)
+end
+
+# itergeneration on timeoutaction just in case user e.g. wants to deepcopy it to avoid some shared state.
+itergeneration(itr::TimedIterator, gen) = TimedIterator(itr.timelimit, itr.patience, itergeneration(itr.timeoutaction, gen), itr.accumulate_timeouts, itergeneration(itr.base, gen))
