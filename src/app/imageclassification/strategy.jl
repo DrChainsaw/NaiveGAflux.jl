@@ -144,7 +144,7 @@ dataiter(s::BatchedIterConfig, x, y) = dataiter(x, y, s.batchsize, s.dataaug) |>
 
 """
     struct ShuffleIterConfig{T, V}
-        ShuffleIterConfig(;batchsize=32, seed=123, dataaug=identity, iterwrap=GpuIterator) 
+    ShuffleIterConfig(;batchsize=32, seed=123, dataaug=identity, iterwrap=GpuIterator) 
 
 Configuration for creating shuffled batch iterators from array data. Data will be re-shuffled every time the iterator restarts.
 
@@ -163,13 +163,14 @@ dataiter(s::ShuffleIterConfig, x, y) = dataiter(x, y, s.batchsize, s.seed, s.dat
 
 
 """
-    struct TrainIterStrategy{T}
-    TrainIterStrategy(batchsize, nbatches_per_gen, seed, dataaug)
-    TrainIterStrategy(;batchsize=32, nbatches_per_gen=400, seed=123, dataaug=identity)
+    struct TrainIterConfig{T}
+    TrainIterConfig(nbatches_per_gen, baseconfig)
+    TrainIterConfig(;nbatches_per_gen=400, baseconfig=ShuffleIterConfig())
 
-Standard training strategy for creating a batched iterators from data. Data is cycled in partitions of `nbatches_per_gen` and batchsize of `batchsize` each generation using a [`RepeatPartitionIterator`](@ref).
+Standard training strategy for creating a batched iterators from data. Data from `baseconfig` is cycled in partitions of `nbatches_per_gen` each generation using a [`RepeatPartitionIterator`](@ref).
 
-Data can be augmented using `dataaug`.
+Note there there is no upper bound on how many generations are supported as the returned iterator cycles the data indefinitely. Use e.g. `Iterators.take(itr, cld(nepochs * nbatches_per_epoch, nbatches_per_gen))` to limit to `nepochs`
+epochs. 
 """
 struct TrainIterConfig{T}
     nbatches_per_gen::Int

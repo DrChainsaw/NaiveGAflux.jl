@@ -300,6 +300,7 @@ end
 
 function Base.iterate(itr::TimedIterator, (tstamp, ntimeout, bstate)::Tuple)
     duration = time() - tstamp
+    # Note reiles on NaN > x === false for all x
     ntimeout = if duration > itr.timelimit 
         ntimeout + 1 
     else

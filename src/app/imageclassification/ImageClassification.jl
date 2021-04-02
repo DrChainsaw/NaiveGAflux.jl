@@ -24,11 +24,11 @@ include("archspace.jl")
 """
     ImageClassifier
     ImageClassifier(popinit, popsize, seed)
-    ImageClassifier(;popsize=50, seed=1, newpop=false; insize, outsize)
+    ImageClassifier(;popsize=50, seed=1, newpop=false, mdir=defaultdir("ImageClassifier"); insize, outsize)
 
 Type to make `AutoFlux.fit` train an image classifier using initial population size `popsize` using random seed `seed`.
 
-Load models from `mdir` if directory contains models. If persistence is used (e.g. by providing `cb=persist`) candidates will be stored in this directory.
+Load models from `mdir` if directory contains models. If persistence is used (e.g. by providing `cb=persist` to `fit`) candidates will be stored in this directory.
 
 If `newpop` is `true` the process will start with a new population and existing state in the specified directory will be overwritten.
 """
@@ -43,7 +43,7 @@ function ImageClassifier(;popsize=50, seed=1, newpop=false, mdir=defaultdir("Ima
 end
 
 """
-    fit(c::ImageClassifier, x, y; cb, fitnesstrategy, evolutionstrategy)
+    fit(c::ImageClassifier, x, y; cb, fitnesstrategy, evolutionstrategy, stopcriterion)
 
 Return a population of image classifiers fitted to the given data.
 
@@ -75,7 +75,7 @@ function AutoFlux.fit(c::ImageClassifier, x::AbstractArray, y::AbstractArray;
 end
 
 """
-    fit(c::ImageClassifier, fitnesstrategy::AbstractFitness, evostrategy::AbstractEvolution; cb)
+    fit(c::ImageClassifier, fitnesstrategy::AbstractFitness, evostrategy::AbstractEvolution, stopcriterion; cb)
 
 Return a population of image classifiers fitted to the given data.
 
@@ -87,6 +87,8 @@ Lower level version of `fit` to use when `fit(c::ImageClassifier, x, y)` doesn't
 - `fitnessstrategy`: An `AbstractFitness` used to compute the fitness metric for a candidate.
 
 - `evostrategy::AbstractEvolution`: Evolution strategy to use. Population `p` will be evolved through `p = evolve(evostrategy, p)`.
+
+- `stopcriterion`: Takes the current population and returns true if fitting shall stop. Candidate fitness is available by calling `fitness(c)` where `c` is a member of the population.
 
 - `cb=identity`: Callback function. After training and evaluating each generation but before evolution `cb(population)` will be called where `population` is the array of candidates. Useful for persistence and plotting.
 """

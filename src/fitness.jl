@@ -108,6 +108,8 @@ complex iterators such as [`StatefulGenerationIter`](@gen).
 
 If the model loss is ever `NaN` or `Inf` the training will be stopped and `invalidfitness`
 will be returned without calculating the fitness using `fitstrat`. 
+
+Tip: Use `TimedIterator` to stop training of models which take too long to train.
 """
 struct TrainThenFitness{I,L,O,F, IF} <: AbstractFitness
     dataiter::I

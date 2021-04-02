@@ -35,7 +35,7 @@ export Population, generation
 export Probability, MutationShield, ApplyIf, RemoveIfSingleInput, PersistentArray, ShieldedOpt
 
 # Iterators. These should preferably come from somewhere else, but I haven't found anything which fits the bill w.r.t repeatability over subsets
-export RepeatPartitionIterator, SeedIterator, MapIterator, GpuIterator, BatchIterator, ShuffleIterator, TimedIterator, StatefulGenerationIter
+export RepeatPartitionIterator, SeedIterator, MapIterator, GpuIterator, BatchIterator, ShuffleIterator, TimedIterator, TimedIteratorStop, StatefulGenerationIter
 
 # Persistence
 export persist
