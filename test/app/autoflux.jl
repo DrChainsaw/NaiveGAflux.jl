@@ -36,7 +36,7 @@
 
         # Now try TrainAccuracyVsSize and EliteAndTournamentSelection
         @info "\tSmoke test with TrainAccuracyVsSize and EliteAndTournamentSelection"
-        pop = @test_logs (:info, "Begin generation 1") (:info, "Begin generation 2") (:info, "Begin generation 3") (:info, r"Mutate model") match_mode=:any fit(c, x, y, fitnesstrategy=TrainAccuracyVsSize(), trainstrategy=t, evolutionstrategy = GlobalOptimizerMutation(EliteAndTournamentSelection(popsize=c.popsize, nelites=1, k=2)), stopcriterion = pop -> generation(pop) == 3)
+        pop = @test_logs (:info, "Begin generation 1") (:info, "Begin generation 2") (:info, "Begin generation 3") (:info, r"Mutate model") match_mode=:any fit(c, x, y, fitnesstrategy=TrainAccuracyVsSize(), evolutionstrategy = GlobalOptimizerMutation(EliteAndTournamentSelection(popsize=c.popsize, nelites=1, k=2)), stopcriterion = pop -> generation(pop) == 3)
 
         @test length(pop) == c.popsize
         @test modelname.(pop) == ["model$i" for i in 1:length(pop)]
