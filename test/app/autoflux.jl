@@ -118,19 +118,19 @@
     end
 
     @testset "TrainIterConfig" begin
-        import NaiveGAflux.AutoFlux.ImageClassification: TrainIterConfig, dataiter
+        import NaiveGAflux.AutoFlux.ImageClassification: TrainIterConfig, ShuffleIterConfig, dataiter
         nexamples = 10
         x = randn(Float32, 4,4,3, nexamples)
         y = rand(0:7, nexamples)
 
         @testset "Test $ne epochs and $nbpg batches per generation" for ne in (1, 2, 10), nbpg in (2, 10)
             bs = 3
-            s = TrainIterConfig(nepochs=ne, batchsize=bs, nbatches_per_gen=nbpg)
-            itr = trainiter(s, x, y)
+            s = TrainIterConfig(nbatches_per_gen=nbpg, baseconfig=ShuffleIterConfig(batchsize=bs))
+            itr =  Iterators.take(dataiter(s, x, y), cld(ne * nexamples, nbpg))
 
-            totsize = ne * ceil(nexamples / bs)
-            @test mapreduce(length ∘ collect, +, itr) == totsize
-            @test length(itr |> first) == min(nbpg, totsize)
+            totnrofexamples = ne * nexamples
+            @test mapreduce(length ∘ collect, +, itr) == totnrofexamples
+            @test length(itr |> first) == min(nbpg, totnrofexamples)
             @test size(itr |> first |> first |> first, 4) == bs
 
             # All models shall see the same examples
