@@ -89,7 +89,6 @@
             return fvals[cnt] * f
         end
 
-
         ef = EwmaFitness(MapFitness(stepfun, MockFitness(1)))
         efc = deepcopy(ef)
 

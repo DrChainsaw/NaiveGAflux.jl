@@ -36,12 +36,16 @@ evostrategy(s::AbstractEvolutionStrategy, inshape) = evostrategy_internal(s, ins
 
 """
     struct TrainSplitAccuracy{T} <: AbstractFitnessStrategy
-    TrainSplitAccuracy(nexamples, batchsize, data2fitfun, dataaug)
-    TrainSplitAccuracy(;nexamples=2048, batchsize=64, data2fitgen= data -> NanGuard ∘ AccuracyVsSize(data), dataaug=identity)
+        TrainSplitAccuracy(;split, accuracyconfig, accuracyfitness, trainconfig, trainfitness)
 
-Strategy to measure fitness on a subset of the training data of size `nexamples`.
+Strategy to train model on a subset of the training data and measure fitness as accuracy on the rest.
 
-Mapping from this subset to a fitness generator is done by `data2fitgen` which takes a data iterator and returns a function (or callable struct) which in turn produces an `AbstractFitness` when called with no arguments.
+Size of subset for accuracy fitness is `ceil(Int, split * nobs)` where `nobs` is the size of along the last dimension of the input.
+
+Parameters `accuracyconfig` (default `BatchedIterConfig()`) and `accuracyfitness` (default AccuracyVsSize) determine 
+how to iterate over the accuracy subset and how to measure fitness based on this iterator respectively.
+
+Parameters `trainconfig` (default `TrainIterConfig()`) and `trainfitness` (default GpuFitness(TrainThenFitness(StatefulGenerationIter(iter), Flux.Losses.logitcrossentropy, ADAM(), accfitness, 0.0)) where accfitness is the fitness strategy produced by `accuracyfitness`) are the equivalents for training data.
 """
 struct TrainSplitAccuracy{S, VC, VF, TC, TF} <: AbstractFitnessStrategy
     split::S
@@ -54,7 +58,7 @@ function TrainSplitAccuracy(;split=0.1,
             accuracyconfig=BatchedIterConfig(),
             accuracyfitness=AccuracyVsSize,
             trainconfig=TrainIterConfig(),
-            trainfitness=(iter, accf) -> GpuFitness(TrainThenFitness(StatefulGenerationIter(iter), Flux.Losses.logitcrossentropy, ADAM(), accf)))
+            trainfitness=(iter, accf) -> GpuFitness(TrainThenFitness(StatefulGenerationIter(iter), Flux.Losses.logitcrossentropy, ADAM(), accf, 0.0)))
 
     return TrainSplitAccuracy(split, accuracyconfig, accuracyfitness, trainconfig, trainfitness)
 end
@@ -85,7 +89,7 @@ Only if the first `accdigits` of accuracy is the same will the number of paramet
 Accuracy part of the fitness is calculated by `accwrap(AccuracyFitness(data))`.
 """
 AccuracyVsSize(data, accdigits=2; accwrap=identity) = sizevs(accwrap(AccuracyFitness(data)), accdigits)
-function sizevs(f::AbstractFitness, accdigits)
+function sizevs(f::AbstractFitness, accdigits=2)
     truncacc = MapFitness(x -> round(x, digits=accdigits), f)
 
     size = SizeFitness()
@@ -96,24 +100,29 @@ end
 
 """
     struct TrainAccuracyVsSize <: AbstractFitnessStrategy
-    TrainAccuracyVsSize(;accdigits=3, accwrap=identity)
+    TrainAccuracyVsSize(;trainconfig, trainfitness)
 
-Produces an `AbstractFitness` which measures fitness accuracy on training data and based on number of parameters.
+Produces an `AbstractFitness` which measures fitness accuracy on training data and based on number of parameters combined in the same way as is done for `AccuracyVsSize`.
 
-The two are combined so that a candidate `a` which achieves higher accuracy rounded to the first `accdigits` digits compared to a candidate `b` will always have a better fitness.
-
-Only if the first `accdigits` of accuracy is the same will the number of parameters determine who has higher fitness.
-
-Accuracy part of the fitness is calculated by `accwrap(TrainAccuracyFitness())`.
+Parameters `trainconfig` (default `TrainIterConfig()`) and `trainfitness` (default sizevs(GpuFitness(TrainAccuracyFitness(dataiter=StatefulGenerationIter(dataiter), defaultloss=Flux.Losses.logitcrossentropy, defaultopt = ADAM()))) where `dataiter` is the iterator produced by `trainconfig`).
 
 Beware that fitness as accuracy on training data will make evolution favour overfitted candidates.
 """
-struct TrainAccuracyVsSize{T} <: AbstractFitnessStrategy
-    accwrap::T
-    accdigits::Int
+struct TrainAccuracyVsSize{TC, TF} <: AbstractFitnessStrategy
+    trainconfig::TC
+    trainfitness::TF
 end
-TrainAccuracyVsSize(;accdigits=3, accwrap=identity) = TrainAccuracyVsSize(accwrap, accdigits)
-fitnessfun(s::TrainAccuracyVsSize, x, y) = x, y, () -> NanGuard(sizevs(s.accwrap(TrainAccuracyFitness()), s.accdigits))
+function TrainAccuracyVsSize(;
+                        trainconfig=TrainIterConfig(),
+                        trainfitness = dataiter -> sizevs(GpuFitness(TrainAccuracyFitness(
+                                                                            dataiter=StatefulGenerationIter(dataiter), 
+                                                                            defaultloss=Flux.Losses.logitcrossentropy, defaultopt = ADAM())))) 
+        return TrainAccuracyVsSize(trainconfig, trainfitness)
+end
+function fitnessfun(s::TrainAccuracyVsSize, x, y) 
+    iter = dataiter(s.trainconfig, x, y)
+    return s.trainfitness(iter)
+end
 
 """
     struct PruneLongRunning{T <: AbstractFitnessStrategy, D <: Real} <: AbstractFitnessStrategy
