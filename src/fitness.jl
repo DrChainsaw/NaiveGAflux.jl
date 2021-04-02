@@ -196,7 +196,7 @@ function fitness(s::TrainAccuracyFitnessInner, c::TrainAccuracyCandidate, gen)
 end
 
 """
-    mutable struct TrainAccuracyFitness <: AbstractFitness
+    struct TrainAccuracyFitness <: AbstractFitness
     TrainAccuracyFitness(;drop=0.5, kwargs...)
 
 Measure fitness as the accuracy on the training data set. Beware of overfitting!
@@ -211,7 +211,7 @@ Advantage vs `AccuracyFitness` is that one does not have to run through another 
 struct TrainAccuracyFitness{T} <: AbstractFitness
     train::T
 end
-TrainAccuracyFitness(;drop=0.5, fitstrat=TrainAccuracyFitnessInner(drop), kwargs...,) =  TrainAccuracyFitness( TrainThenFitness(;fitstrat, kwargs...)) 
+TrainAccuracyFitness(;drop=0.5, kwargs...,) =  TrainAccuracyFitness( TrainThenFitness(;fitstrat=TrainAccuracyFitnessInner(drop), kwargs...)) 
 
 fitness(s::TrainAccuracyFitness, c::AbstractCandidate, gen) = fitness(s.train, TrainAccuracyCandidate(c), gen)
 

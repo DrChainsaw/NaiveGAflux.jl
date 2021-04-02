@@ -167,7 +167,6 @@ end
 
     @testset "Stop iteration at timeout" begin
         # also test that we really timeout when not accumulating here
-        import NaiveGAflux: TimedIteratorStop
         titer = TimedIterator(;timelimit=0.1, patience=4, timeoutaction = () -> TimedIteratorStop, accumulate_timeouts=false, base=1:10)
 
         last = 0
