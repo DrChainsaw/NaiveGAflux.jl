@@ -239,7 +239,7 @@ Main purpose is to mitigate the effects of fitness noise.
 
 See `https://github.com/DrChainsaw/NaiveGAExperiments/blob/master/fitnessnoise/experiments.ipynb` for some hints as to why this might be needed.
 """
-struct EwmaFitness{F}
+struct EwmaFitness{F} <: AbstractFitness
     α::Float64
     base::F
 end

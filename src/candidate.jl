@@ -170,13 +170,13 @@ struct FittedCandidate{F, C} <: AbstractWrappingCandidate
     fitness::F
     c::C
 end
-FittedCandidate(c::AbstractCandidate, f::AbstractFitness, gen) = FittedCandidate(gen, fitness(c, f, gen), c)
-FittedCandidate(c::FittedCandidate, f::AbstractFitness, gen) = FittedCandidate(wrappedcand(c), f ,gen)
+FittedCandidate(c::AbstractCandidate, f::AbstractFitness, gen) = FittedCandidate(gen, fitness(f, c, gen), c)
+FittedCandidate(c::FittedCandidate, f::AbstractFitness, gen) = FittedCandidate(f, wrappedcand(c) ,gen)
 
 Flux.@functor FittedCandidate
 
 fitness(c::FittedCandidate; default=nothing) = c.fitness
-
+fitness(c::FittedCandidate, f::AbstractFitness, gen) = fitness(f, c, gen)
 
 nparams(c::AbstractCandidate) = graph(c, nparams)
 nparams(x) = mapreduce(prod ∘ size, +, params(x).order; init=0)
