@@ -15,12 +15,12 @@ abstract type AbstractFitness end
 
 Base.Broadcast.broadcastable(c::AbstractCandidate) = Ref(c)
 
-fitness(c::AbstractCandidate, f::AbstractFitness, gen) = fitness(f, c, gen)
-
+release!(::AbstractCandidate) = nothing
 graph(c::AbstractCandidate, f=identity; default=nothing) = f(default)
 opt(c::AbstractCandidate; default=nothing) = default
 lossfun(c::AbstractCandidate; default=nothing) = default
 fitness(c::AbstractCandidate; default=nothing) = default
+generation(c::AbstractCandidate; default=nothing) = default
 
 
 wrappedcand(::T) where T <: AbstractCandidate = error("$T does not wrap any candidate! Check your base case!")
@@ -34,20 +34,17 @@ Should implement `wrappedcand(c)` to get lots of stuff handled automatically.
 """
 abstract type AbstractWrappingCandidate <: AbstractCandidate end
 
-"""
-    reset!(c::AbstractCandidate)
-
-Reset state of `c`. Typically needs to be called after evolution to clear old fitness computations.
-"""
-reset!(c::AbstractWrappingCandidate) = reset!(wrappedcand(c))
-
 wrappedcand(c::AbstractWrappingCandidate) = c.c
+
+release!(c::AbstractWrappingCandidate) = release!(wrappedcand(c))
+
 graph(c::AbstractWrappingCandidate) = graph(wrappedcand(c))
 # This is mainly for FileCandidate to allow for writing the graph back to disk after f is done
 graph(c::AbstractWrappingCandidate, f; kwargs...) = graph(wrappedcand(c), f; kwargs...)
 opt(c::AbstractWrappingCandidate; kwargs...) = opt(wrappedcand(c); kwargs...)
 lossfun(c::AbstractWrappingCandidate; kwargs...) = lossfun(wrappedcand(c); kwargs...)
 fitness(c::AbstractWrappingCandidate; kwargs...) = fitness(wrappedcand(c); kwargs...)
+generation(c::AbstractWrappingCandidate; kwargs...) = generation(wrappedcand(c); kwargs...)
 
 
 """
@@ -64,21 +61,25 @@ Flux.@functor CandidateModel
 
 graph(c::CandidateModel, f=identity; kwargs...) = f(c.graph)
 
+newcand(c::CandidateModel, mapfield) = CandidateModel(map(mapfield, getproperty.(c, fieldnames(CandidateModel)))...)
+
 """
     CandidateOptModel <: AbstractCandidate
-    CandidateOptModel(model)
+    CandidateOptModel(candidate, optimizer)
 
-A candidate model consisting of a `CompGraph` and an optimizer.
+A candidate adding an optimizer to another candidate.
 """
-struct CandidateOptModel{G,O} <: AbstractCandidate
-    graph::G
+struct CandidateOptModel{O, C <: AbstractCandidate} <: AbstractWrappingCandidate
     opt::O
+    c::C
 end
+CandidateOptModel(opt, g::CompGraph) = CandidateOptModel(opt, CandidateModel(g))
 
 Flux.@functor CandidateOptModel
 
-graph(c::CandidateOptModel, f=identity; kwargs...) = f(c.graph)
 opt(c::CandidateOptModel; kwargs...) = c.opt 
+
+newcand(c::CandidateOptModel, mapfield) = CandidateOptModel(mapfield(c.opt), newcand(wrappedcand(c), mapfield))
 
 """
     FileCandidate <: AbstractWrappingCandidate
@@ -136,6 +137,13 @@ function candtodisk(r::MemPool.DRef, writelock)
     end
 end
 
+function release!(c::FileCandidate)
+    release!(wrappedcand(c))
+    close(c.movetimer)
+    c.movetimer = asynctodisk(c.c, c.movedelay, c.writelock)
+    return nothing
+end
+
 
 function Serialization.serialize(s::AbstractSerializer, c::FileCandidate)
     Serialization.writetag(s.io, Serialization.OBJECT_TAG)
@@ -151,12 +159,14 @@ end
 # Mutation needs to be enabled here?
 Flux.functor(c::FileCandidate) = callcand(Flux.functor, c)
 
-fitness(c::FileCandidate, f::AbstractFitness, gen) = callcand(fitness, c, f, gen)
-
-reset!(c::FileCandidate) = callcand(reset!, c)
-wrappedcand(c::FileCandidate) = MemPool.poolget(c.c)
+function wrappedcand(c::FileCandidate) 
+    close(c.movetimer)
+    MemPool.poolget(c.c)
+end
 graph(c::FileCandidate, f) = callcand(graph, c, f)
 opt(c::FileCandidate) = callcand(opt, c)
+
+newcand(c::FileCandidate, mapfield) = FileCandidate(callcand(newcand, c, mapfield), c.movedelay)
 
 """
     struct FittedCandidate{F, C} <: AbstractWrappingCandidate
@@ -164,19 +174,23 @@ opt(c::FileCandidate) = callcand(opt, c)
 An `AbstractCandidate` with a computed fitness value. 
 
 Basically a container for results so that fitness does not need to be recomputed to e.g. check stopping conditions. 
+
+Also useful for fitness smoothing, e.g. with `EwmaFitness` as it gives access to previous fitness value.
 """
-struct FittedCandidate{F, C} <: AbstractWrappingCandidate
+struct FittedCandidate{F, C <: AbstractCandidate} <: AbstractWrappingCandidate
     gen::Int
     fitness::F
     c::C
 end
-FittedCandidate(c::AbstractCandidate, f::AbstractFitness, gen) = FittedCandidate(gen, fitness(f, c, gen), c)
-FittedCandidate(c::FittedCandidate, f::AbstractFitness, gen) = FittedCandidate(f, wrappedcand(c) ,gen)
+FittedCandidate(c::AbstractCandidate, f::AbstractFitness, gen) = FittedCandidate(gen, fitness(f, c), c)
+FittedCandidate(c::FittedCandidate, f::AbstractFitness, gen) = FittedCandidate(wrappedcand(c), f, gen)
 
 Flux.@functor FittedCandidate
 
 fitness(c::FittedCandidate; default=nothing) = c.fitness
-fitness(c::FittedCandidate, f::AbstractFitness, gen) = fitness(f, c, gen)
+generation(c::FittedCandidate; default=nothing) = c.gen
+
+newcand(c::FittedCandidate, mapfield) = FittedCandidate(c.gen+1, c.fitness, newcand(wrappedcand(c), mapfield))
 
 nparams(c::AbstractCandidate) = graph(c, nparams)
 nparams(x) = mapreduce(prod ∘ size, +, params(x).order; init=0)
@@ -237,11 +251,6 @@ function mapcandidate(mapgraph, mapothers=deepcopy)
     mapfield(f) = mapothers(f)
     return c -> newcand(c, mapfield)
 end
-
-newcand(c::CandidateModel, mapfield) = CandidateModel(map(mapfield, getproperty.(c, fieldnames(CandidateModel)))...)
-newcand(c::CandidateOptModel, mapfield) = CandidateOptModel(map(mapfield, getproperty.(c, fieldnames(CandidateOptModel)))...)
-newcand(c::FileCandidate, mapfield) = FileCandidate(callcand(newcand, c, mapfield), c.movedelay)
-newcand(c::FittedCandidate, mapfield) = newcand(wrappedcand(c), mapfield)
 
 function clearstate(s) end
 clearstate(s::AbstractDict) = foreach(k -> delete!(s, k), keys(s))

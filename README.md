@@ -471,17 +471,13 @@ candidate2 = CandidateModel(Dense(ones(Float32, 3,3), collect(Float32, 1:3)))
 # Fitness is accuracy on the provided data set
 accfitness = AccuracyFitness([(ones(Float32, 3, 1), 1:3)])
 
-# Some fitness functions needs this, but not all. Might be moved inside the candidate and provided
-# through a function in future releases.
-generationnr = 1 
-
-@test fitness(accfitness, candidate1, generationnr) == 0
-@test fitness(accfitness, candidate2, generationnr) == 1
+@test fitness(accfitness, candidate1) == 0
+@test fitness(accfitness, candidate2) == 1
 
 # Measure how long time it takes to evaluate the fitness and add that in addition to the accuracy
 let timedfitness = TimeFitness(accfitness)
-    c1time, c1acc = fitness(timedfitness, candidate1, generationnr)
-    c2time, c2acc = fitness(timedfitness, candidate2, generationnr) 
+    c1time, c1acc = fitness(timedfitness, candidate1)
+    c2time, c2acc = fitness(timedfitness, candidate2) 
     @test c1acc == 0
     @test c2acc == 1
     @test 0 < c1time 
@@ -490,28 +486,28 @@ end
 
 # Use the number of parameters to compute fitness
 bigmodelfitness = SizeFitness()
-@test fitness(bigmodelfitness, candidate1, generationnr) == 0
-@test fitness(bigmodelfitness, candidate2, generationnr) == 12
+@test fitness(bigmodelfitness, candidate1) == 0
+@test fitness(bigmodelfitness, candidate2) == 12
 
 # One typically wants to map high number of params to lower fitness:
 smallmodelfitness = MapFitness(bigmodelfitness) do nparameters
     return min(1, 1 / nparameters)
 end
-@test fitness(smallmodelfitness, candidate1, generationnr) == 1
-@test fitness(smallmodelfitness, candidate2, generationnr) == 1/12
+@test fitness(smallmodelfitness, candidate1) == 1
+@test fitness(smallmodelfitness, candidate2) == 1/12
 
 # Combining fitness is straight forward
 combined = AggFitness(+, accfitness, smallmodelfitness, bigmodelfitness)
 
-@test fitness(combined, candidate1, generationnr) == 1
-@test fitness(combined, candidate2, generationnr) == 13 + 1/12
+@test fitness(combined, candidate1) == 1
+@test fitness(combined, candidate2) == 13 + 1/12
 
 # GpuFitness moves the candidates to GPU (as selected by Flux.gpu) before computing the wrapped fitness
 # Note that any data in the wrapped fitness must also be moved to the same GPU before being fed to the model
 gpuaccfitness = GpuFitness(AccuracyFitness(GpuIterator(accfitness.dataset)))
 
-@test fitness(gpuaccfitness, candidate1, generationnr) == 0
-@test fitness(gpuaccfitness, candidate2, generationnr) == 1
+@test fitness(gpuaccfitness, candidate1) == 0
+@test fitness(gpuaccfitness, candidate2) == 1
 
 ```
 
@@ -540,12 +536,12 @@ aval(c::ExampleCandidate; default=nothing) = c.a
 bval(c::ExampleCandidate; default=nothing) = c.b
 
 struct ExampleFitness <: AbstractFitness end
-NaiveGAflux.fitness(::ExampleFitness, c::AbstractCandidate, gen) = aval(c; default=10) - bval(c; default=5)
+NaiveGAflux._fitness(::ExampleFitness, c::AbstractCandidate) = aval(c; default=10) - bval(c; default=5)
 
 # Ok, this is alot of work for quite little in this dummy example
-@test fitness(ExampleFitness(), ExampleCandidate(4, 3), 0) === 1
+@test fitness(ExampleFitness(), ExampleCandidate(4, 3)) === 1
 
-ctime, examplemetric = fitness(TimeFitness(ExampleFitness()), ExampleCandidate(3,1), 0)
+ctime, examplemetric = fitness(TimeFitness(ExampleFitness()), ExampleCandidate(3,1))
 @test examplemetric === 2
 @test ctime > 0
 ```

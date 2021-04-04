@@ -50,7 +50,7 @@
         struct SizeVsTestFitness <: AbstractFitness
             fitness
         end
-        NaiveGAflux.fitness(s::SizeVsTestFitness, c, gen) = s.fitness
+        NaiveGAflux._fitness(s::SizeVsTestFitness, c) = s.fitness
 
         struct SizeVsTestFakeModel <: AbstractCandidate
             nparams::Int
@@ -60,16 +60,16 @@
         basefitness = SizeVsTestFitness(0.12345678)
 
         testfitness = sizevs(basefitness, 2)
-        @test fitness(testfitness, SizeVsTestFakeModel(1), 0) == 0.121
-        @test fitness(testfitness, SizeVsTestFakeModel(100_000), 0) ≈ 0.12001
+        @test fitness(testfitness, SizeVsTestFakeModel(1)) == 0.121
+        @test fitness(testfitness, SizeVsTestFakeModel(100_000)) ≈ 0.12001
 
         testfitness = sizevs(basefitness, 3)
-        @test fitness(testfitness, SizeVsTestFakeModel(1), 0) == 0.1231
-        @test fitness(testfitness, SizeVsTestFakeModel(100_000), 0) ≈ 0.12301
+        @test fitness(testfitness, SizeVsTestFakeModel(1)) == 0.1231
+        @test fitness(testfitness, SizeVsTestFakeModel(100_000)) ≈ 0.12301
 
         testfitness = sizevs(basefitness, 4)
-        @test fitness(testfitness, SizeVsTestFakeModel(1), 0) == 0.12351
-        @test fitness(testfitness, SizeVsTestFakeModel(100_000), 0) ≈ 0.12351
+        @test fitness(testfitness, SizeVsTestFakeModel(1)) == 0.12351
+        @test fitness(testfitness, SizeVsTestFakeModel(100_000)) ≈ 0.12351
     end
 
     @testset "TrainIterConfig" begin

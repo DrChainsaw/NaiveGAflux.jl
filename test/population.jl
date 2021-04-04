@@ -25,7 +25,7 @@
             nr::Int
         end
 
-        function NaiveGAflux.fitness(f::PopulationMockFitness, c::PopulationMockCand, gen) 
+        function NaiveGAflux._fitness(f::PopulationMockFitness, c::PopulationMockCand) 
             f.cnt +=1
             return f.cnt + c.nr
         end

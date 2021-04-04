@@ -131,7 +131,7 @@ function create_model(name, as, in, cwrap)
     opt = optselect(Descent(rand() * 0.099 + 0.01))
     # Always cache even if not strictly needed for all fitnessfunctions because consequence is so bad if one forgets
     # it when needed. Users who know what they are doing can unwrap if caching is not wanted.
-    cwrap(CandidateOptModel(CompGraph(in, as(name, in)), opt))
+    cwrap(CandidateOptModel(opt, CompGraph(in, as(name, in))))
 end
 
 end

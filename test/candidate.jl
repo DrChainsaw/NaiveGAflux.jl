@@ -1,17 +1,20 @@
 @testset "Candidate" begin
 
     struct DummyFitness <: AbstractFitness end
-    NaiveGAflux.fitness(::DummyFitness, f, gen) = 17
-    import NaiveGAflux: FileCandidate, AbstractWrappingCandidate, opt
+    NaiveGAflux._fitness(::DummyFitness, f::AbstractCandidate) = 17
+    import NaiveGAflux: FileCandidate, AbstractWrappingCandidate, opt, FittedCandidate
     import MemPool
     @testset "$ctype" for (ctype, candfun) in (
         (CandidateModel, CandidateModel),
-        (CandidateOptModel, g -> CandidateOptModel(g, Descent(0.01)))
+        (CandidateOptModel, g -> CandidateOptModel(Descent(0.01), g))
     )
     
-        @testset " $wrp" for wrp in (
-            identity,
-            FileCandidate)
+        @testset " $lbl" for (lbl, wrp) in (
+            ("", identity),
+            (FileCandidate, FileCandidate),
+            (FittedCandidate, c -> FittedCandidate(3, 0.34, c)),
+            ("FittedCandidate ∘ FileCandidate", c -> FittedCandidate(1, 0.78, FileCandidate(c)))
+            )
 
             invertex = inputvertex("in", 3, FluxDense())
             hlayer = mutable("hlayer", Dense(3,4), invertex)
@@ -22,7 +25,9 @@
 
                 cand = wrp(candfun(graph))
 
-                @test fitness(cand, DummyFitness(), 0) == 17
+                @test fitness(DummyFitness(), cand) == 17
+                # Just to make sure we can access the graph
+                @test fitness(SizeFitness(), cand) == nparams(graph)
 
                 graphmutation = VertexMutation(MutationFilter(v -> name(v)=="hlayer", AddVertexMutation(ArchSpace(DenseSpace([1], [relu])))))
                 optmutation = OptimizerMutation((Momentum, Nesterov, ADAM))
@@ -37,7 +42,7 @@
                 if ctype === CandidateModel
                     @test optimizer(newcand) === optimizer(cand) === Nothing
                 else
-                    @test optimizer(newcand) !== optimizer(cand)
+                    @test optimizer(newcand) !== optimizer(cand) !== Nothing
                 end
 
                 teststrat() = NaiveGAflux.default_crossoverswap_strategy(v -> ones(nout_org(v)))
@@ -145,7 +150,7 @@
 
         @testset "Global learning rate scaling" begin
             v1 = inputvertex("in", 3, FluxDense())
-            pop = CandidateOptModel.(Ref(CompGraph(v1, v1)), Descent.(0.1:0.1:1.0))
+            pop = CandidateOptModel.(Descent.(0.1:0.1:1.0), Ref(CompGraph(v1, v1)))
 
             lr(c) = c.opt.eta
             @test lr.(pop) == 0.1:0.1:1.0

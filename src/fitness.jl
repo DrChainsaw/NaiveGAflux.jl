@@ -1,4 +1,17 @@
 
+
+"""
+    fitness(f::AbstractFitness, c::AbstractCandidate)
+
+Compute the fitness metric `f` for candidate `c`.
+"""
+function fitness(f::AbstractFitness, c::AbstractCandidate)
+    val = _fitness(f, c)
+    release!(c)
+    return val
+end
+
+
 """
     LogFitness{F, MF} <: AbstractFitness
     LogFitness(fitnesstrategy::AbstractFitness) = LogFitness(;fitnesstrategy)
@@ -15,8 +28,9 @@ end
 LogFitness(fitnesstrategy::AbstractFitness) = LogFitness(;fitnesstrategy)
 LogFitness(;currgen=0, candcnt=0, fitnesstrategy, msgfun=default_fitnessmsgfun) = LogFitness(currgen, candcnt, fitnesstrategy, msgfun)
 
-function fitness(lf::LogFitness, c::AbstractCandidate, gen)
-    f = fitness(lf.fitstrat, c, gen)
+function _fitness(lf::LogFitness, c::AbstractCandidate)
+    f = _fitness(lf.fitstrat, c)
+    gen = generation(c; default=0)
     if gen != lf.currgen
         lf.candcnt = 0
         lf.currgen = gen
@@ -55,9 +69,9 @@ Note: Only works for mutable models, such as `CompGraph` since it can't change t
 struct GpuFitness{F} <: AbstractFitness
     f::F
 end
-function fitness(s::GpuFitness, c::AbstractCandidate, gen)
+function _fitness(s::GpuFitness, c::AbstractCandidate)
     NaiveNASflux.forcemutation(graph(c)) # Optimization: If there is a LazyMutable somewhere, we want it to do its thing now so we don't end up copying the model to the GPU only to then trigger another copy when the mutations are applied.
-    fitval = fitness(s.f, c |> gpu, gen)
+    fitval = _fitness(s.f, c |> gpu)
     c |> cpu # As some parts, namely CompGraph change internal state when mapping to GPU
     gpu_gc()
     return fitval
@@ -81,7 +95,7 @@ Measure fitness as the accuracy on a dataset.
 struct AccuracyFitness{D} <: AbstractFitness
     dataset::D
 end
-function fitness(s::AccuracyFitness, c::AbstractCandidate, gen)
+function _fitness(s::AccuracyFitness, c::AbstractCandidate)
     acc,cnt = 0, 0
     model = graph(c)
     for (x,y) in s.dataset
@@ -120,10 +134,11 @@ struct TrainThenFitness{I,L,O,F, IF} <: AbstractFitness
 end
 TrainThenFitness(;dataiter, defaultloss, defaultopt, fitstrat, invalidfitness=0.0) = TrainThenFitness(dataiter, defaultloss, defaultopt, fitstrat, invalidfitness)
 
-function fitness(s::TrainThenFitness, c::AbstractCandidate, gen)
+function _fitness(s::TrainThenFitness, c::AbstractCandidate)
     loss = lossfun(c; default=s.defaultloss)
     model = graph(c)
     ninput = ninputs(model)
+    gen = generation(c; default=0)
 
     valid = let valid = true
         nanguard = function(data...)
@@ -146,7 +161,7 @@ function fitness(s::TrainThenFitness, c::AbstractCandidate, gen)
         cleanopt(o)
         valid
     end
-    return valid ? fitness(s.fitstrat, c, gen) : s.invalidfitness
+    return valid ? _fitness(s.fitstrat, c) : s.invalidfitness
 end
 
 function checkvalid(ifnot, x)
@@ -190,7 +205,7 @@ struct TrainAccuracyFitnessInner{D} <: AbstractFitness
     drop::D
 end
 
-function fitness(s::TrainAccuracyFitnessInner, c::TrainAccuracyCandidate, gen)
+function _fitness(s::TrainAccuracyFitnessInner, c::TrainAccuracyCandidate)
     startind = max(1, 1+floor(Int, s.drop * length(c.acc)))
     return mean(@view c.acc[startind:end])
 end
@@ -213,7 +228,7 @@ struct TrainAccuracyFitness{T} <: AbstractFitness
 end
 TrainAccuracyFitness(;drop=0.5, kwargs...,) =  TrainAccuracyFitness( TrainThenFitness(;fitstrat=TrainAccuracyFitnessInner(drop), kwargs...)) 
 
-fitness(s::TrainAccuracyFitness, c::AbstractCandidate, gen) = fitness(s.train, TrainAccuracyCandidate(c), gen)
+_fitness(s::TrainAccuracyFitness, c::AbstractCandidate) = _fitness(s.train, TrainAccuracyCandidate(c))
 
 
 """
@@ -226,7 +241,7 @@ struct MapFitness <: AbstractFitness
     mapping::Function
     base::AbstractFitness
 end
-fitness(s::MapFitness, c::AbstractCandidate, gen) = fitness(s.base, c, gen) |> s.mapping
+_fitness(s::MapFitness, c::AbstractCandidate) = _fitness(s.base, c) |> s.mapping
 
 
 """
@@ -245,9 +260,9 @@ struct EwmaFitness{F} <: AbstractFitness
 end
 EwmaFitness(base) = EwmaFitness(0.5, base)
 
-function fitness(s::EwmaFitness, c::AbstractCandidate, gen)
+function _fitness(s::EwmaFitness, c::AbstractCandidate)
     prev = fitness(c)
-    curr = fitness(s.base, c, gen)
+    curr = _fitness(s.base, c)
     return ewma(curr, prev, s.α)
 end
 
@@ -268,8 +283,8 @@ Function needs to be instrumented using [`instrument`](@ref).
 struct TimeFitness{T} <: AbstractFitness
     fitstrat::T
 end
-function fitness(s::TimeFitness, c::AbstractCandidate, gen)
-    res, t, bytes, gctime = @timed fitness(s.fitstrat, c, gen)
+function _fitness(s::TimeFitness, c::AbstractCandidate)
+    res, t, bytes, gctime = @timed _fitness(s.fitstrat, c)
     return t - gctime, res
 end
 
@@ -285,7 +300,7 @@ Note: relies on Flux.params which does not work for functions which have been in
 To handle intrumentation, an attempt to extract the size is also made when instrumenting for `Validation`. Whether this works or not depends on the order in which fitness functions are combined.
 """
 struct SizeFitness <: AbstractFitness end
-fitness(s::SizeFitness, c::AbstractCandidate, gen) = nparams(c)
+_fitness(s::SizeFitness, c::AbstractCandidate) = nparams(c)
     
 
 """
@@ -301,4 +316,4 @@ end
 AggFitness(aggfun) = error("Must supply an aggregation function an at least one fitness")
 AggFitness(aggfun, fitnesses::AbstractFitness...) = AggFitness(aggfun, fitnesses)
 
-fitness(s::AggFitness, c::AbstractCandidate, gen) = mapfoldl(fs -> fitness(fs, c, gen), s.aggfun, s.fitnesses)
+_fitness(s::AggFitness, c::AbstractCandidate) = mapfoldl(fs -> _fitness(fs, c), s.aggfun, s.fitnesses)
