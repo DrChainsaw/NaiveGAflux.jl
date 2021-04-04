@@ -35,7 +35,7 @@ function default_fitnessmsgfun(i, c, f; level::Logging.LogLevel = Logging.Info)
     else
         nps = @sprintf "%5.2fk" (nps / 1e3)
     end
-    msg = @sprintf "  Candidate: %i\tvertices: %i\tparams: %s\tfitness: %f" i nvs nps f
+    msg = @sprintf " Candidate: %3i\tvertices: %3i\tparams: %s\tfitness: %s" i nvs nps f
     @logmsg level msg
 end
 

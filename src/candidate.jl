@@ -169,6 +169,8 @@ end
 FittedCandidate(c::AbstractCandidate, f::AbstractFitness, gen) = FittedCandidate(gen, fitness(c, f, gen), c)
 FittedCandidate(c::FittedCandidate, f::AbstractFitness, gen) = FittedCandidate(wrappedcand(c), f ,gen)
 
+Flux.@functor FittedCandidate
+
 fitness(c::FittedCandidate) = c.fitness
 
 

@@ -266,7 +266,7 @@ Intended use is to quickly abort training of models which take very long time to
 
 By default, calling `timeoutaction()` will not stop the iteration as this would break otherwise convenient functions like `length`, `collect` and `map`. Let `timeoutaction()` return `TimedIteratorStop` to stop iteration.
 
-If `accumulate_timeouts` is `false` then counting will reset every when time between iterations is shorter than `timelimit`, otherwise it will not.
+If `accumulate_timeouts` is `false` then counting will reset when time between iterations is shorter than `timelimit`, otherwise it will not.
 """ 
 struct TimedIterator{F,A,I}
     timelimit::F
