@@ -82,19 +82,11 @@
     end
 
     @testset "EwmaFitness" begin
-        cnt = 0
-        fvals = [10.0, 20.0, 20.0]
-        function stepfun(f)
-            cnt = cnt+1
-            return fvals[cnt] * f
-        end
+        import NaiveGAflux: FittedCandidate
 
-        ef = EwmaFitness(MapFitness(stepfun, MockFitness(1)))
-        efc = deepcopy(ef)
-
-        @test fitness(ef, IdCand()) == fitness(efc, IdCand()) == 10
-        @test fitness(ef, IdCand()) == fitness(efc, IdCand()) == 15
-        @test fitness(ef, IdCand()) == fitness(efc, IdCand()) == 17.5
+        @test fitness(EwmaFitness(MockFitness(10)), IdCand(), 0) == 10
+        @test fitness(EwmaFitness(MockFitness(20)), FittedCandidate(0, 10, IdCand()), 0) == 15
+        @test fitness(EwmaFitness(MockFitness(20)), FittedCandidate(0, 15, IdCand()), 0) == 17.5
     end
 
     @testset "TimeFitness" begin

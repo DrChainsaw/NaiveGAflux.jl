@@ -20,6 +20,8 @@ fitness(c::AbstractCandidate, f::AbstractFitness, gen) = fitness(f, c, gen)
 graph(c::AbstractCandidate, f=identity; default=nothing) = f(default)
 opt(c::AbstractCandidate; default=nothing) = default
 lossfun(c::AbstractCandidate; default=nothing) = default
+fitness(c::AbstractCandidate; default=nothing) = default
+
 
 wrappedcand(::T) where T <: AbstractCandidate = error("$T does not wrap any candidate! Check your base case!")
 
@@ -45,6 +47,8 @@ graph(c::AbstractWrappingCandidate) = graph(wrappedcand(c))
 graph(c::AbstractWrappingCandidate, f; kwargs...) = graph(wrappedcand(c), f; kwargs...)
 opt(c::AbstractWrappingCandidate; kwargs...) = opt(wrappedcand(c); kwargs...)
 lossfun(c::AbstractWrappingCandidate; kwargs...) = lossfun(wrappedcand(c); kwargs...)
+fitness(c::AbstractWrappingCandidate; kwargs...) = fitness(wrappedcand(c); kwargs...)
+
 
 """
     CandidateModel <: Candidate
@@ -171,7 +175,7 @@ FittedCandidate(c::FittedCandidate, f::AbstractFitness, gen) = FittedCandidate(w
 
 Flux.@functor FittedCandidate
 
-fitness(c::FittedCandidate) = c.fitness
+fitness(c::FittedCandidate; default=nothing) = c.fitness
 
 
 nparams(c::AbstractCandidate) = graph(c, nparams)

@@ -233,21 +233,27 @@ fitness(s::MapFitness, c::AbstractCandidate, gen) = fitness(s.base, c, gen) |> s
     EwmaFitness(base)
     EwmaFitness(α, base)
 
-Computes the exponentially weighted moving average of the fitness of `base`.
+Computes the exponentially weighted moving average of the fitness of `base`. Assumes that candidates previous fitness metric is available through `fitness(cand)`.
 
 Main purpose is to mitigate the effects of fitness noise.
 
-The filter is updated each time `fitness` is called, so practical use requires the fitness to be wrapped in a `CacheFitness`.
-
 See `https://github.com/DrChainsaw/NaiveGAExperiments/blob/master/fitnessnoise/experiments.ipynb` for some hints as to why this might be needed.
 """
-EwmaFitness(base) = EwmaFitness(0.5, base)
-function EwmaFitness(α, base)
-    avgfitness = missing
-    ewma = Ewma(α)
-    state(x) = avgfitness = NaiveNASflux.agg(ewma, avgfitness, x)
-    return MapFitness(state, base)
+struct EwmaFitness{F}
+    α::Float64
+    base::F
 end
+EwmaFitness(base) = EwmaFitness(0.5, base)
+
+function fitness(s::EwmaFitness, c::AbstractCandidate, gen)
+    prev = fitness(c)
+    curr = fitness(s.base, c, gen)
+    return ewma(curr, prev, s.α)
+end
+
+ewma(curr, prev, α) = (1 - α) .* curr + α .* prev
+ewma(curr, ::Nothing, α) = curr
+
 
 
 """
