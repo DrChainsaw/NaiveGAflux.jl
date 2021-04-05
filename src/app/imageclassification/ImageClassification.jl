@@ -101,7 +101,7 @@ function AutoFlux.fit(c::ImageClassifier, fitnesstrategy::AbstractFitness, evost
     # If experiment was resumed we should start by evolving as population is persisted right before evolution
     population = generation(population) > 1 ? evolve(evostrategy, population) : population
 
-    logfitness = LogFitness(;currgen=generation(population), fitnesstrategy)
+    logfitness = LogFitness(;fitnesstrategy)
 
     return evolutionloop(population, evostrategy, logfitness, stopcriterion, cb)
 end

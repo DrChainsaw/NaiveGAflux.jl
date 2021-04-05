@@ -30,7 +30,7 @@ LogFitness(;currgen=0, candcnt=0, fitnesstrategy, msgfun=default_fitnessmsgfun) 
 
 function _fitness(lf::LogFitness, c::AbstractCandidate)
     f = _fitness(lf.fitstrat, c)
-    gen = generation(c; default=0)
+    gen = generation(c; default=lf.currgen)
     if gen != lf.currgen
         lf.candcnt = 0
         lf.currgen = gen

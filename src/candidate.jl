@@ -183,14 +183,20 @@ struct FittedCandidate{F, C <: AbstractCandidate} <: AbstractWrappingCandidate
     c::C
 end
 FittedCandidate(c::AbstractCandidate, f::AbstractFitness, gen) = FittedCandidate(gen, fitness(f, c), c)
-FittedCandidate(c::FittedCandidate, f::AbstractFitness, gen) = FittedCandidate(wrappedcand(c), f, gen)
+FittedCandidate(c::FittedCandidate, f::AbstractFitness, gen) = FittedCandidate(gen, fitness(f, c), wrappedcand(c))
 
 Flux.@functor FittedCandidate
 
 fitness(c::FittedCandidate; default=nothing) = c.fitness
 generation(c::FittedCandidate; default=nothing) = c.gen
 
-newcand(c::FittedCandidate, mapfield) = FittedCandidate(c.gen+1, c.fitness, newcand(wrappedcand(c), mapfield))
+# Some fitness functions make use of gen and fitness value :/ 
+# This is a bit of an ugly inconsistency that I hope to fix one day is it is not beautiful that the fitness of a 
+# new candidate is that same as its ancestor. It is the wanted behaviour for e.g. EwmaFitness though and 
+# as of version 0.8.0 fitness does not longer carry any state. 
+# Maybe I need to come up with a mechanism for that. As of now, alot of fitness strategies will not work properly 
+# if they are not passed a FittedCandidate. Perhaps having some kind of fitness state container in each candidate?
+newcand(c::FittedCandidate, mapfield) = FittedCandidate(c.gen, c.fitness, newcand(wrappedcand(c), mapfield))
 
 nparams(c::AbstractCandidate) = graph(c, nparams)
 nparams(x) = mapreduce(prod ∘ size, +, params(x).order; init=0)
