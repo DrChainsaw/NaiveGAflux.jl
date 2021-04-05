@@ -129,8 +129,9 @@ remlayer = mp(RemoveVertexMutation(), 0.4)
 mutation = MutationChain(remlayer, addlayer)
 
 # Selection:
-# The two best models are not changed, the rest are mutated using mutation defined above
+# The two best models are not changed
 elites = EliteSelection(2)
+# Three new candidates are produced by selecting three canidates from the whole population and mutating them
 mutate = SusSelection(3, EvolveCandidates(evolvemodel(mutation)))
 selection = CombinedEvolution(elites, mutate)
 
