@@ -179,7 +179,7 @@ end
 TrainIterConfig(;nbatches_per_gen=400, baseconfig=ShuffleIterConfig()) = TrainIterConfig(nbatches_per_gen,baseconfig)
 function dataiter(s::TrainIterConfig, x, y)
     baseiter = dataiter(s.baseconfig, x, y)
-    return RepeatPartitionIterator(Iterators.cycle(baseiter), s.nbatches_per_gen)
+    return RepeatPartitionIterator(baseiter, s.nbatches_per_gen)
 end
 
 dataiter(x::AbstractArray,y::AbstractArray{T, 1}, args...) where T = _dataiter(x,y, args...,yi -> Flux.onehotbatch(yi, sort(unique(y))))
@@ -189,7 +189,11 @@ function _dataiter(x::AbstractArray,y::AbstractArray, bs::Integer, seed::Integer
     xiter = shuffleiter(x, bs, seed)
     yiter = shuffleiter(y, bs, seed)
     # iterates feature/label pairs
-    biter = zip(xwrap(xiter), ywrap(yiter))
+    # Cycle is pretty important here. It is what makes it so that each generation sees a new shuffle
+    # This is also what makes SeedIterators useful with random data augmentation: 
+    #   - Even if SeedIterator makes the augmentation itself the same, it will be applied to different images 
+    # Something ought to be done about the inconsistency vs BatchedIterConfig through...
+    biter = Iterators.cycle(zip(xwrap(xiter), ywrap(yiter)))
     # Ensures all models see the exact same examples, even when a RepeatStatefulIterator restarts iteration.
     return SeedIterator(SeedIterator(biter;rng=xiter.rng); rng=yiter.rng)
 end

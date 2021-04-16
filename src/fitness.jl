@@ -137,6 +137,7 @@ TrainThenFitness(;dataiter, defaultloss, defaultopt, fitstrat, invalidfitness=0.
 function _fitness(s::TrainThenFitness, c::AbstractCandidate)
     loss = lossfun(c; default=s.defaultloss)
     model = graph(c)
+    o = opt(c; default=s.defaultopt)
     ninput = ninputs(model)
     gen = generation(c; default=0)
 
@@ -148,15 +149,17 @@ function _fitness(s::TrainThenFitness, c::AbstractCandidate)
             y = data[ninput+1:end]
             l = loss(ŷ, y...)   
             
-            checkvalid(l) do badval
-                @warn "$badval loss detected when training!"
-                valid = false
-                Flux.stop()
+            nograd() do 
+                checkvalid(l) do badval
+                    @warn "$badval loss detected when training!"
+                    # Flux.stop will exit this function immediately before we have a chance to return valid
+                    valid = false
+                    Flux.stop()
+                end
             end
             return l
         end
         iter = itergeneration(s.dataiter, gen)
-        o = opt(c; default=s.defaultopt)
         Flux.train!(nanguard, params(model), iter, o)
         cleanopt(o)
         valid

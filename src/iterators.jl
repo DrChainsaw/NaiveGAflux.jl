@@ -40,12 +40,12 @@ function Base.iterate(itr::RepeatPartitionIterator, reset=true)
 end
 
 Base.length(itr::RepeatPartitionIterator) = ceil(Int, length(itr.base) / itr.ntake)
-Base.eltype(itr::RepeatPartitionIterator{T}) where T = T
+Base.eltype(itr::RepeatPartitionIterator) = eltype(itr.base)
 Base.size(itr::RepeatPartitionIterator) = size(itr.base.itr)
 
 
 Base.IteratorSize(itr::RepeatPartitionIterator) = Base.IteratorSize(itr.base.itr)
-Base.IteratorEltype(itr::RepeatPartitionIterator) = Base.HasEltype()
+Base.IteratorEltype(itr::RepeatPartitionIterator) = Base.IteratorEltype(itr.base.itr)
 
 
 struct RepeatStatefulIterator{T, VS}
@@ -69,7 +69,7 @@ Base.eltype(itr::RepeatStatefulIterator) = eltype(itr.base)
 Base.size(itr::RepeatStatefulIterator) = size(itr.base.itr)
 
 Base.IteratorSize(itr::RepeatStatefulIterator) = Base.IteratorSize(itr.base.itr)
-Base.IteratorEltype(itr::RepeatStatefulIterator) = Base.HasEltype()
+Base.IteratorEltype(itr::RepeatStatefulIterator) = Base.IteratorEltype(itr.base.itr)
 
 """
     StatefulGenerationIter{T, VS}
