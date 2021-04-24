@@ -197,7 +197,7 @@ function _dataiter(x::AbstractArray,y::AbstractArray, bs::Integer, seed::Integer
     # Ensures all models see the exact same examples, even when a RepeatStatefulIterator restarts iteration.
     return SeedIterator(SeedIterator(biter;rng=xiter.rng); rng=yiter.rng)
 end
-shuffleiter(x, batchsize, seed) = ShuffleIterator(NaiveGAflux.Singleton(x), batchsize, MersenneTwister(seed))
+shuffleiter(x, batchsize, seed) = ShuffleIterator(x, batchsize, MersenneTwister(seed))
 
 function _dataiter(x::AbstractArray, y::AbstractArray, bs::Integer, xwrap, ywrap = identity)
     xiter = BatchIterator(x, bs)

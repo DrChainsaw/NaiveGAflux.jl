@@ -111,12 +111,7 @@
     end
 
     @testset "SizeFitness" begin
-        import NaiveGAflux: Validate
-
-        sf = SizeFitness()
-        c = MockCandidate(Dense(2,3))
-
-        @test fitness(sf, c) == 9
+        @test fitness(SizeFitness(), MockCandidate(Dense(2,3))) == 9
     end
 
     @testset "AggFitness" begin
