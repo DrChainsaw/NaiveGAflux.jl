@@ -423,7 +423,8 @@ function canshrink(v, inshape)
     # Also assumes single output after a global pool and flatten
     allvs = all_in_graph(v)
     gpv = allvs[findfirst(is_globpool, allvs)] |> inputs |> first
-    return all(fshape(shapetrace(gpv) |> squashshapes, inshape) .> 1)
+    # Minsize 2 below is workaround for https://github.com/JuliaGPU/CUDA.jl/issues/848
+    return all(fshape(shapetrace(gpv) |> squashshapes, inshape) .> 2)
 end
 
 function infork(v, inputcnt = Dict{AbstractVertex, Int}(inputs(v) .=> 1), seen = Set())

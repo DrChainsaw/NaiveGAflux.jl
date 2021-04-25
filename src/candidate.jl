@@ -93,11 +93,12 @@ mutable struct FileCandidate{C, R<:Real, L<:Base.AbstractLock} <: AbstractWrappi
     movedelay::R
     movetimer::Timer
     writelock::L
+    hold::Bool
     function FileCandidate(c::C, movedelay::R) where {C, R}
         cref = MemPool.poolset(c)
         writelock = ReentrantLock()
         movetimer = asynctodisk(cref, movedelay, writelock)
-        fc = new{C, R, typeof(writelock)}(cref, movedelay, movetimer, writelock)
+        fc = new{C, R, typeof(writelock)}(cref, movedelay, movetimer, writelock, false)
         finalizer(gfc -> MemPool.pooldelete(gfc.c), fc)
         return fc
      end
@@ -110,11 +111,18 @@ function callcand(f, c::FileCandidate, args...)
 
     # writelock means that the candidate is being moved to disk. We need to wait for it or risk data corruption
     islocked(c.writelock) && @warn "Try to access FileCandidate which is being moved to disk. Consider retuning of movedelay!"
-    ret = lock(c.writelock) do
+    ret= lock(c.writelock) do
         f(MemPool.poolget(c.c), args...)
     end
-    c.movetimer = asynctodisk(c.c, c.movedelay, c.writelock)
+    if !c.hold
+        c.movetimer = asynctodisk(c.c, c.movedelay, c.writelock)
+    end
     return ret
+end
+
+candinmem(c::FileCandidate) = candinmem(c.c)
+candinmem(r::MemPool.DRef) =  MemPool.with_datastore_lock() do
+    haskey(MemPool.datastore, r.id) && MemPool.isinmemory(MemPool.datastore[r.id])
 end
 
 function asynctodisk(r::MemPool.DRef, delay, writelock)
@@ -126,11 +134,7 @@ end
 function candtodisk(r::MemPool.DRef, writelock)
     lock(writelock) do
         # Not sure why this can even happen, but it does. Bug lurking...
-        inmem = MemPool.with_datastore_lock() do
-            haskey(MemPool.datastore, r.id) && MemPool.isinmemory(MemPool.datastore[r.id])
-        end
-        inmem || return
-
+        candinmem(r) || return
         # Remove file if it exists or else MemPool won't move it
         rm(MemPool.default_path(r); force=true)
         MemPool.movetodisk(r)
@@ -138,6 +142,7 @@ function candtodisk(r::MemPool.DRef, writelock)
 end
 
 function release!(c::FileCandidate)
+    c.hold = false
     release!(wrappedcand(c))
     close(c.movetimer)
     c.movetimer = asynctodisk(c.c, c.movedelay, c.writelock)
@@ -160,6 +165,7 @@ end
 Flux.functor(c::FileCandidate) = callcand(Flux.functor, c)
 
 function wrappedcand(c::FileCandidate) 
+    c.hold = true
     close(c.movetimer)
     MemPool.poolget(c.c)
 end

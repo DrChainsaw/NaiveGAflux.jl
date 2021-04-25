@@ -64,8 +64,9 @@
     end
 
     @testset "FileCandidate" begin
+        import NaiveGAflux: graph
         try
-            @testset "FileCandidate cleanup" begin
+           @testset "FileCandidate cleanup" begin
                 fc = FileCandidate([1,2,3], 1.0)
                 # Waiting for timer to end does not seem to be reliable, so we'll just stop the timer and call the timeout function manually
                 close(fc.movetimer)
@@ -88,12 +89,11 @@
                 cand2 = Flux.fmap(mul, cand1)
 
                 indata = collect(Float32, reshape(1:6,3,2))
-                @test NaiveGAflux.graph(cand2)(indata) == 2 .* indata
+                @test graph(cand2)(indata) == 2 .* indata
             end
 
             @testset "Serialization" begin
                 using Serialization
-
 
                 v = mutable("v1", Dense(3,3), inputvertex("in", 3, FluxDense()))
                 secand = FileCandidate(CandidateModel(CompGraph(inputs(v)[], v)))
@@ -111,7 +111,38 @@
 
                 decand = deserialize(io)
 
-                @test NaiveGAflux.graph(decand)(indata) == expected
+                @test graph(decand)(indata) == expected
+            end
+
+            @testset "Hold in mem" begin
+                import NaiveGAflux: wrappedcand, callcand, candinmem
+                struct BoolCand <: AbstractCandidate
+                    x::Ref{Bool}
+                end
+                testref(c::BoolCand, f=identity) = f(c.x)
+                testref(c::AbstractWrappingCandidate) = testref(wrappedcand(c))
+                testref(c::FileCandidate, f) =  callcand(testref, c, f)             
+
+                fc = FileCandidate(BoolCand(Ref(true)), 0.1)
+                
+                #1 test the testcase: Change true to false after move to disk
+                x = testref(fc, identity) # And neither should this now
+                @test isopen(fc.movetimer)
+
+                t0 = time()
+                while candinmem(fc) && time() - t0 < 5
+                    sleep(0.01)
+                end
+                @test time() - t0 < 5 # Or else we timed out
+                x[] = false
+
+                @test false == x[] != testref(fc)[] # Note graph(fc) should not start movetimer
+                @test !isopen(fc.movetimer)
+                
+                x = testref(fc, identity) # And neither should this now
+                @test !isopen(fc.movetimer)
+                NaiveGAflux.release!(fc)
+                @test isopen(fc.movetimer)
 
             end
         finally
