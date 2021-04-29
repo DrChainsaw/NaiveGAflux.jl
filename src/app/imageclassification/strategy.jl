@@ -151,6 +151,9 @@ Configuration for creating shuffled batch iterators from array data. Data will b
 The function `dataiter(s::ShuffleIterConfig, x, y)` creates an iterator which returns a tuple of batches from `x` and `y` respectively.
 
 More specifically, the result of `s.iterwrap(zip(s.dataaug(bx), by))` will be returned where `bx` and `by` are `ShuffleIterator`s.
+
+Note there there is no upper bound on how many generations are supported as the returned iterator cycles the data indefinitely. Use e.g. `Iterators.take(itr, cld(nepochs * nbatches_per_epoch, nbatches_per_gen))` to limit to `nepochs`
+epochs. 
 """
 struct ShuffleIterConfig{T, V}
     batchsize::Int
@@ -169,8 +172,6 @@ dataiter(s::ShuffleIterConfig, x, y) = dataiter(x, y, s.batchsize, s.seed, s.dat
 
 Standard training strategy for creating a batched iterators from data. Data from `baseconfig` is cycled in partitions of `nbatches_per_gen` each generation using a [`RepeatPartitionIterator`](@ref).
 
-Note there there is no upper bound on how many generations are supported as the returned iterator cycles the data indefinitely. Use e.g. `Iterators.take(itr, cld(nepochs * nbatches_per_epoch, nbatches_per_gen))` to limit to `nepochs`
-epochs. 
 """
 struct TrainIterConfig{T}
     nbatches_per_gen::Int
@@ -423,8 +424,7 @@ function canshrink(v, inshape)
     # Also assumes single output after a global pool and flatten
     allvs = all_in_graph(v)
     gpv = allvs[findfirst(is_globpool, allvs)] |> inputs |> first
-    # Minsize 2 below is workaround for https://github.com/JuliaGPU/CUDA.jl/issues/848
-    return all(fshape(shapetrace(gpv) |> squashshapes, inshape) .> 2)
+    return all(fshape(shapetrace(gpv) |> squashshapes, inshape) .> 1)
 end
 
 function infork(v, inputcnt = Dict{AbstractVertex, Int}(inputs(v) .=> 1), seen = Set())
