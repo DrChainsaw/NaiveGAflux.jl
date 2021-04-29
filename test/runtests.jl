@@ -59,11 +59,11 @@ using Test
     @info "Testing visualization"
     include("visualization/callbacks.jl")
 
-    if VERSION === v"1.6.0"
+    if VERSION === v"1.6.1"
         @info "Testing README examples"
         include("examples.jl")
     else
-        @warn "README examples will only be tested in julia version 1.6.0 due to rng dependency. Skipping..."
+        @warn "README examples will only be tested in julia version 1.6.1 due to rng dependency. Skipping..."
     end
 
     @info "Testing AutoFlux"
