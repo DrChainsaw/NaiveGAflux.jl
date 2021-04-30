@@ -552,8 +552,7 @@ ctime, examplemetric = fitness(TimeFitness(ExampleFitness()), ExampleCandidate(3
 Evolution strategies are the functions used to evolve the population in the genetic algorithm from one generation to the next. The following is performed by evolution strategies:
 
 * Select which candidates to use for the next generation
-* Mutate the selected candidates
-* Reset/clear state so that the population is prepared for the next generation
+* Produce new candidates, e.g by mutating the selected candidates
 
 Important to note about evolution strategies is that they generally expect candidates which can provide a precomputed fitness value, e.g. `FittedCandidate`s. This is because the fitness value is used by things like sorting where it is not only impractical to recompute it, but is also might lead to undefined behaviour if it is not always the same. Use `Population` to get some help with computing fitness for all candidates before passing them on to evolution.
 
