@@ -30,7 +30,7 @@ function PlotFitness(plotfun, rootdir, subdir="PlotFitness")
     basedir = joinpath(rootdir, subdir)
     best = loadifpresent(joinpath(basedir, "best.jls"))
     avg = loadifpresent(joinpath(basedir, "avg.jls"))
-    plt = plotfun(collect(Int, 1:length(best)), hcat(best,avg), label=["Best" "Avg"], xlabel="Generation", ylabel="Fitness", m=[:circle, :circle], legend=:bottomright)
+    plt = plotfun(collect(Int, 1:length(best)), hcat(best,avg), label=["Best" "Avg"], xlabel="Generation", ylabel="Fitness", m=:circle, legend=:bottomright)
     return PlotFitness(best, avg, plt, basedir)
 end
 
@@ -94,7 +94,7 @@ function plotgen(p::ScatterPop, gen=length(p.data))
     nverts = data[:,1]
     fits = data[:,2]
     npars = data[:,3]
-    return p.plotfun(nverts, fits, zcolor=log10.(npars), m=(:heat, 0.8), xlabel="Number of vertices", ylabel="Fitness", colorbar_title="Number of parameters (log10)", label="")
+    return p.plotfun(nverts, fits, zcolor=log10.(npars), m=(:heat, 0.8), xlabel="Number of vertices", ylabel="Fitness", colorbar_title="Number of parameters (log10)", label=nothing)
 end
 
 function(p::ScatterPop)(population)

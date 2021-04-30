@@ -132,3 +132,51 @@ end
         end
     end
 end
+
+@testset "StatefulGenerationIter" begin
+    import NaiveGAflux: itergeneration, StatefulGenerationIter
+    ritr = RepeatPartitionIterator(BatchIterator(1:20, 3), 4)
+    sitr = RepeatPartitionIterator(BatchIterator(1:20, 3), 4) |> StatefulGenerationIter
+    for (i, itr) in enumerate(ritr)
+        @test collect(itr) == collect(itergeneration(sitr, i))
+    end
+end
+
+@testset "TimedIterator" begin
+
+    @testset "No stopping accumulate = $acc" for (acc, exp) in (
+        (true, 7),
+        (false, 0)
+    )
+        timeoutcnt = 0
+
+        titer = TimedIterator(;timelimit=0.1, patience=2, timeoutaction = () -> timeoutcnt += 1, accumulate_timeouts=acc, base=1:10)
+
+        @test collect(titer) == 1:10
+        @test timeoutcnt === 0 # Or else we'll have flakey tests...
+
+        for i in titer
+            if iseven(i)
+                sleep(0.11) # Does not matter here if overloaded CI VM takes longer than this to get back to us
+            end
+        end
+        # When accumulating timeouts: after 1,2,3,4 our patience is up, call timeoutaction for 4,5,6,7,8,9,10
+        # When not accumulating: We never reach patience level 
+        @test timeoutcnt == exp 
+    end
+
+    @testset "Stop iteration at timeout" begin
+        # also test that we really timeout when not accumulating here
+        titer = TimedIterator(;timelimit=0.1, patience=4, timeoutaction = () -> TimedIteratorStop, accumulate_timeouts=false, base=1:10)
+
+        last = 0
+        for i in titer
+            last = i
+            if i > 2
+                sleep(0.11) # Does not matter here if overloaded CI VM takes longer than this to get back to us
+            end
+        end
+        @test last === 6 # Sleep after 2, then 4 patience
+    end
+
+end

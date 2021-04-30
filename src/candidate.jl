@@ -1,113 +1,104 @@
 """
     AbstractCandidate
 
-Abstract base type for canidates
+Abstract base type for candidates
 """
 abstract type AbstractCandidate end
 
 """
-    reset!(c::AbstractCandidate)
+    AbstractFitness
 
-Reset state of `c`. Typically needs to be called after evolution to clear old fitness computations.
+Abstract type for fitness functions
 """
-reset!(c::AbstractCandidate) = reset!(wrappedcand(c))
+abstract type AbstractFitness end
+
+
 Base.Broadcast.broadcastable(c::AbstractCandidate) = Ref(c)
 
-wrappedcand(c::AbstractCandidate) = c.c
-graph(c::AbstractCandidate) = graph(wrappedcand(c))
-# This is mainly for FileCandidate to allow for writing the graph back to disk after f is done
-graph(c::AbstractCandidate, f) = graph(wrappedcand(c), f)
+release!(::AbstractCandidate) = nothing
+graph(c::AbstractCandidate, f=identity; default=nothing) = f(default)
+opt(c::AbstractCandidate; default=nothing) = default
+lossfun(c::AbstractCandidate; default=nothing) = default
+fitness(c::AbstractCandidate; default=nothing) = default
+generation(c::AbstractCandidate; default=nothing) = default
 
-opt(c::AbstractCandidate) = opt(wrappedcand(c))
+
+wrappedcand(::T) where T <: AbstractCandidate = error("$T does not wrap any candidate! Check your base case!")
+
+"""
+    AbstractWrappingCandidate <: AbstractCandidate
+
+Abstract base type for candidates which wrap other candidates.
+
+Should implement `wrappedcand(c)` to get lots of stuff handled automatically.
+"""
+abstract type AbstractWrappingCandidate <: AbstractCandidate end
+
+wrappedcand(c::AbstractWrappingCandidate) = c.c
+
+release!(c::AbstractWrappingCandidate) = release!(wrappedcand(c))
+
+graph(c::AbstractWrappingCandidate) = graph(wrappedcand(c))
+# This is mainly for FileCandidate to allow for writing the graph back to disk after f is done
+graph(c::AbstractWrappingCandidate, f; kwargs...) = graph(wrappedcand(c), f; kwargs...)
+opt(c::AbstractWrappingCandidate; kwargs...) = opt(wrappedcand(c); kwargs...)
+lossfun(c::AbstractWrappingCandidate; kwargs...) = lossfun(wrappedcand(c); kwargs...)
+fitness(c::AbstractWrappingCandidate; kwargs...) = fitness(wrappedcand(c); kwargs...)
+generation(c::AbstractWrappingCandidate; kwargs...) = generation(wrappedcand(c); kwargs...)
+
 
 """
     CandidateModel <: Candidate
-    CandidateModel(model, optimizer, lossfunction, fitness)
+    CandidateModel(model)
 
 A candidate model consisting of a `CompGraph`, an optimizer a lossfunction and a fitness method.
 """
-struct CandidateModel{G,O,L,F} <: AbstractCandidate
+struct CandidateModel{G} <: AbstractCandidate
     graph::G
+end
+
+Flux.@functor CandidateModel
+
+graph(c::CandidateModel, f=identity; kwargs...) = f(c.graph)
+
+newcand(c::CandidateModel, mapfield) = CandidateModel(map(mapfield, getproperty.(c, fieldnames(CandidateModel)))...)
+
+"""
+    CandidateOptModel <: AbstractCandidate
+    CandidateOptModel(candidate, optimizer)
+
+A candidate adding an optimizer to another candidate.
+"""
+struct CandidateOptModel{O, C <: AbstractCandidate} <: AbstractWrappingCandidate
     opt::O
-    lossfun::L
-    fitness::F
-end
-
-Flux.functor(c::CandidateModel) = (c.graph, c.opt, c.lossfun), gcl -> CandidateModel(gcl..., c.fitness)
-
-function Flux.train!(model::CandidateModel, data)
-    f = instrument(Train(), model.fitness, model.graph)
-    loss(x,y) = model.lossfun(f(x), y)
-    iloss = instrument(TrainLoss(), model.fitness, loss)
-    Flux.train!(iloss, Flux.params(model.graph), data, model.opt)
-end
-
-Flux.train!(model::CandidateModel, data::Tuple{<:AbstractArray, <:AbstractArray}) = Flux.train!(model, [data])
-
-fitness(model::CandidateModel) = fitness(model.fitness, instrument(Validate(), model.fitness, model.graph))
-
-reset!(model::CandidateModel) = reset!(model.fitness)
-
-graph(model::CandidateModel, f=identity) = f(model.graph)
-
-opt(c::CandidateModel) = c.opt
-
-wrappedcand(c::CandidateModel) = error("CandidateModel does not wrap any candidate! Check your base case!")
-
-
-"""
-    HostCandidate <: AbstractCandidate
-    HostCandidate(c::AbstractCandidate)
-
-Keeps `c` in host memory and transfers to GPU when training or calculating fitness.
-"""
-struct HostCandidate{C} <: AbstractCandidate
     c::C
 end
+CandidateOptModel(opt, g::CompGraph) = CandidateOptModel(opt, CandidateModel(g))
 
-Flux.@functor HostCandidate
+Flux.@functor CandidateOptModel
 
-function Flux.train!(c::HostCandidate, data)
-    NaiveNASflux.forcemutation(graph(c)) # Optimization: If there is a LazyMutable somewhere, we want it to do its thing now so we don't end up copying the model to the GPU only to then trigger another copy when the mutations are applied.
-    Flux.train!(c.c |> gpu, data)
-    cleanopt(c) # As optimizer state does not survive transfer from gpu -> cpu
-    c.c |> cpu # As some parts, namely CompGraph change internal state when mapping to GPU
-    gpu_gc()
-end
+opt(c::CandidateOptModel; kwargs...) = c.opt 
 
-function fitness(c::HostCandidate)
-    fitval = fitness(c.c |> gpu)
-    c.c |> cpu # As some parts, namely CompGraph change internal state when mapping to GPU
-    gpu_gc()
-    return fitval
-end
-
-const gpu_gc = if CUDA.functional()
-    function()
-        GC.gc()
-        CUDA.reclaim()
-    end
-else
-    () -> nothing
-end
+newcand(c::CandidateOptModel, mapfield) = CandidateOptModel(mapfield(c.opt), newcand(wrappedcand(c), mapfield))
 
 """
-    FileCandidate
+    FileCandidate <: AbstractWrappingCandidate
 
 Keeps `c` on disk when not in use and just maintains its [`DRef`](@ref).
 
 Experimental feature. May not work as intended!
 """
-mutable struct FileCandidate{C, R<:Real, L<:Base.AbstractLock} <: AbstractCandidate
+mutable struct FileCandidate{C, R<:Real, L<:Base.AbstractLock} <: AbstractWrappingCandidate
     c::MemPool.DRef
     movedelay::R
     movetimer::Timer
     writelock::L
+    hold::Bool
     function FileCandidate(c::C, movedelay::R) where {C, R}
         cref = MemPool.poolset(c)
         writelock = ReentrantLock()
         movetimer = asynctodisk(cref, movedelay, writelock)
-        fc = new{C, R, typeof(writelock)}(cref, movedelay, movetimer, writelock)
+        fc = new{C, R, typeof(writelock)}(cref, movedelay, movetimer, writelock, false)
         finalizer(gfc -> MemPool.pooldelete(gfc.c), fc)
         return fc
      end
@@ -120,11 +111,18 @@ function callcand(f, c::FileCandidate, args...)
 
     # writelock means that the candidate is being moved to disk. We need to wait for it or risk data corruption
     islocked(c.writelock) && @warn "Try to access FileCandidate which is being moved to disk. Consider retuning of movedelay!"
-    ret = lock(c.writelock) do
+    ret= lock(c.writelock) do
         f(MemPool.poolget(c.c), args...)
     end
-    c.movetimer = asynctodisk(c.c, c.movedelay, c.writelock)
+    if !c.hold
+        c.movetimer = asynctodisk(c.c, c.movedelay, c.writelock)
+    end
     return ret
+end
+
+candinmem(c::FileCandidate) = candinmem(c.c)
+candinmem(r::MemPool.DRef) =  MemPool.with_datastore_lock() do
+    haskey(MemPool.datastore, r.id) && MemPool.isinmemory(MemPool.datastore[r.id])
 end
 
 function asynctodisk(r::MemPool.DRef, delay, writelock)
@@ -136,15 +134,19 @@ end
 function candtodisk(r::MemPool.DRef, writelock)
     lock(writelock) do
         # Not sure why this can even happen, but it does. Bug lurking...
-        inmem = MemPool.with_datastore_lock() do
-            haskey(MemPool.datastore, r.id) && MemPool.isinmemory(MemPool.datastore[r.id])
-        end
-        inmem || return
-
+        candinmem(r) || return
         # Remove file if it exists or else MemPool won't move it
         rm(MemPool.default_path(r); force=true)
         MemPool.movetodisk(r)
     end
+end
+
+function release!(c::FileCandidate)
+    c.hold = false
+    release!(wrappedcand(c))
+    close(c.movetimer)
+    c.movetimer = asynctodisk(c.c, c.movedelay, c.writelock)
+    return nothing
 end
 
 
@@ -162,44 +164,48 @@ end
 # Mutation needs to be enabled here?
 Flux.functor(c::FileCandidate) = callcand(Flux.functor, c)
 
-Flux.train!(c::FileCandidate, data) = callcand(Flux.train!, c, data)
-fitness(c::FileCandidate) = callcand(fitness, c)
-
-reset!(c::FileCandidate) = callcand(reset!, c)
-wrappedcand(c::FileCandidate) = MemPool.poolget(c.c)
+function wrappedcand(c::FileCandidate) 
+    c.hold = true
+    close(c.movetimer)
+    MemPool.poolget(c.c)
+end
 graph(c::FileCandidate, f) = callcand(graph, c, f)
 opt(c::FileCandidate) = callcand(opt, c)
 
-"""
-    CacheCandidate <: AbstractCandidate
-    CacheCandidate(c::AbstractCandidate)
+newcand(c::FileCandidate, mapfield) = FileCandidate(callcand(newcand, c, mapfield), c.movedelay)
 
-Caches fitness values produced by `c` until `reset!` is called.
-
-Useful with `HostCandidate` to prevent models from being pushed to/from GPU just to fetch fitness values.
 """
-mutable struct CacheCandidate{C} <: AbstractCandidate
-    fitnesscache
+    struct FittedCandidate{F, C} <: AbstractWrappingCandidate
+
+An `AbstractCandidate` with a computed fitness value. 
+
+Basically a container for results so that fitness does not need to be recomputed to e.g. check stopping conditions. 
+
+Also useful for fitness smoothing, e.g. with `EwmaFitness` as it gives access to previous fitness value.
+"""
+struct FittedCandidate{F, C <: AbstractCandidate} <: AbstractWrappingCandidate
+    gen::Int
+    fitness::F
     c::C
 end
-CacheCandidate(c::AbstractCandidate) = CacheCandidate(nothing, c)
+FittedCandidate(c::AbstractCandidate, f::AbstractFitness, gen) = FittedCandidate(gen, fitness(f, c), c)
+FittedCandidate(c::FittedCandidate, f::AbstractFitness, gen) = FittedCandidate(gen, fitness(f, c), wrappedcand(c))
 
-Flux.train!(c::CacheCandidate, data) = Flux.train!(c.c, data)
+Flux.@functor FittedCandidate
 
-function fitness(c::CacheCandidate)
-    if isnothing(c.fitnesscache)
-        c.fitnesscache = fitness(c.c)
-    end
-    return c.fitnesscache
-end
+fitness(c::FittedCandidate; default=nothing) = c.fitness
+generation(c::FittedCandidate; default=nothing) = c.gen
 
-function reset!(c::CacheCandidate)
-    c.fitnesscache = nothing
-    reset!(c.c)
-end
+# Some fitness functions make use of gen and fitness value :/ 
+# This is a bit of an ugly inconsistency that I hope to fix one day is it is not beautiful that the fitness of a 
+# new candidate is that same as its ancestor. It is the wanted behaviour for e.g. EwmaFitness though and 
+# as of version 0.8.0 fitness does not longer carry any state. 
+# Maybe I need to come up with a mechanism for that. As of now, alot of fitness strategies will not work properly 
+# if they are not passed a FittedCandidate. Perhaps having some kind of fitness state container in each candidate?
+newcand(c::FittedCandidate, mapfield) = FittedCandidate(c.gen, c.fitness, newcand(wrappedcand(c), mapfield))
 
-nparams(c::AbstractCandidate) = nparams(graph(c))
-nparams(g::CompGraph) = mapreduce(prod ∘ size, +, params(g).order)
+nparams(c::AbstractCandidate) = graph(c, nparams)
+nparams(x) = mapreduce(prod ∘ size, +, params(x).order; init=0)
 
 """
     evolvemodel(m::AbstractMutation{CompGraph}, mapothers=deepcopy)
@@ -257,11 +263,6 @@ function mapcandidate(mapgraph, mapothers=deepcopy)
     mapfield(f) = mapothers(f)
     return c -> newcand(c, mapfield)
 end
-
-newcand(c::CandidateModel, mapfield) = CandidateModel(map(mapfield, getproperty.(c, fieldnames(CandidateModel)))...)
-newcand(c::HostCandidate, mapfield) = HostCandidate(newcand(c.c, mapfield))
-newcand(c::CacheCandidate, mapfield) = CacheCandidate(newcand(c.c, mapfield))
-newcand(c::FileCandidate, mapfield) = FileCandidate(callcand(newcand, c, mapfield), c.movedelay)
 
 function clearstate(s) end
 clearstate(s::AbstractDict) = foreach(k -> delete!(s, k), keys(s))

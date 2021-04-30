@@ -338,3 +338,11 @@ NaiveNASlib.minΔninfactor(::GlobalPool) = 1
 NaiveNASlib.minΔnoutfactor(::GlobalPool) = 1
 function NaiveNASlib.mutate_inputs(::GlobalPool, args...) end
 function NaiveNASlib.mutate_outputs(::GlobalPool, args...) end
+
+
+"""
+    ninputs(model)
+    
+Return the number of model inputs.
+"""
+ninputs(cg::CompGraph) = length(cg.inputs)

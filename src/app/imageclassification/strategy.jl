@@ -10,31 +10,11 @@ abstract type AbstractFitnessStrategy end
 """
     fitnessfun(s::T, x, y) where T <: AbstractFitnessStrategy
 
-Returns the tuple `rem_x`, `rem_y`, `fitnessgen` where `rem_x` and `rem_y` are subsets of `x` and `y` and `fitnessgen()` produces an `AbstractFitness`.
+Returns an `AbstractFitness` given the features `x` and labels `y`.
 
-Rationale for `rem_x` and `rem_y` is to allow fitness to be calculated on a subset of the training data which the models are not trained on themselves.
-
-Rationale for `fitnessgen` not being an `AbstractFitness` is that some `AbstractFitness` implementations are stateful so that each candidate needs its own instance.
+Allows for simple control over e.g. train vs validation split.
 """
 fitnessfun(s::T, x, y) where T <: AbstractFitnessStrategy = error("Not implemented for $(T)!")
-
-"""
-    AbstractTrainStrategy
-
-Base type for strategies on how to feed training data.
-
-See [`trainiter`](@ref).
-"""
-abstract type AbstractTrainStrategy end
-
-"""
-    trainiter(s::T, x, y) where T <: AbstractTrainStrategy
-
-Returns an iterator `fit_iter` which in turn iterates over iterators `ss_iter` where each `ss_iter` iterates over a subset of the data in x and y.
-
-See [`RepeatPartitionIterator`](@ref) for an example of an iterator which fits the bill.
-"""
-trainiter(s::T, x, y) where T <: AbstractTrainStrategy = error("Not implemented for $(T)!")
 
 """
     AbstractEvolutionStrategy
@@ -52,41 +32,53 @@ Returns an `AbstractEvolution`.
 
 Argument `inshape` is the size of the input feature maps (i.e. how many pixels images are) and may be used to determine which mutation operations are allowed for example to avoid that feature maps accidentally become 0 sized.
 """
-function evostrategy(s::AbstractEvolutionStrategy, inshape)
-    evostrat = evostrategy_internal(s, inshape)
-    return ResetAfterEvolution(evostrat)
-end
+evostrategy(s::AbstractEvolutionStrategy, inshape) = evostrategy_internal(s, inshape)
 
 """
     struct TrainSplitAccuracy{T} <: AbstractFitnessStrategy
-    TrainSplitAccuracy(nexamples, batchsize, data2fitfun, dataaug)
-    TrainSplitAccuracy(;nexamples=2048, batchsize=64, data2fitgen= data -> NanGuard ∘ AccuracyVsSize(data), dataaug=identity)
+        TrainSplitAccuracy(;split, accuracyconfig, accuracyfitness, trainconfig, trainfitness)
 
-Strategy to measure fitness on a subset of the training data of size `nexamples`.
+Strategy to train model on a subset of the training data and measure fitness as accuracy on the rest.
 
-Mapping from this subset to a fitness generator is done by `data2fitgen` which takes a data iterator and returns a function (or callable struct) which in turn produces an `AbstractFitness` when called with no arguments.
+Size of subset for accuracy fitness is `ceil(Int, split * nobs)` where `nobs` is the size of along the last dimension of the input.
+
+Parameters `accuracyconfig` (default `BatchedIterConfig()`) and `accuracyfitness` (default AccuracyVsSize) determine 
+how to iterate over the accuracy subset and how to measure fitness based on this iterator respectively.
+
+Parameters `trainconfig` (default `TrainIterConfig()`) and `trainfitness` (default GpuFitness(TrainThenFitness(StatefulGenerationIter(iter), Flux.Losses.logitcrossentropy, ADAM(), accfitness, 0.0)) where accfitness is the fitness strategy produced by `accuracyfitness`) are the equivalents for training data.
 """
-struct TrainSplitAccuracy{T, V} <: AbstractFitnessStrategy
-    nexamples::Int
-    batchsize::Int
-    data2fitgen::T
-    dataaug::V
+struct TrainSplitAccuracy{S, VC, VF, TC, TF} <: AbstractFitnessStrategy
+    split::S
+    accconfig::VC
+    accfitness::VF
+    trainconfig::TC
+    trainfitness::TF
 end
-TrainSplitAccuracy(;nexamples=2048, batchsize=64, data2fitgen= data -> NanGuard ∘ AccuracyVsSize(data), dataaug=identity) = TrainSplitAccuracy(nexamples, batchsize, data2fitgen, dataaug)
+function TrainSplitAccuracy(;split=0.1, 
+            accuracyconfig=BatchedIterConfig(),
+            accuracyfitness=AccuracyVsSize,
+            trainconfig=TrainIterConfig(),
+            trainfitness=(iter, accf) -> GpuFitness(TrainThenFitness(StatefulGenerationIter(iter), Flux.Losses.logitcrossentropy, ADAM(), accf, 0.0)))
+
+    return TrainSplitAccuracy(split, accuracyconfig, accuracyfitness, trainconfig, trainfitness)
+end
 function fitnessfun(s::TrainSplitAccuracy, x, y)
-    rem_x, acc_x = split_examples(x, s.nexamples)
-    rem_y, acc_y = split_examples(y, s.nexamples)
-    acc_iter = GpuIterator(dataiter(acc_x, acc_y, 1, s.batchsize, 0, s.dataaug))
-    return rem_x, rem_y, s.data2fitgen(acc_iter)
+    train_x, acc_x = split_examples(x, ceil(Int, last(size(x)) * s.split))
+    train_y, acc_y = split_examples(y, ceil(Int, last(size(y)) * s.split))
+
+    aiter = dataiter(s.accconfig, acc_x, acc_y)
+    afitness = s.accfitness(aiter)
+
+    titer = dataiter(s.trainconfig, train_x, train_y)
+    return s.trainfitness(titer, afitness)
 end
 
-split_examples(a::AbstractArray{T, 1}, splitpoint) where T = a[1:end-splitpoint], a[end-splitpoint:end]
-split_examples(a::AbstractArray{T, 2}, splitpoint) where T = a[:,1:end-splitpoint], a[:,end-splitpoint:end]
-split_examples(a::AbstractArray{T, 4}, splitpoint) where T = a[:,:,:,1:end-splitpoint], a[:,:,:,end-splitpoint:end]
+split_examples(a::AbstractArray{T, 1}, splitpoint) where T = a[1:end-splitpoint], a[end-splitpoint+1:end]
+split_examples(a::AbstractArray{T, 2}, splitpoint) where T = a[:,1:end-splitpoint], a[:,end-splitpoint+1:end]
+split_examples(a::AbstractArray{T, 4}, splitpoint) where T = a[:,:,:,1:end-splitpoint], a[:,:,:,end-splitpoint+1:end]
 
 """
-    struct AccuracyVsSize{T}
-    AccuracyVsSize(data, accdigits=3)
+    AccuracyVsSize(data, accdigits=2, accwrap=identity)
 
 Produces an `AbstractFitness` which measures fitness accuracy on `data` and based on number of parameters.
 
@@ -96,15 +88,8 @@ Only if the first `accdigits` of accuracy is the same will the number of paramet
 
 Accuracy part of the fitness is calculated by `accwrap(AccuracyFitness(data))`.
 """
-struct AccuracyVsSize{T,V}
-    data::T
-    accwrap::V
-    accdigits::Int
-end
-AccuracyVsSize(data, accdigits=2; accwrap=identity) = AccuracyVsSize(data, accwrap, accdigits)
-(f::AccuracyVsSize)() = sizevs(f.accwrap(AccuracyFitness(f.data)), f.accdigits)
-
-function sizevs(f::AbstractFitness, accdigits)
+AccuracyVsSize(data, accdigits=2; accwrap=identity) = sizevs(accwrap(AccuracyFitness(data)), accdigits)
+function sizevs(f::AbstractFitness, accdigits=2)
     truncacc = MapFitness(x -> round(x, digits=accdigits), f)
 
     size = SizeFitness()
@@ -115,85 +100,112 @@ end
 
 """
     struct TrainAccuracyVsSize <: AbstractFitnessStrategy
-    TrainAccuracyVsSize(;accdigits=3, accwrap=identity)
+    TrainAccuracyVsSize(;trainconfig, trainfitness)
 
-Produces an `AbstractFitness` which measures fitness accuracy on training data and based on number of parameters.
+Produces an `AbstractFitness` which measures fitness accuracy on training data and based on number of parameters combined in the same way as is done for `AccuracyVsSize`.
 
-The two are combined so that a candidate `a` which achieves higher accuracy rounded to the first `accdigits` digits compared to a candidate `b` will always have a better fitness.
-
-Only if the first `accdigits` of accuracy is the same will the number of parameters determine who has higher fitness.
-
-Accuracy part of the fitness is calculated by `accwrap(TrainAccuracyFitness())`.
+Parameters `trainconfig` (default `TrainIterConfig()`) and `trainfitness` (default sizevs(GpuFitness(TrainAccuracyFitness(dataiter=StatefulGenerationIter(dataiter), defaultloss=Flux.Losses.logitcrossentropy, defaultopt = ADAM()))) where `dataiter` is the iterator produced by `trainconfig`).
 
 Beware that fitness as accuracy on training data will make evolution favour overfitted candidates.
 """
-struct TrainAccuracyVsSize{T} <: AbstractFitnessStrategy
-    accwrap::T
-    accdigits::Int
+struct TrainAccuracyVsSize{TC, TF} <: AbstractFitnessStrategy
+    trainconfig::TC
+    trainfitness::TF
 end
-TrainAccuracyVsSize(;accdigits=3, accwrap=identity) = TrainAccuracyVsSize(accwrap, accdigits)
-fitnessfun(s::TrainAccuracyVsSize, x, y) = x, y, () -> NanGuard(sizevs(s.accwrap(TrainAccuracyFitness()), s.accdigits))
-
-"""
-    struct PruneLongRunning{T <: AbstractFitnessStrategy, D <: Real} <: AbstractFitnessStrategy
-    PruneLongRunning(s::AbstractFitnessStrategy, t1, t2)
-
-Produces an `AbstractFitness` generator which multiplies the fitness produced by `s` with a factor `f < 1` if training time takes longer than `t1`. If training time takes longer than t2, fitness will be zero.
-
-As the name suggests, the purpose is to get rid of models which take too long to train.
-"""
-struct PruneLongRunning{T <: AbstractFitnessStrategy, D <: Real} <: AbstractFitnessStrategy
-    s::T
-    t1::D
-    t2::D
+function TrainAccuracyVsSize(;
+                        trainconfig=TrainIterConfig(),
+                        trainfitness = dataiter -> sizevs(GpuFitness(TrainAccuracyFitness(
+                                                                            dataiter=StatefulGenerationIter(dataiter), 
+                                                                            defaultloss=Flux.Losses.logitcrossentropy, defaultopt = ADAM())))) 
+        return TrainAccuracyVsSize(trainconfig, trainfitness)
 end
-function fitnessfun(s::PruneLongRunning, x, y)
-    x, y, fitgen = fitnessfun(s.s, x, y)
-    return x, y, () -> prunelongrunning(fitgen(), s.t1, s.t2)
-end
-
-function prunelongrunning(s::AbstractFitness, t1, t2)
-    mapping(t) = 1 - (t - t1) / (t2 - t1)
-    scaled = MapFitness(t -> clamp(mapping(t), 0, 1), TimeFitness(NaiveGAflux.Train(), 1))
-    return AggFitness(*, scaled, s)
+function fitnessfun(s::TrainAccuracyVsSize, x, y) 
+    iter = dataiter(s.trainconfig, x, y)
+    return s.trainfitness(iter)
 end
 
 """
-    struct TrainStrategy{T} <: AbstractTrainStrategy
-    TrainStrategy(nepochs, batchsize, nbatches_per_gen, seed, dataaug)
-    TrainStrategy(;nepochs=200, batchsize=32, nbatches_per_gen=400, seed=123, dataaug=identity)
+    struct BatchedIterConfig{T, V}
+    BatchedIterConfig(;batchsize=32, dataaug=identity, iterwrap=GpuIterator) 
 
-Standard training strategy. Data is cycled `nepochs` times in partitions of `nbatches_per_gen` and batchsize of `batchsize` each generation using a [`RepeatPartitionIterator`](@ref).
+Configuration for creating batch iterators from array data.
 
-Data can be augmented using `dataaug`.
+The function `dataiter(s::BatchedIterConfig, x, y)` creates an iterator which returns a tuple of batches from `x` and `y` respectively.
+
+More specifically, the result of `s.iterwrap(zip(s.dataaug(bx), by))` will be returned where `bx` and `by` are `BatchIterator`s.
 """
-struct TrainStrategy{T} <: AbstractTrainStrategy
-    nepochs::Int
+struct BatchedIterConfig{T, V}
     batchsize::Int
-    nbatches_per_gen::Int
+    dataaug::T
+    iterwrap::V
+end
+BatchedIterConfig(;batchsize=32, dataaug=identity, iterwrap=GpuIterator) = BatchedIterConfig(batchsize, dataaug, iterwrap)
+dataiter(s::BatchedIterConfig, x, y) = dataiter(x, y, s.batchsize, s.dataaug) |> s.iterwrap
+
+"""
+    struct ShuffleIterConfig{T, V}
+    ShuffleIterConfig(;batchsize=32, seed=123, dataaug=identity, iterwrap=GpuIterator) 
+
+Configuration for creating shuffled batch iterators from array data. Data will be re-shuffled every time the iterator restarts.
+
+The function `dataiter(s::ShuffleIterConfig, x, y)` creates an iterator which returns a tuple of batches from `x` and `y` respectively.
+
+More specifically, the result of `s.iterwrap(zip(s.dataaug(bx), by))` will be returned where `bx` and `by` are `ShuffleIterator`s.
+
+Note there there is no upper bound on how many generations are supported as the returned iterator cycles the data indefinitely. Use e.g. `Iterators.take(itr, cld(nepochs * nbatches_per_epoch, nbatches_per_gen))` to limit to `nepochs`
+epochs. 
+"""
+struct ShuffleIterConfig{T, V}
+    batchsize::Int
     seed::Int
     dataaug::T
+    iterwrap::V
 end
-TrainStrategy(;nepochs=200, batchsize=32, nbatches_per_gen=400, seed=123, dataaug=identity) = TrainStrategy(nepochs, batchsize, nbatches_per_gen, seed, dataaug)
-function trainiter(s::TrainStrategy, x, y)
-    baseiter = dataiter(x, y, s.nepochs, s.batchsize, s.seed, s.dataaug)
-    return RepeatPartitionIterator(GpuIterator(baseiter), s.nbatches_per_gen)
+ShuffleIterConfig(;batchsize=32, seed=123, dataaug=identity, iterwrap=GpuIterator) = ShuffleIterConfig(batchsize, seed, dataaug, iterwrap)
+dataiter(s::ShuffleIterConfig, x, y) = dataiter(x, y, s.batchsize, s.seed, s.dataaug) |> s.iterwrap
+
+
+"""
+    struct TrainIterConfig{T}
+    TrainIterConfig(nbatches_per_gen, baseconfig)
+    TrainIterConfig(;nbatches_per_gen=400, baseconfig=ShuffleIterConfig())
+
+Standard training strategy for creating a batched iterators from data. Data from `baseconfig` is cycled in partitions of `nbatches_per_gen` each generation using a [`RepeatPartitionIterator`](@ref).
+
+"""
+struct TrainIterConfig{T}
+    nbatches_per_gen::Int
+    baseconfig::T
+end
+TrainIterConfig(;nbatches_per_gen=400, baseconfig=ShuffleIterConfig()) = TrainIterConfig(nbatches_per_gen,baseconfig)
+function dataiter(s::TrainIterConfig, x, y)
+    baseiter = dataiter(s.baseconfig, x, y)
+    return RepeatPartitionIterator(baseiter, s.nbatches_per_gen)
 end
 
-dataiter(x,y::AbstractArray{T, 1}, args...) where T = epochiter(x,y, args...,yi -> Flux.onehotbatch(yi, sort(unique(y))))
-dataiter(x,y::AbstractArray{T, 2}, args...) where T = epochiter(x,y, args...)
-function epochiter(x,y, ne, bs, seed, xwrap, ywrap = identity)
-    xiter = batchiter(x, bs, seed)
-    yiter = batchiter(y, bs, seed)
-    # Iterates over one epoch
-    biter = zip(xwrap(xiter), ywrap(yiter))
-    # Iterates all epochs
-    eiter = ncycle(biter, ne)
-    # Ensures all models see the exact same examples
-    # This only matters when number of batches per generation is more than the number of batches in one epoch
-    return SeedIterator(SeedIterator(eiter;rng=xiter.rng); rng=yiter.rng)
+dataiter(x::AbstractArray,y::AbstractArray{T, 1}, args...) where T = _dataiter(x,y, args...,yi -> Flux.onehotbatch(yi, sort(unique(y))))
+dataiter(x::AbstractArray,y::AbstractArray{T, 2}, args...) where T = _dataiter(x,y, args...)
+
+function _dataiter(x::AbstractArray,y::AbstractArray, bs::Integer, seed::Integer, xwrap, ywrap = identity)
+    xiter = shuffleiter(x, bs, seed)
+    yiter = shuffleiter(y, bs, seed)
+    # iterates feature/label pairs
+    # Cycle is pretty important here. It is what makes it so that each generation sees a new shuffle
+    # This is also what makes SeedIterators useful with random data augmentation: 
+    #   - Even if SeedIterator makes the augmentation itself the same, it will be applied to different images 
+    # Something ought to be done about the inconsistency vs BatchedIterConfig through...
+    biter = Iterators.cycle(zip(xwrap(xiter), ywrap(yiter)))
+    # Ensures all models see the exact same examples, even when a RepeatStatefulIterator restarts iteration.
+    return SeedIterator(SeedIterator(biter;rng=xiter.rng); rng=yiter.rng)
 end
-batchiter(x, batchsize, seed) = ShuffleIterator(NaiveGAflux.Singleton(x), batchsize, MersenneTwister(seed))
+shuffleiter(x, batchsize, seed) = ShuffleIterator(x, batchsize, MersenneTwister(seed))
+
+function _dataiter(x::AbstractArray, y::AbstractArray, bs::Integer, xwrap, ywrap = identity)
+    xiter = BatchIterator(x, bs)
+    yiter = BatchIterator(y, bs)
+    # iterates feature/label pairs
+    return zip(xwrap(xiter), ywrap(yiter))
+end
 
 """
     struct GlobalOptimizerMutation{S<:AbstractEvolutionStrategy, F} <: AbstractEvolutionStrategy

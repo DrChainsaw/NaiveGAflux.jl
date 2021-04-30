@@ -15,7 +15,7 @@
             graph::DummyGraph
             PlotTestCand(fitness, nv, np) = new(fitness, DummyGraph(nv, np))
         end
-        NaiveGAflux.graph(c::PlotTestCand) = c.graph
+        NaiveGAflux.graph(c::PlotTestCand, f=identity) = f(c.graph)
         NaiveGAflux.fitness(c::PlotTestCand) = c.fitness
 
         try
@@ -79,7 +79,7 @@
                 @test p2.data ==  [[1 99 Descent; 2 198 Descent; 3 297 ADAM], [2 198 Descent; 3 297 ADAM; 4 396 ADAM],[3 297 ADAM; 4 396 ADAM; 5 495 ADAM]]
 
                 p3 = ScatterOpt((args...;kwargs...) -> true, testdir)
-                @test p3(NaiveGAflux.FileCandidate.(PlotTestCand.(3:5, [30, 40, 50], [300, 400, 500])))
+                @test p3(PlotTestCand.(3:5, [30, 40, 50], [300, 400, 500]))
                 # Test that something was added
                 @test length(p3.data) == 1 + length(p2.data)
                 # What was added is just a copy paste of the last thing inserted to p2 so this lazy check works

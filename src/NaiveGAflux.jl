@@ -9,6 +9,7 @@ using Statistics
 import CUDA
 import MemPool
 import IterTools
+using Printf
 
 using Setfield
 
@@ -19,19 +20,22 @@ const rng_default = MersenneTwister(abs(rand(Int)))
 const modeldir = "models"
 
 # Fitness
-export fitness, instrument, reset!, AbstractFitness, AccuracyFitness, TrainAccuracyFitness, MapFitness, EwmaFitness, TimeFitness, SizeFitness, FitnessCache, NanGuard, AggFitness
+export fitness, instrument, reset!, AbstractFitness, LogFitness, GpuFitness, AccuracyFitness, TrainThenFitness, TrainAccuracyFitness, MapFitness, EwmaFitness, TimeFitness, SizeFitness, AggFitness
 
 # Candidate
-export evolvemodel, AbstractCandidate, CandidateModel, HostCandidate, CacheCandidate
+export evolvemodel, AbstractCandidate, CandidateModel, CandidateOptModel
 
 # Evolution
-export evolve!, AbstractEvolution, NoOpEvolution, AfterEvolution, ResetAfterEvolution, EliteSelection, SusSelection, TournamentSelection, CombinedEvolution, EvolutionChain, PairCandidates, ShuffleCandidates, EvolveCandidates
+export evolve, AbstractEvolution, NoOpEvolution, AfterEvolution, ResetAfterEvolution, EliteSelection, SusSelection, TournamentSelection, CombinedEvolution, EvolutionChain, PairCandidates, ShuffleCandidates, EvolveCandidates
 
 # Population
 export Population, generation
 
 # misc types
-export Probability, MutationShield, ApplyIf, RemoveIfSingleInput, RepeatPartitionIterator, SeedIterator, MapIterator, GpuIterator, BatchIterator, ShuffleIterator, PersistentArray, ShieldedOpt
+export Probability, MutationShield, ApplyIf, RemoveIfSingleInput, PersistentArray, ShieldedOpt
+
+# Iterators. These should preferably come from somewhere else, but I haven't found anything which fits the bill w.r.t repeatability over subsets
+export RepeatPartitionIterator, SeedIterator, MapIterator, GpuIterator, BatchIterator, ShuffleIterator, TimedIterator, TimedIteratorStop, StatefulGenerationIter
 
 # Persistence
 export persist
@@ -71,8 +75,8 @@ include("shape.jl")
 include("archspace.jl")
 include("mutation.jl")
 include("crossover.jl")
-include("fitness.jl")
 include("candidate.jl")
+include("fitness.jl")
 include("evolve.jl")
 include("population.jl")
 include("iterators.jl")

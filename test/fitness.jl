@@ -1,232 +1,123 @@
 @testset "Fitness" begin
 
     struct MockFitness <: AbstractFitness f end
-    NaiveGAflux.fitness(s::MockFitness, f) = s.f
+    NaiveGAflux._fitness(s::MockFitness, c) = s.f
+
+    struct MockCandidate{F} <: AbstractCandidate 
+        f::F
+    end
+    IdCand() = MockCandidate(identity)
+    NaiveGAflux.graph(c::MockCandidate, f=identity) = f(c.f)
+
+    @testset "LogFitness" begin
+        import NaiveGAflux: FittedCandidate
+        iv = inputvertex("in", 2)
+        c = CompGraph(iv, mutable(Dense(2,3), iv)) |> CandidateModel
+        lf = LogFitness(MockFitness(3))
+        @test @test_logs (:info, " Candidate:   1\tvertices:   2\tparams:  0.01k\tfitness: 3") fitness(lf, c) == 3
+        @test @test_logs (:info, " Candidate:   2\tvertices:   2\tparams:  0.01k\tfitness: 3") fitness(lf, c) == 3
+        fc = FittedCandidate(1, 3, c)
+        @test @test_logs (:info, " Candidate:   1\tvertices:   2\tparams:  0.01k\tfitness: 3") fitness(lf, fc) == 3
+        @test @test_logs (:info, " Candidate:   2\tvertices:   2\tparams:  0.01k\tfitness: 3") fitness(lf, fc) == 3
+    end
+
+    @testset "GpuFitness" begin
+        label = Val(:GpuTest)
+        wasgpumapped = false
+        function Flux.gpu(x::MockCandidate{Val{:GpuTest}}) 
+            wasgpumapped = true
+            return x
+        end
+        
+        wascpumapped = false
+        function Flux.cpu(x::MockCandidate{Val{:GpuTest}}) 
+            wascpumapped = true
+            return x
+        end
+
+        @test fitness(GpuFitness(MockFitness(4)), MockCandidate(label)) == 4
+        @test wasgpumapped
+        @test wascpumapped
+    end
 
     @testset "AccuracyFitness" begin
         struct DummyIter end
         Base.iterate(::DummyIter) = (([0 1 0 0; 1 0 0 1; 0 0 1 0], [1 0 0 0; 1 0 0 1; 0 0 1 0]), 1)
         Base.iterate(::DummyIter, state) = state == 1 ? (([1 0; 0 0; 0 1], [0 0; 1 1; 0 0]), 2) : nothing
 
-        @test fitness(AccuracyFitness(DummyIter()), identity) == 0.5
+        @test fitness(AccuracyFitness(DummyIter()), IdCand()) == 0.5
+    end
+
+    @testset "TrainThenFitness" begin
+        iv = inputvertex("in", 2)
+        ov = mutable(Dense(2, 2), iv)
+        cand = CandidateModel(CompGraph(iv, ov))
+
+        ttf = TrainThenFitness(
+            dataiter = [(ones(Float32, 2, 1), ones(Float32, 2, 1))],
+            defaultloss=Flux.mse,
+            defaultopt = Descent(0.0001),
+            fitstrat = MockFitness(17),
+            invalidfitness = 123.456)
+
+        @test fitness(ttf, cand) === 17
+
+        struct NaNCandidateModel <: AbstractCandidate end
+        NaiveGAflux.ninputs(::NaNCandidateModel) = 1
+        NaiveGAflux.graph(f::NaNCandidateModel) = f 
+        (::NaNCandidateModel)(x) = x
+        NaiveGAflux.lossfun(::NaNCandidateModel; default) = (args...) -> NaN32
+
+        @test @test_logs (:warn, "NaN loss detected when training!") fitness(ttf, NaNCandidateModel()) == 123.456
     end
 
     @testset "TrainAccuracyFitness" begin
-        import NaiveGAflux: Train, TrainLoss
-        x = nothing
-        f(x) = [0 1 0; 1 0 0; 0 0 1]
-        y =    [0 0 0; 1 1 0; 0 0 1]
+        dataiter  = [([0 1 0; 1 0 0; 0 0 1], [0 0 0; 1 1 0; 0 0 1])]
+        iv = inputvertex("in", 3)
+        idgraph = CompGraph(iv, iv)
 
-        taf = TrainAccuracyFitness()
-        @test_throws AssertionError fitness(taf, (args...) -> error("shall not be called"))
+        taf = TrainAccuracyFitness(;drop=0.5,dataiter, defaultloss = Flux.Losses.mse, defaultopt = Descent(0.001))
 
-        fi = instrument(Train(), taf, f)
-        li = instrument(TrainLoss(), taf, Flux.Losses.mse)
-
-        @test li(fi(x), y) ≈ 2/9
-        @test fitness(taf, (args...) -> error("shall not be called")) == 0.5
-
-        reset!(taf)
-        @test_throws AssertionError fitness(taf, (args...) -> error("shall not be called"))
+        # Note: First example will be dropped
+        @test fitness(taf, CandidateModel(idgraph))  == 0.5
     end
 
     @testset "MapFitness" begin
-        NaiveGAflux.instrument(::NaiveGAflux.AbstractFunLabel, s::MockFitness, f) = x -> s.f*f(x)
-
-        @test fitness( MapFitness(f -> 2f, MockFitness(3)), identity) == 6
-        @test instrument(NaiveGAflux.Train(), MapFitness(identity, MockFitness(2)), x -> 3x)(5) == 2*3*5
-
-        wasreset = false
-        NaiveGAflux.reset!(s::MockFitness) = wasreset=true
-
-        reset!(MapFitness(identity, MockFitness(2)))
-
-        @test wasreset
+        @test fitness(MapFitness(f -> 2f, MockFitness(3)), IdCand()) == 6
     end
 
     @testset "EwmaFitness" begin
-        cnt = 0
-        fvals = [10.0, 20.0, 20.0]
-        function stepfun(f)
-            cnt = cnt+1
-            return fvals[cnt] * f
-        end
+        import NaiveGAflux: FittedCandidate
 
-        ef = EwmaFitness(MapFitness(stepfun, MockFitness(1)))
-        efc = deepcopy(ef)
-
-        @test fitness(ef, identity) == fitness(efc, identity) == 10
-        @test fitness(ef, identity) == fitness(efc, identity) == 15
-        @test fitness(ef, identity) == fitness(efc, identity) == 17.5
+        @test fitness(EwmaFitness(MockFitness(10)), IdCand()) == 10
+        @test fitness(EwmaFitness(MockFitness(20)), FittedCandidate(0, 10, IdCand())) == 15
+        @test fitness(EwmaFitness(MockFitness(20)), FittedCandidate(0, 15, IdCand())) == 17.5
     end
 
     @testset "TimeFitness" begin
-        import NaiveGAflux: Train, Validate
-        tf = TimeFitness(Train(), 1)
-        function sleepret(t)
-            sleep(t)
-            return t
+
+        function busysleep(t)
+            t0 = time()
+            # Busy wait to avoid yielding since this causes sporadic failures in CI
+            while time() - t0 < t
+                1+1
+            end
         end
-
-        @test fitness(tf, identity) == 0
-
-        # First call doesn't count
-        @test instrument(Train(), tf, sleepret)(0.5) == 0.5
-        @test instrument(Train(), tf, sleepret)(0.02) == 0.02
-        @test instrument(Validate(), tf, sleepret)(0.5) == 0.5
-        @test instrument(Train(), tf, sleepret)(0.04) == 0.04
-
-        @test fitness(tf, identity) < 0.5 / 3
-
-        reset!(tf)
-
-        @test fitness(tf, identity) == 0
+        tf = TimeFitness(MockFitness(13))
+        NaiveGAflux._fitness(s::MockFitness, c::MockCandidate{typeof(busysleep)}) = (busysleep(0.1); s.f)
+        ftime, f = fitness(tf, MockCandidate(busysleep))
+        @test ftime ≈ 0.1 atol=0.01
+        @test f == 13
     end
 
     @testset "SizeFitness" begin
-        import NaiveGAflux: Validate
-
-        sf = SizeFitness()
-        l = Dense(2,3)
-
-        @test fitness(sf, l) == 9
-
-        @test_logs (:warn, "SizeFitness got zero parameters! Check your fitness function!") fitness(sf, identity)
-
-        @test instrument(Validate(), sf, l) == l
-
-        @test fitness(sf, identity) == 9
-
-        sf = NanGuard(Validate(), SizeFitness())
-
-        @test instrument(Validate(), sf, l) != l
-
-        @test fitness(sf, identity) == 9
-    end
-
-    @testset "FitnessCache" begin
-        struct RandomFitness <: AbstractFitness end
-        NaiveGAflux.fitness(s::RandomFitness, f) = rand()
-
-        cf = FitnessCache(RandomFitness())
-        @test fitness(cf, identity) == fitness(cf, identity)
-
-        val = fitness(cf, identity)
-        reset!(cf)
-        @test fitness(cf, identity) != val
-    end
-
-    @testset "NanGuard" begin
-
-        import NaiveGAflux: Train, TrainLoss, Validate
-
-        badfun(x::Real, val=NaN) = val
-        function badfun(x::AbstractArray, val=NaN)
-            x[1] = val
-            return x
-        end
-        badfun(x::AbstractArray{<:Integer}, val=NaN) = badfun(Float64.(x), val)
-
-        @testset "NanGuard $val" for val in (NaN, Inf)
-
-            ng = NanGuard(Train(), MockFitness(1))
-
-            okfun = instrument(Train(), ng, identity)
-            nokfun = instrument(Train(), ng, x -> badfun(x, val))
-
-            @test okfun(5) == 5
-            @test fitness(ng, identity) == 1
-
-            @test okfun([3,4,5]) == [3,4,5]
-            @test fitness(ng, identity) == 1
-
-            # Overwritten by NanGuard
-            @test (@test_logs (:warn, Regex("$val detected")) nokfun(3)) == 0
-            @test nokfun(3) == 0
-            @test fitness(ng, identity) == 0
-
-            @test okfun(3) == 0
-            @test fitness(ng, identity) == 0
-
-            wasreset = false
-            NaiveGAflux.reset!(::MockFitness) = wasreset = true
-            reset!(ng)
-
-            @test wasreset
-
-            @test okfun(5) == 5
-            @test fitness(ng, identity) == 1
-
-            @test (@test_logs (:warn, Regex("$val detected")) nokfun([1,2,3])) == [0,0,0]
-            @test nokfun([1,2,3]) == [0,0,0]
-
-            # New size of input, typically a different batch size
-            @test nokfun(ones(2,3,4)) == zeros(2,3,4)
-            @test okfun(ones(2,3,4)) == zeros(2,3,4)
-
-            @test fitness(ng, identity) == 0
-        end
-
-        @testset "NanGuard all" begin
-            ng = NanGuard(MockFitness(1))
-
-            okfun(t) = instrument(t, ng, identity)
-            nokfun(t) = instrument(t, ng, badfun)
-
-            @test okfun(Train())(3) == 3
-            @test okfun(TrainLoss())([1,2,3]) == [1,2,3]
-            @test okfun(Validate())([1,2,3]) == [1,2,3]
-
-            @test fitness(ng, identity) == 1
-
-            @test (@test_logs (:warn, r"NaN detected") nokfun(Train())(3)) == 0
-            @test okfun(TrainLoss())([1,2,3]) == [1,2,3]
-            @test okfun(Validate())([1,2,3]) == [1,2,3]
-
-            @test fitness(ng, identity) == 0
-
-            @test okfun(Train())(3) == 0
-            @test (@test_logs (:warn, r"NaN detected") nokfun(TrainLoss())(Float32[1,2,3])) == [0,0,0]
-            @test okfun(Validate())([1,2,3]) == [1,2,3]
-
-            @test fitness(ng, identity) == 0
-
-            @test okfun(Train())(3) == 0
-            @test okfun(TrainLoss())([1,2,3]) == [0,0,0]
-            @test (@test_logs (:warn, r"NaN detected") nokfun(Validate())([1,2,3])) == [0,0,0]
-
-            @test fitness(ng, identity) == 0
-
-            @test okfun(Train())(3) == 0
-            @test okfun(TrainLoss())([1,2,3]) == [0,0,0]
-            @test okfun(Validate())([1,2,3]) == [0,0,0]
-
-            @test fitness(ng, identity) == 0
-
-            reset!(ng)
-
-            @test okfun(Train())(3) == 3
-            @test okfun(TrainLoss())([1,2,3]) == [1,2,3]
-            @test okfun(Validate())([1,2,3]) == [1,2,3]
-
-            @test fitness(ng, identity) == 1
-        end
+        @test fitness(SizeFitness(), MockCandidate(Dense(2,3))) == 9
     end
 
     @testset "AggFitness" begin
         af = AggFitness(+, MockFitness(3), MockFitness(2))
 
-        @test fitness(af, identity) == 5
-
-        NaiveGAflux.instrument(::NaiveGAflux.AbstractFunLabel, s::MockFitness, f) = x -> s.f*f(x)
-        @test instrument(NaiveGAflux.Train(), af, x -> 5x)(7) == 2*3*5*7
-
-        nreset = 0
-        NaiveGAflux.reset!(::MockFitness) = nreset += 1
-        reset!(af)
-
-        @test nreset == 2
-
+        @test fitness(af, IdCand()) == 5
         @test_throws ErrorException AggFitness(+)
     end
 end

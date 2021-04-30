@@ -83,7 +83,6 @@ Random.seed!(NaiveGAflux.rng_default, 0)
 
 nlabels = 3
 ninputs = 5
-inshape() = inputvertex("input", ninputs, FluxDense())
 
 # Step 1: Create initial models
 # Search space: 2-4 dense layers of width 3-10
@@ -93,51 +92,58 @@ initial_hidden = RepeatArchSpace(layerspace, 1:3)
 outlayer = VertexSpace(Shielded(), DenseSpace(nlabels, identity))
 initial_searchspace = ArchSpaceChain(initial_hidden, outlayer)
 
-# Sample 5 models from the initial search space
+# Sample 5 models from the initial search space and make an initial population
 model(invertex) = CompGraph(invertex, initial_searchspace(invertex))
-models = [model(inshape()) for _ in 1:5]
+models = [model(inputvertex("input", ninputs, FluxDense())) for _ in 1:5]
 @test nv.(models) == [4, 3, 4, 5, 3]
 
-onehot(y) = Flux.onehotbatch(y, 1:nlabels)
+population = Population(CandidateModel.(models))
+@test generation(population) == 1
 
+# Step 2: Set up fitness function:
+# Train model for one epoch using datasettrain, then measure accuracy on datasetvalidate
 # Some dummy data just to make stuff run
+onehot(y) = Flux.onehotbatch(y, 1:nlabels)
 batchsize = 4
-dataset = (randn(ninputs, batchsize), onehot(rand(1:nlabels, batchsize)))
+datasettrain    = [(randn(ninputs, batchsize), onehot(rand(1:nlabels, batchsize)))]
+datasetvalidate = [(randn(ninputs, batchsize), onehot(rand(1:nlabels, batchsize)))]
 
-# Fitness function for evolution, loss function and optimizer for models
+fitnessfunction = TrainThenFitness(;
+    dataiter = datasettrain,
+    defaultloss = Flux.logitcrossentropy, # Will be used if not provided by the candidate
+    defaultopt = ADAM(), # Same as above. State is wiped after training to prevent memory leaks
+    fitstrat = AccuracyFitness(datasetvalidate) # This is what creates our fitness value after training
+)
 
-# Not recommended to measure fitness on the training data for real usage.
-fitfun = AccuracyFitness([dataset])
-opt = Flux.Descent(0.01) # All models use the same optimizer here. Would be a bad idea with a stateful optimizer!
-loss = Flux.Losses.logitcrossentropy
-population = [CandidateModel(model, opt, loss, fitfun) for model in models]
+# Step 3: Define how to search for new candidates
+# We choose to evolve the existing ones through mutation
 
-# Step 2: Train the models
-for candidate in population
-    Flux.train!(candidate, dataset)
-end
-
-# Step 3: Evolve the population
-
-# Mutations
+# VertexMutation selects valid vertices from the graph to mutate
+# MutationProbability applies mutation m with a probability of p
+# Lets shorten that a bit:
 mp(m, p) = VertexMutation(MutationProbability(m, p))
-# Either add a layer (40% chance) or remove a layer (40% chance)
-# You probably want to use lower probabilities than this
+# Add a layer (40% chance) and/or remove a layer (40% chance)
+# You might want to use lower probabilities than this
 addlayer = mp(AddVertexMutation(layerspace), 0.4)
 remlayer = mp(RemoveVertexMutation(), 0.4)
-
 mutation = MutationChain(remlayer, addlayer)
 
-# Selection
+# Selection:
+# The two best models are not changed
 elites = EliteSelection(2)
+# Three new candidates are produced by selecting three canidates from the whole population and mutating them
 mutate = SusSelection(3, EvolveCandidates(evolvemodel(mutation)))
 selection = CombinedEvolution(elites, mutate)
 
-# And evolve
-newpopulation = evolve!(selection, population)
+# Step 4: Run evolution
+newpopulation = evolve(selection, fitnessfunction, population)
 @test newpopulation != population
-
-# Repeat steps 2 and 3 until a model with the desired fitness is found.
+@test generation(newpopulation) == 2
+# Repeat step 4 until a model with the desired fitness is found.
+newnewpopulation = evolve(selection, fitnessfunction, newpopulation)
+@test newnewpopulation != newpopulation
+@test generation(newnewpopulation) == 3
+# Maybe in a loop :)
 ```
 
 ### Search Spaces
@@ -450,196 +456,95 @@ crossoversome = VertexCrossover(MutationProbability(LogMutation(((v1,v2)::Tuple)
 
 ### Fitness functions
 
-A handful of ways to compute the fitness of a model are supplied. Apart from the obvious accuracy on some (typically held out) data set, it is also possible to measure fitness as how many (few) parameters a model has and how long it takes on average to perform a forward/backward pass. Fitness metrics can of course be combined to create objectives which balance several factors.
+A handful of ways to compute the fitness of a model are supplied. Apart from the obvious accuracy on some (typically held out) data set, it is also possible to measure fitness as how many (few) parameters a model has and how long it takes to compute the fitness. Fitness metrics can of course be combined to create objectives which balance several factors.
 
-As seen below, some fitness functions are not trivial to use. [Candidate utilities](#candidate-utilities) helps managing this complexity behind a much simpler API.
+As seen in the very first basic example above, training of a model is just another fitness strategy. This might seem unintuitive at first, but reading it out like "the chosen fitness strategy is to first train the model for N batches, then compute the accuracy on the validation set" makes sense. The practical advantages are that it becomes straight forward to implement fitness strategies which don't involve model training (e.g. using the neural tangent kernel) as well as fitness strategies which measure some aspect of the model training (e.g. time to train for X iterations or training memory consumption). Another useful property is that models which produce `NaN`s or `Inf`s or take very long to train can be assigned a low fitness score.
 
 Examples:
 
 ```julia
 # Function to compute fitness for does not have to be a CompGraph, or even a neural network
-candidate1 = x -> 3:-1:1
-candidate2 = Dense(ones(Float32, 3,3), collect(Float32, 1:3))
+# They must be wrapped in an AbstractCandidate since fitness functions generally need to query the candidate for 
+# things which affect the fitness, such as the model but also things like optimizers and loss functions.
+candidate1 = CandidateModel(x -> 3:-1:1)
+candidate2 = CandidateModel(Dense(ones(Float32, 3,3), collect(Float32, 1:3)))
 
 # Fitness is accuracy on the provided data set
-accfitness = AccuracyFitness([(ones(3, 1), 1:3)])
+accfitness = AccuracyFitness([(ones(Float32, 3, 1), 1:3)])
 
 @test fitness(accfitness, candidate1) == 0
 @test fitness(accfitness, candidate2) == 1
 
-# Measure how long time it takes to train the function
-import NaiveGAflux: Train, Validate
-timetotrain = TimeFitness(Train())
-
-# No training done yet...
-@test fitness(timetotrain, candidate1) == 0
-@test fitness(timetotrain, candidate2) == 0
-
-# There is no magic involved here, we need to "instrument" the function to measure
-candidate2_timed = instrument(Train(), timetotrain, candidate2)
-
-# Instrumented function produces same result as the original function...
-@test candidate2_timed(ones(3,1)) == candidate2((ones(3,1)))
-# ... and TimeFitness measures time elapsed in the background
-@test fitness(timetotrain, candidate2) > 0
-
-# Just beware that it is not very clever, it just stores the time when a function it instrumented was run...
-@test fitness(timetotrain, x -> sleep(0.2)) == fitness(timetotrain, x -> sleep(10))
-
-# ... and it needs to be reset before being used for another candidate
-# In practice you probably want to create one instance per candidate
-reset!(timetotrain)
-@test fitness(timetotrain, candidate1) == 0
-
-# One typically wants to map short time to high fitness.
-timefitness = MapFitness(x -> x == 0 ? 0 : 1/(x*1e6), timetotrain)
-
-# Will see to it so that timetotrain gets to instrument the function
-candidate2_timed = instrument(Train(), timefitness, candidate2)
-
-@test candidate2_timed(ones(3,1)) == candidate2(ones(3,1))
-@test fitness(timefitness, candidate2) > 0
-
-# This also propagates ofc
-reset!(timefitness)
-@test fitness(timefitness, candidate2) == 0
+# Measure how long time it takes to evaluate the fitness and add that in addition to the accuracy
+let timedfitness = TimeFitness(accfitness)
+    c1time, c1acc = fitness(timedfitness, candidate1)
+    c2time, c2acc = fitness(timedfitness, candidate2) 
+    @test c1acc == 0
+    @test c2acc == 1
+    @test 0 < c1time 
+    @test 0 < c2time 
+end
 
 # Use the number of parameters to compute fitness
-nparams = SizeFitness()
+bigmodelfitness = SizeFitness()
+@test fitness(bigmodelfitness, candidate1) == 0
+@test fitness(bigmodelfitness, candidate2) == 12
 
-@test fitness(nparams, candidate2) == 12
-
-# This does not work unfortunately, and it tends to happen when combining fitness functions due to instrumentation
-@test (@test_logs (:warn, "SizeFitness got zero parameters! Check your fitness function!") fitness(nparams, candidate2_timed)) == 0
-
-# The mitigation for this is to "abuse" the instrumentation API
-instrument(Validate(), nparams, candidate2)
-@test fitness(nparams, candidate2_timed) == 12
-
-# This however adds state which needs to be reset shall the function be used for something else
-@test fitness(nparams, sum) == 12
-reset!(nparams)
-@test fitness(nparams, 1:3) == 3
+# One typically wants to map high number of params to lower fitness:
+smallmodelfitness = MapFitness(bigmodelfitness) do nparameters
+    return min(1, 1 / nparameters)
+end
+@test fitness(smallmodelfitness, candidate1) == 1
+@test fitness(smallmodelfitness, candidate2) == 1/12
 
 # Combining fitness is straight forward
-# Note that one typically wants to map low number of parameters to high fitness (omitted here for brevity)
-combined = AggFitness(+, accfitness, nparams, timefitness)
+combined = AggFitness(+, accfitness, smallmodelfitness, bigmodelfitness)
 
-@test fitness(combined, candidate2) == 13
+@test fitness(combined, candidate1) == 1
+@test fitness(combined, candidate2) == 13 + 1/12
 
-# instrumentation will be aggregated as well
-candidate2_timed = instrument(Train(), combined, candidate2)
+# GpuFitness moves the candidates to GPU (as selected by Flux.gpu) before computing the wrapped fitness
+# Note that any data in the wrapped fitness must also be moved to the same GPU before being fed to the model
+gpuaccfitness = GpuFitness(AccuracyFitness(GpuIterator(accfitness.dataset)))
 
-@test candidate2_timed(ones(3,1)) == candidate2(ones(3,1))
-@test fitness(combined, candidate2) > 13
+@test fitness(gpuaccfitness, candidate1) == 0
+@test fitness(gpuaccfitness, candidate2) == 1
 
-# Special mention goes to NanGuard.
-# It is hard to ensure that evolution does not produce a model which outputs NaN or Inf.
-# However, Flux typically throws an exception if it sees NaN or Inf.
-# NanGuard keeps the show going and assigns fitness 0 so that the model will not be selected.
-nanguard = NanGuard(combined)
-
-training_guarded = instrument(Train(), nanguard, candidate2)
-validation_guarded = instrument(Validate(), nanguard, candidate2)
-
-@test training_guarded(ones(3,1)) == validation_guarded(ones(3,1)) == candidate2(ones(3,1))
-
-# Now the model gets corrupted somehow...
-candidate2.weight[1,1] = NaN
-
-@test any(isnan, candidate2(ones(3,1)))
-
-@test (@test_logs (:warn, r"NaN detected for function with label Train()") training_guarded(ones(3,1))) == zeros(3,1)
-
-@test (@test_logs (:warn, r"NaN detected for function with label Validate()") validation_guarded(ones(3,1))) == zeros(3,1)
-
-@test fitness(nanguard, candidate2) == 0
-
-# Now the model gets corrupted somehow...
-candidate2.weight[1,1] = NaN
-
-@test !any(isnan, candidate2(ones(3,1)))
-@test training_guarded(ones(3,1)) == zeros(3,1)
-@test validation_guarded(ones(3,1)) == zeros(3,1)
-@test fitness(nanguard, candidate2) == 0
-
-reset!(nanguard)
-@test training_guarded(ones(3,1)) == validation_guarded(ones(3,1)) == candidate2(ones(3,1))
 ```
 
 ### Candidate utilities
 
-The main component of a candidate is the model itself of course. There are however a few convenience utilities around candidate handling which may be useful.
+As seen above, fitness strategies require an `AbstractCandidate` to compute fitness. To be used by NaiveGAflux, an `AbstractCandidate` needs to 
+1. Provide the data needed by the fitness strategy, most commonly the model but also things like lossfunctions and optimizers
+2. Be able to create a new version of itself given a function which maps its fields to new fields.
 
-As seen in the previous section, some fitness functions are not straight forward to use. By wrapping a model, a fitness function, a loss function and an optimizer in a `CandidateModel`, NaiveGAflux will hide much of the complexity and reduce the API to the following:
+Capability 1. is generally performed through functions of the format `someproperty(candidate; default)` where in general `someproperty(::AbstractCandidate; default=nothing) = default`. The following such functions are currently implemented by NaiveGAflux:
+* `graph(c; default)`  : Return a model
+* `opt(c; default)`    : Return an optimizer
+* `lossfun(c; default)` : Return a lossfunction
 
-* `train!(candidate, data)`
-* `fitness(candidate)`
+All such functions are obviously not used by all fitness strategies and some are used more often than others. Whether an `AbstractCandidate` returns something other than `default` generally depends on whether it is a hyperparameter which is being searched for or not. For example, the very simple `CandidateModel` has only a `model` while `CandidateOptModel` has both a model and an own optimizer which may be mutated/crossedover when evolving.
 
-Examples:
+Capability 2. is what is used then evolving a candidate into a new version of itself. The function to implement for new `AbstractCandidate` types is `newcand(c::MyCandidate, mapfields)` which in most cases has the implementation `newcand(c::MyCandidate, mapfield) = MyCandidate(map(mapfield, getproperty.(c, fieldnames(MyCandidate)))...)`.
 
+Example with a new candidate type and a new fitness strategy for said type:
 ```julia
-using Random
-Random.seed!(NaiveGAflux.rng_default, 0)
+struct ExampleCandidate <: AbstractCandidate
+    a::Int
+    b::Int
+end
+aval(c::ExampleCandidate; default=nothing) = c.a
+bval(c::ExampleCandidate; default=nothing) = c.b
 
-archspace = RepeatArchSpace(VertexSpace(DenseSpace(3, elu)), 2)
-inpt = inputvertex("in", 3)
-dataset = (ones(Float32, 3, 1), Float32[0, 1, 0])
+struct ExampleFitness <: AbstractFitness end
+NaiveGAflux._fitness(::ExampleFitness, c::AbstractCandidate) = aval(c; default=10) - bval(c; default=5)
 
-graph = CompGraph(inpt, archspace(inpt))
-opt = Flux.ADAM(0.1)
-loss = Flux.Losses.logitcrossentropy
-fitfun = NanGuard(AccuracyFitness([dataset]))
+# Ok, this is alot of work for quite little in this dummy example
+@test fitness(ExampleFitness(), ExampleCandidate(4, 3)) === 1
 
-# CandidateModel is the most basic candidate and handles things like fitness instrumentation
-candmodel = CandidateModel(graph, opt, loss, fitfun)
-
-Flux.train!(candmodel, Iterators.repeated(dataset, 20))
-@test fitness(candmodel) > 0
-
-# HostCandidate moves the model to the GPU when training or evaluating fitness and moves it back afterwards
-# Useful for reducing GPU memory consumption (at the cost of longer time to train as cpu<->gpu move takes some time).
-# Note, it does not move the data. GpuIterator can provide some assistance here...
-dataset_gpu = GpuIterator([dataset])
-fitfun_gpu = NanGuard(AccuracyFitness(dataset_gpu))
-hostcand = HostCandidate(CandidateModel(graph, Flux.ADAM(0.1), loss, fitfun_gpu))
-
-Flux.train!(hostcand, dataset_gpu)
-@test fitness(hostcand) > 0
-
-# CacheCandidate is a practical necessity if using AccuracyFitness.
-# It caches the last computed fitness value so it is not recomputed every time fitness is called
-cachinghostcand = CacheCandidate(hostcand)
-
-Flux.train!(cachinghostcand, dataset_gpu)
-@test fitness(cachinghostcand) > 0
-```
-
-Evolving a candidate is not limited to evolving the model. In general any aspect might be useful to search over and NaiveGAflux tries to not be opinionated here.
-
-The function `evolvemodel` is a convenience method for creating functions which evolve `AbstractCandidate`s. Apart from handling mutation is also ensures that everything is copied so that an evolved candidate does not accidentally share any state with its parent.
-
-```julia
-graphmutation = VertexMutation(NeuronSelectMutation(NoutMutation(-0.5,0.5)))
-optimizermutation = OptimizerMutation([Descent, Momentum, Nesterov])
-evofun = evolvemodel(graphmutation, optimizermutation)
-
-# This should perhaps be of type AbstractMutation{AbstractCandidate} for the sake of consistency.
-# Until a usecase for it materializes it is just an anonymous function though.
-@test evofun isa Function
-
-evolvedcand = evofun(cachinghostcand)
-
-@test typeof(evolvedcand) == typeof(cachinghostcand)
-
-@test nout.(vertices(NaiveGAflux.graph(evolvedcand))) == [3, 4, 4]
-@test nout.(vertices(graph)) == [3, 3, 3]
-
-optimizer(c::AbstractCandidate) = optimizer(c.c)
-optimizer(c::CandidateModel) = typeof(c.opt)
-
-@test optimizer(cachinghostcand) == ADAM
-@test optimizer(evolvedcand) == Nesterov
+ctime, examplemetric = fitness(TimeFitness(ExampleFitness()), ExampleCandidate(3,1))
+@test examplemetric === 2
+@test ctime > 0
 ```
 
 ### Evolution Strategies
@@ -649,6 +554,10 @@ Evolution strategies are the functions used to evolve the population in the gene
 * Select which candidates to use for the next generation
 * Mutate the selected candidates
 * Reset/clear state so that the population is prepared for the next generation
+
+Important to note about evolution strategies is that they generally expect candidates which can provide a precomputed fitness value, e.g. `FittedCandidate`s. This is because the fitness value is used by things like sorting where it is not only impractical to recompute it, but is also might lead to undefined behaviour if it is not always the same. Use `Population` to get some help with computing fitness for all candidates before passing them on to evolution.
+
+Note that there is no general requirement on an evolution strategy to return the same population size as it was given. It is also free to create completely new candidates without basing anything on any given candidate.
 
 Examples:
 
@@ -665,40 +574,27 @@ NaiveGAflux.fitness(d::Cand) = d.fitness
 
 # EliteSelection selects the n best candidates
 elitesel = EliteSelection(2)
-@test evolve!(elitesel, Cand.(1:10)) == Cand.([10, 9])
+@test evolve(elitesel, Cand.(1:10)) == Cand.([10, 9])
 
 # EvolveCandidates maps candidates to new candidates (e.g. through mutation)
 evocands = EvolveCandidates(c -> Cand(fitness(c) + 0.1))
-@test evolve!(evocands, Cand.(1:10)) == Cand.(1.1:10.1)
+@test evolve(evocands, Cand.(1:10)) == Cand.(1.1:10.1)
 
 # SusSelection selects n random candidates using stochastic uniform sampling
 # Selected candidates will be forwarded to the wrapped evolution strategy before returned
 sussel = SusSelection(5, evocands, FakeRng())
-@test evolve!(sussel, Cand.(1:10)) == Cand.([4.1, 6.1, 8.1, 9.1, 10.1])
+@test evolve(sussel, Cand.(1:10)) == Cand.([4.1, 6.1, 8.1, 9.1, 10.1])
 
 # CombinedEvolution combines the populations from several evolution strategies
 comb = CombinedEvolution(elitesel, sussel)
-@test evolve!(comb, Cand.(1:10)) == Cand.(Any[10, 9, 4.1, 6.1, 8.1, 9.1, 10.1])
-
-# AfterEvolution calls a function after evolution is completed
-afterfun(pop) = map(c -> Cand(2fitness(c)), pop)
-afterevo = AfterEvolution(comb, afterfun)
-@test evolve!(afterevo, Cand.(1:10)) == Cand.(Any[20, 18, 8.2, 12.2, 16.2, 18.2, 20.2])
-
-# Its mainly intended for resetting
-ntest = 0
-NaiveGAflux.reset!(::Cand) = ntest += 1
-
-resetafter = ResetAfterEvolution(comb)
-@test evolve!(resetafter, Cand.(1:10)) == Cand.(Any[10, 9, 4.1, 6.1, 8.1, 9.1, 10.1])
-@test ntest == 7
+@test evolve(comb, Cand.(1:10)) == Cand.(Any[10, 9, 4.1, 6.1, 8.1, 9.1, 10.1])
 ```
 
 ### Iterators
 
 While not part of the scope of this package, some simple utilities for iterating over data sets is provided.
 
-The only iterator which is in some sense special for this package is `RepeatPartitionIterator` which produces iterators over a subset of its wrapped iterator. This is useful when there is a non-negligible cost of "switching" models, for example if `HostCandidate` is used as it allows training one model on the whole data subset before moving on to the next model.
+The only iterator which is in some sense special for this package is `RepeatPartitionIterator` which produces iterators over a subset of its wrapped iterator. This is useful when one wants to ensure that all models see the same (possibly randomly augmented) data in the same order. Note that this is not certain to be the best strategy for finding good models for a given data set and this package does (intentionally) blur the lines a bit between model training protocol and architecture search.
 
 Examples:
 
@@ -742,6 +638,28 @@ for modeli in 1:3
         @test label == expl
     end
 end
+
+# StatefulGenerationIter is typically used in conjunction with TrainThenFitness to map a generation
+# number to an iterator from a RepeatStatefulIterator 
+sgiter = StatefulGenerationIter(rpiter)
+for (generationnr, topiter) in enumerate(rpiter)
+    gendata = collect(NaiveGAflux.itergeneration(sgiter, generationnr))
+    expdata = collect(topiter)
+    @test gendata == expdata
+end
+
+# Timed iterator is useful for preventing that models which take very long time 
+# to train slow down the process. We can just stop training them in that case
+timediter = TimedIterator(;timelimit=0.1, patience=4, timeoutaction = () -> TimedIteratorStop, accumulate_timeouts=false, base=1:100)
+
+last = 0
+for i in timediter
+    last = i
+    if i > 2
+        sleep(0.11)
+    end
+end
+@test last === 6 # Sleep after 2, then 4 patience
 ```
 
 ## Contributing
