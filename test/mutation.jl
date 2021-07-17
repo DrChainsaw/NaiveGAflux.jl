@@ -31,12 +31,14 @@
 
     @testset "Neuron value weighted mutation" begin
         using Statistics
-        struct DummyValue <: AbstractMutableComp
-            values
+        struct DummyValue{T, W<:AbstractMutableComp} <: AbstractMutableComp
+            values::T
+            w::W
         end
         NaiveNASflux.neuron_value(d::DummyValue) = d.values
+        NaiveNASflux.wrapped(d::DummyValue) = d.w
 
-        l(in, outsize, value) = mutable(Dense(nout(in), outsize), in, layerfun = l -> DummyValue(value))
+        l(in, outsize, value) = mutable(Dense(nout(in), outsize), in, layerfun = l -> DummyValue(value, l))
 
         v0 = inputvertex("in", 3)
         v1 = l(v0, 4, 1:4)

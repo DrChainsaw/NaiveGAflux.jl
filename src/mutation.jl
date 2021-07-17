@@ -122,7 +122,7 @@ Intended use case is to be able to do parameter selection on mutated vertices.
 """
 struct RecordMutation{T} <: DecoratingMutation{T}
     m::AbstractMutation{T}
-    mutated::AbstractVector{T}
+    mutated::Vector{T}
 end
 RecordMutation(m::AbstractMutation{T}) where T = RecordMutation(m, T[])
 function (m::RecordMutation)(e)
@@ -167,8 +167,8 @@ end
 
 Applies mutation `m` only for entities `e` for which `predicate(e)` returns true.
 """
-struct MutationFilter{T} <: DecoratingMutation{T}
-    predicate
+struct MutationFilter{P,T} <: DecoratingMutation{T}
+    predicate::P
     m::AbstractMutation{T}
 end
 function (m::MutationFilter)(e)
@@ -186,9 +186,9 @@ Applies a wrapped `AbstractMutation{AbstractVertex}` to each selected vertex in 
 
 Vertices to select is determined by the configured `AbstractVertexSelection`.
 """
-struct VertexMutation <: DecoratingMutation{CompGraph}
+struct VertexMutation{S<:AbstractVertexSelection} <: DecoratingMutation{CompGraph}
     m::AbstractMutation{AbstractVertex}
-    s::AbstractVertexSelection
+    s::S
 end
 VertexMutation(m::AbstractMutation{AbstractVertex}) = VertexMutation(m, FilterMutationAllowed())
 function (m::VertexMutation)(g::CompGraph)
@@ -208,11 +208,14 @@ Mutate the out size of a vertex.
 
 Size is changed by `x * nout(v)` quantized to closest non-zero integer of `minΔnoutfactor(v)` where `x` is drawn from `U(minrel, maxrel)` where `minrel` and `maxrel` are `l1` and `l2` if `l1 < l2` and `l2` and `l1` otherwise.
 """
-struct NoutMutation <:AbstractMutation{AbstractVertex}
-    minrel::Real
-    maxrel::Real
-    rng::AbstractRNG
-    NoutMutation(l1,l2, rng) = l1 < l2 ? new(l1, l2, rng) : new(l2,l1, rng)
+struct NoutMutation{R<:Real, RNG<:AbstractRNG} <:AbstractMutation{AbstractVertex}
+    minrel::R
+    maxrel::R
+    rng::RNG
+    function NoutMutation(l1::R1, l2::R2, rng::RNG) where {R1, R2, RNG} 
+        R = promote_type(R1, R2)
+        return l1 < l2 ? new{R, RNG}(promote(l1, l2)..., rng) : new{R, RNG}(promote(l2, l1)..., rng)
+    end
 end
 NoutMutation(limit, rng::AbstractRNG=rng_default) = NoutMutation(0, limit, rng)
 NoutMutation(l1,l2) = NoutMutation(l1,l2, rng_default)
@@ -231,10 +234,10 @@ function (m::NoutMutation)(v::AbstractVertex)
     minsize = min(nout(v), minimum(nout.(findterminating(v, inputs))))
     minsize + Δ <= Δfactor && return v
 
-    fallback = ΔNout{Relaxed}(v, Δ, LogΔSizeExec(Logging.Warn, "Could not change nout of $v by $(Δ) after relaxation! Vertex not changed!", ΔSizeFailNoOp()))
-    strategy = ΔNout{Exact}(v, Δ, LogΔSizeExec(Logging.Warn, "Could not change nout of $v by $(Δ)! Relaxing constraints...", fallback))
+    fallback = ΔNoutRelaxed(v, Δ; fallback=LogΔSizeExec("Could not change nout of $v by $(Δ) after relaxation! Vertex not changed!", Logging.Warn, ΔSizeFailNoOp()))
+    strategy = ΔNoutExact(v, Δ; fallback=LogΔSizeExec("Could not change nout of $v by $(Δ)! Relaxing constraints...", Logging.Warn, fallback))
 
-    Δsize(strategy , all_in_Δsize_graph(v, Output()))
+    Δsize!(strategy , all_in_Δsize_graph(v, Output()))
     return v
 end
 
@@ -249,11 +252,11 @@ Insert a vertex from the wrapped `AbstractArchSpace` `s` after a given vertex `v
 
 The function `outselect` takes an `AbstractVector{AbstractVertex}` representing the output of `v` and returns an `AbstractVector{AbstractVertex}` which shall be reconnected to the vertex `v'` returned by `s`. Defaults to `identity` meaning all outputs of `v` are reconnected to `v'`.
 """
-struct AddVertexMutation <:AbstractMutation{AbstractVertex}
-    s::AbstractArchSpace
-    outselect::Function
-    weightinit::AbstractWeightInit
-    rng::AbstractRNG
+struct AddVertexMutation{S<:AbstractArchSpace, F, WI<:AbstractWeightInit, RNG<:AbstractRNG} <:AbstractMutation{AbstractVertex}
+    s::S
+    outselect::F
+    weightinit::WI
+    rng::RNG
 end
 AddVertexMutation(s, outselect::Function=identity) = AddVertexMutation(s, outselect, IdentityWeightInit(), rng_default)
 AddVertexMutation(s, rng::AbstractRNG) = AddVertexMutation(s, identity, IdentityWeightInit(), rng)
@@ -277,8 +280,8 @@ Default reconnect strategy is `ConnectAll`.
 
 Note: High likelyhood of large accuracy degradation after applying this mutation.
 """
-struct RemoveVertexMutation <:AbstractMutation{AbstractVertex}
-    s::RemoveStrategy
+struct RemoveVertexMutation{S<:RemoveStrategy} <:AbstractMutation{AbstractVertex}
+    s::S
 end
 RemoveVertexMutation() = RemoveVertexMutation(RemoveStrategy(CheckAligned(CheckNoSizeCycle(ApplyMutation(SelectOutputs(select = SelectDirection(OutSelect{NaiveNASlib.Exact}(LogSelectionFallback("Reverting...", NoutRevert()))),
 valuefun = default_neuronselect, align=IncreaseSmaller(DecreaseBigger(AlignSizeBoth(FailAlignSizeWarn()))))), FailAlignSizeWarn(msgfun = (vin,vout) -> "Can not remove vertex $(name(vin))! Size cycle detected!")))))
@@ -303,12 +306,12 @@ When selecting neurons/outputs after any eventual size change the values `valuef
 
 Note: High likelyhood of large accuracy degradation after applying this mutation.
 """
-struct AddEdgeMutation{F1, F2, F3, R} <: AbstractMutation{AbstractVertex}
+struct AddEdgeMutation{F1, F2, F3, P<:Probability, RNG} <: AbstractMutation{AbstractVertex}
     mergefun::F1
     filtfun::F2
     valuefun::F3
-    p::Probability
-    rng::R
+    p::P
+    rng::RNG
 end
 AddEdgeMutation(p; rng=rng_default, mergefun=default_mergefun(rng=rng), filtfun=no_shapechange, valuefun=default_neuronselect) = AddEdgeMutation(Probability(p, rng), rng=rng, mergefun=mergefun, filtfun=filtfun, valuefun=valuefun)
 AddEdgeMutation(p::Probability; rng=rng_default, mergefun=default_mergefun(rng=rng), filtfun=no_shapechange, valuefun=default_neuronselect) = AddEdgeMutation(mergefun, filtfun, valuefun, p, rng)
@@ -434,9 +437,9 @@ When selecting neurons/outputs after any eventual size change the values `valuef
 
 Note: High likelyhood of large accuracy degradation after applying this mutation.
 """
-struct RemoveEdgeMutation{F, R} <: AbstractMutation{AbstractVertex}
+struct RemoveEdgeMutation{F, RNG<:AbstractRNG} <: AbstractMutation{AbstractVertex}
     valuefun::F
-    rng::R
+    rng::RNG
 end
 RemoveEdgeMutation(;valuefun=default_neuronselect, rng=rng_default) = RemoveEdgeMutation(valuefun, rng)
 
@@ -504,9 +507,9 @@ Mutate the activation function of layers which have an activation function.
 
 Note: High likelyhood of large accuracy degradation after applying this mutation.
 """
-struct ActivationFunctionMutation{T,R} <: AbstractMutation{AbstractVertex} where {T <: AbstractParSpace{1}, R <: AbstractRNG}
+struct ActivationFunctionMutation{T,RNG} <: AbstractMutation{AbstractVertex} where {T <: AbstractParSpace{1}, R <: AbstractRNG}
     actspace::T
-    rng::R
+    rng::RNG
 end
 ActivationFunctionMutation(acts...;rng=rng_default) = ActivationFunctionMutation(collect(acts), rng=rng)
 ActivationFunctionMutation(acts::AbstractVector;rng=rng_default) = ActivationFunctionMutation(ParSpace(acts), rng)
@@ -534,86 +537,6 @@ function setlayer(m::MutableLayer, propval)
     m.layer = setproperties(m.layer, propval)
 end
 
-
-"""
-    NeuronSelectMutation{T} <: AbstractMutation{AbstractVertex}
-    NeuronSelectMutation(m::AbstractMutation{AbstractVertex})
-    NeuronSelectMutation(rankfun, m::AbstractMutation{AbstractVertex})
-    NeuronSelectMutation(rankfun::Function, strategy, m::RecordMutation{AbstractVertex})
-
-Selects neurons of vertices mutated by the wrapped `RecordMutation`.
-
-Possible to select ranking method for neurons using `rankfun` which takes a mutated vertex as input and value/utility per neuron (higher is better).
-
-How to select neurons depends a bit on what operation the wrapped `RecordMutation` performs. If not supplied explicitly an attempt to infer it will be made, resulting in an error if not possible.
-"""
-struct NeuronSelectMutation{T, MT} <: AbstractMutation{MT}
-    rankfun::Function
-    strategy::T
-    m::RecordMutation{MT}
-end
-NeuronSelectMutation(rankfun, m::AbstractMutation) = NeuronSelectMutation(rankfun, neuron_select_strategy(m), m)
-NeuronSelectMutation(rankfun, strategy, m::AbstractMutation) = NeuronSelectMutation(rankfun, strategy, RecordMutation(m))
-NeuronSelectMutation(m::AbstractMutation) = NeuronSelectMutation(default_neuronselect, m)
-NeuronSelectMutation(m::RecordMutation) = NeuronSelectMutation(default_neuronselect, neuron_select_strategy(m.m), m)
-
-(m::NeuronSelectMutation)(v::AbstractVertex) = m.m(v)
-(m::NeuronSelectMutation)(vs::NTuple{N, AbstractVertex}) where N = m.m(vs)
-
-neuron_select_strategy(::T) where T <:AbstractMutation = error("Neuron select strategy not implemented for $T")
-neuron_select_strategy(::RemoveVertexMutation) = NeuronSelectOut()
-neuron_select_strategy(::NoutMutation) =  NeuronSelectOut()
-neuron_select_strategy(::AbstractCrossover) = NeuronSelectFlatten()
-
-struct NeuronSelectFlatten{T}
-    s::T
-end
-NeuronSelectFlatten() = NeuronSelectFlatten(NeuronSelectOut())
-
-struct NeuronSelectOut
-    s::AbstractSelectionStrategy
-end
-NeuronSelectOut() = NeuronSelectOut(ApplyAfter())
-
-"""
-    select(m::NeuronSelectMutation)
-
-Select neurons for each `AbstractVertex` mutated by `m`.
-"""
-select(m::NeuronSelectMutation) = select_neurons(m.strategy, fetchmutated!(m.m), m.rankfun)
-
-function select_neurons(s, vs::AbstractArray{NTuple{N, AbstractVertex}}, rankfun) where N
-    vsn = reduce((t, r) -> vcat.(t, r), vs)
-    map(vsi -> select_neurons(s, vsi, rankfun), vsn) |> all
-end
-select_neurons(s, v::AbstractVertex, rankfun) = select_neurons(s, [v], rankfun)
-
-function select_neurons(s::NeuronSelectFlatten, vs::AbstractArray{<:AbstractVertex}, rankfun)
-    allvs = foldr(NaiveNASlib.flatten, vs, init=AbstractVertex[])
-    select_neurons(s.s, allvs, rankfun)
-end
-
-function select_neurons(strategy::NeuronSelectOut, vs::AbstractArray{<:AbstractVertex}, rankfun)
-    vchanged = filter(vs) do v
-        # Some structural operations (create/remove edges/vertices) might result in nout(v) being unchanged but nin of its outputs is changed
-        nout(v) != nout_org(v) || any(vo -> nin(vo) != nin_org(vo), outputs(v))
-    end
-    isempty(vchanged) && return true
-
-    vall = unique(mapreduce(v -> all_in_Δsize_graph(v, Output()), vcat, vchanged))
-    Δoutputs(strategy.s, vall, rankfun)
-end
-
-default_neuronselect(v) = neuron_value_safe(trait(v), v)
-
-neuron_value_safe(t::DecoratingTrait, v) = neuron_value_safe(base(t), v)
-neuron_value_safe(::Immutable, v) = ones(nout(v))
-neuron_value_safe(::MutationSizeTrait, v) = clean_values(cpu(neuron_value(v)),v)
-clean_values(::Missing, v) = ones(nout_org(v))
-# NaN should perhaps be < 0, but since SelectDirection is used, this might lead to inconsistent results as a subset of neurons for a vertex v whose output vertices are not part of the selection (typically because only v's inputs are touched) are selected. As the output vertices are not changed this will lead to a size inconsistency. Cleanest fix might be to separate "touch output" from "touch input" when formulating the output selection problem.
-clean_values(a::AbstractArray{T}, v, repval=eps(T)) where T <: AbstractFloat = replace(a, NaN => repval, 0.0 => repval, Inf => repval, -Inf => repval)
-
-
 """
     PostMutation{T} <: DecoratingMutation{T}
     PostMutation(actions, m::AbstractMutation{T})
@@ -623,8 +546,8 @@ Performs a set of actions after a wrapped `AbstractMutation` is applied.
 
 Actions will be invoked with arguments (m::PostMutation{T}, e::T) where m is the enclosing `PostMutation` and `e` is the mutated entity of type `T`.
 """
-struct PostMutation{T} <: DecoratingMutation{T}
-    actions
+struct PostMutation{A,T} <: DecoratingMutation{T}
+    actions::A
     m::AbstractMutation{T}
 end
 PostMutation(m::AbstractMutation{T}, actions...) where T = PostMutation(actions, m)
@@ -634,18 +557,6 @@ function (m::PostMutation)(e)
     foreach(a -> a(m, eout), m.actions)
     return eout
 end
-
-
-"""
-    neuronselect(m, e)
-
-Search `AbstractMutation` hieararchy `m` for `NeuronSelectMutations` and invoke `select` on them
-"""
-neuronselect(m, e) = neuronselect(m)
-function neuronselect(m) end
-neuronselect(m::T) where T <:AbstractMutation = foreach(fn -> neuronselect(getfield(m,fn)), fieldnames(T))
-neuronselect(a::Union{AbstractVector, Tuple}) = foreach(ae -> neuronselect(ae), a)
-neuronselect(m::NeuronSelectMutation) = select(m)
 
 """
     RemoveZeroNout()

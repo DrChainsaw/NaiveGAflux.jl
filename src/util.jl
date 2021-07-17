@@ -4,12 +4,12 @@ Represents a probability that something (typically mutation) will happen.
 
 Possible to specify RNG implementation. If not specified, `rng_default` will be used.
 """
-struct Probability
-    p::Real
-    rng::AbstractRNG
-    function Probability(p::Real, rng)
+struct Probability{P<:Real, R<:AbstractRNG}
+    p::P
+    rng::R
+    function Probability(p::P, rng::R) where {P, R}
          @assert 0 <= p <= 1
-         return new(p, rng)
+         return new{P, R}(p, rng)
     end
 end
 Probability(p::Real) = Probability(p, rng_default)
@@ -109,10 +109,10 @@ Enables calling `apply(v)` for an `AbstractVertex v` which has this trait if 'pr
 
 Motivating use case is to have a way to remove vertices which have ended up as noops, e.g. element wise and concatenation vertices with a single input or identity activation functions.
 """
-struct ApplyIf <: DecoratingTrait
-    predicate::Function
-    apply::Function
-    base::MutationTrait
+struct ApplyIf{P, A, M<:MutationTrait} <: DecoratingTrait
+    predicate::P
+    apply::A
+    base::M
 end
 RemoveIfSingleInput(t) = ApplyIf(v -> length(inputs(v)) == 1, remove!, t)
 NaiveNASlib.base(t::ApplyIf) = t.base
@@ -336,9 +336,6 @@ NaiveNASflux.layertype(gp::GlobalPool) = gp
 NaiveNASflux.layer(gp::GlobalPool) = gp
 NaiveNASlib.minΔninfactor(::GlobalPool) = 1
 NaiveNASlib.minΔnoutfactor(::GlobalPool) = 1
-function NaiveNASlib.mutate_inputs(::GlobalPool, args...) end
-function NaiveNASlib.mutate_outputs(::GlobalPool, args...) end
-
 
 """
     ninputs(model)

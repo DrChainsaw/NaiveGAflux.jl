@@ -302,9 +302,9 @@ Generic configuration template for computation graph vertices.
 
 Intention is to make it easy to add logging, validation and pruning metrics in an uniform way.
 """
-struct LayerVertexConf
-    layerfun
-    traitfun
+struct LayerVertexConf{F, T}
+    layerfun::F
+    traitfun::T
 end
 LayerVertexConf() = LayerVertexConf(ActivationContribution ∘ LazyMutable, validated() ∘ default_logging())
 
@@ -320,8 +320,8 @@ Shielded(base=LayerVertexConf(); allowed = tuple()) = let Shield(t) = MutationSh
 end
 
 
-(c::LayerVertexConf)(in::AbstractVertex, l) = mutable(l,in,layerfun=c.layerfun, mutation=IoChange, traitfun=c.traitfun)
-(c::LayerVertexConf)(name::String, in::AbstractVertex, l) = mutable(name, l,in,layerfun=c.layerfun, mutation=IoChange, traitfun=c.traitfun)
+(c::LayerVertexConf)(in::AbstractVertex, l) = mutable(l,in,layerfun=c.layerfun, traitfun=c.traitfun)
+(c::LayerVertexConf)(name::String, in::AbstractVertex, l) = mutable(name, l,in,layerfun=c.layerfun, traitfun=c.traitfun)
 
 Base.Broadcast.broadcastable(c::LayerVertexConf) = Ref(c)
 
@@ -330,18 +330,18 @@ Base.Broadcast.broadcastable(c::LayerVertexConf) = Ref(c)
 
 Generic configuration template for concatenation of vertex outputs.
 """
-struct ConcConf
-    layerfun
-    traitfun
+struct ConcConf{F, T}
+    layerfun::F
+    traitfun::T
 end
 ConcConf() = ConcConf(ActivationContribution, validated() ∘ default_logging())
 
 (c::ConcConf)(in::AbstractVector{<:AbstractVertex}) = c(in...)
 (c::ConcConf)(in::AbstractVertex) = in
-(c::ConcConf)(ins::AbstractVertex...) = concat(ins...,mutation=IoChange, traitfun = c.traitfun, layerfun=c.layerfun)
+(c::ConcConf)(ins::AbstractVertex...) = concat(ins..., traitfun = c.traitfun, layerfun=c.layerfun)
 (c::ConcConf)(name::String, in::AbstractVector{<:AbstractVertex}) = c(name, in...)
 (c::ConcConf)(name::String, in::AbstractVertex) = in
-(c::ConcConf)(name::String, ins::AbstractVertex...) = concat(ins...,mutation=IoChange, traitfun = c.traitfun ∘ named(name), layerfun=c.layerfun)
+(c::ConcConf)(name::String, ins::AbstractVertex...) = concat(ins..., traitfun = c.traitfun ∘ named(name), layerfun=c.layerfun)
 
 
 """
@@ -524,7 +524,7 @@ function (s::ResidualArchSpace)(name::String, in::AbstractVertex, rng=rng_defaul
 resinitW(wi::AbstractWeightInit) = wi
 
 resscale(wi, conf, v) = v
-resscale(::Union{IdentityWeightInit, PartialIdentityWeightInit}, conf, v) = invariantvertex(conf.outwrap(x -> convert(eltype(x), 0.5) .* x), v; traitdecoration= conf.traitdecoration, mutation=conf.mutation)
+resscale(::Union{IdentityWeightInit, PartialIdentityWeightInit}, conf, v) = invariantvertex(conf.outwrap(x -> convert(eltype(x), 0.5) .* x), v; traitdecoration= conf.traitdecoration)
 
 """
     FunctionSpace <: AbstractArchSpace
@@ -532,9 +532,9 @@ resscale(::Union{IdentityWeightInit, PartialIdentityWeightInit}, conf, v) = inva
 
 Return a `SizeInvariant` vertex representing `fun(x)` when invoked with `in` as input vertex where `x` is output of `in` where `fun` is uniformly selected from `funs`.
 """
-struct FunctionSpace <: AbstractArchSpace
-    conf::LayerVertexConf
-    funspace::AbstractParSpace
+struct FunctionSpace{C<:LayerVertexConf, P<:AbstractParSpace} <: AbstractArchSpace
+    conf::C
+    funspace::P
     namesuff::String
 end
 funspace_default_conf() = LayerVertexConf(ActivationContribution, validated() ∘ default_logging())
@@ -544,10 +544,10 @@ FunctionSpace(funs...; namesuff::String, conf=funspace_default_conf()) = Functio
 (s::FunctionSpace)(in::AbstractVertex, rng=rng_default; outsize=nothing, wi=nothing) = funvertex(s, in, rng)
 (s::FunctionSpace)(name::String, in::AbstractVertex, rng=rng_default; outsize=nothing, wi=nothing) = funvertex(join([name,s.namesuff]), s, in, rng)
 
-funvertex(s::FunctionSpace, in::AbstractVertex, rng) = invariantvertex(s.conf.layerfun(s.funspace(rng)), in, mutation=IoChange, traitdecoration = s.conf.traitfun)
+funvertex(s::FunctionSpace, in::AbstractVertex, rng) = invariantvertex(s.conf.layerfun(s.funspace(rng)), in, traitdecoration = s.conf.traitfun)
 
 funvertex(name::String, s::FunctionSpace, in::AbstractVertex, rng) =
-invariantvertex(s.conf.layerfun(s.funspace(rng)), in, mutation=IoChange, traitdecoration = s.conf.traitfun ∘ named(name))
+invariantvertex(s.conf.layerfun(s.funspace(rng)), in, traitdecoration = s.conf.traitfun ∘ named(name))
 
 """
     GlobalPoolSpace(Ts...)

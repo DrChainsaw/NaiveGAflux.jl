@@ -35,37 +35,47 @@ using Test
     @info "Testing archspace"
     include("archspace.jl")
 
-    @info "Testing mutation"
-    include("mutation.jl")
+    @warn "Skipping mutation"
+    #@info "Testing mutation"
+    #include("mutation.jl")
 
-    @info "Testing crossover"
-    include("crossover.jl")
+    @warn "Skipping crossover"
+    #@info "Testing crossover"
+    #include("crossover.jl")
 
-    @info "Testing fitness"
-    include("fitness.jl")
+    @warn "Skipping fitness"
+    #@info "Testing fitness"
+    #include("fitness.jl")
 
-    @info "Testing candidate"
-    include("candidate.jl")
+    @warn "Skipping candidate"
+    #@info "Testing candidate"
+    #include("candidate.jl")
 
-    @info "Testing evolve"
-    include("evolve.jl")
+    @warn "Skipping evolve"
+    #@info "Testing evolve"
+    #include("evolve.jl")
 
-    @info "Testing population"
-    include("population.jl")
+    @warn "Skipping population"
+    #@info "Testing population"
+    #include("population.jl")
 
-    @info "Testing iterators"
-    include("iterators.jl")
+    @warn "Skipping iterators"
+    #@info "Testing iterators"
+    #include("iterators.jl")
 
-    @info "Testing visualization"
-    include("visualization/callbacks.jl")
+    @warn "Skipping visualization"
+    #@info "Testing visualization"
+    #include("visualization/callbacks.jl")
 
     if VERSION === v"1.6.1"
-        @info "Testing README examples"
-        include("examples.jl")
+        @warn "Skipping readme examples"
+        #@info "Testing README examples"
+        #include("examples.jl")
     else
         @warn "README examples will only be tested in julia version 1.6.1 due to rng dependency. Skipping..."
     end
 
-    @info "Testing AutoFlux"
-    include("app/autoflux.jl")
+    @warn "Skipping autoflux"
+    #@info "Testing AutoFlux"
+    #include("app/autoflux.jl")
 end
