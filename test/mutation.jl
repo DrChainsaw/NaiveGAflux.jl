@@ -206,13 +206,27 @@
     end
 
     @testset "RemoveVertexMutation" begin
-        inpt = inputvertex("in", 3, FluxDense())
-        v1 = dense(inpt, 5)
-        v2 = dense(v1, 3)
+        @testset "Simple" begin
+            inpt = inputvertex("in", 3, FluxDense())
+            v1 = dense(inpt, 5)
+            v2 = dense(v1, 3)
 
-        @test RemoveVertexMutation()(v1) == v1
+            @test RemoveVertexMutation()(v1) == v1
 
-        @test inputs(v2) == [inpt]
+            @test inputs(v2) == [inpt]
+            @test [nout(inpt)] == nin(v2) == [3]
+        end
+
+        @testset "Simple aligned" begin
+            inpt = inputvertex("in", 3, FluxDense())
+            v1 = dense(inpt, 3)
+            v2 = dense(v1, 3)
+
+            @test RemoveVertexMutation()(v1) == v1
+
+            @test inputs(v2) == [inpt]
+            @test [nout(inpt)] == nin(v2) == [3]
+        end
     end
 
     @testset "KernelSizeMutation $convtype" for convtype in (Conv, ConvTranspose, DepthwiseConv)
