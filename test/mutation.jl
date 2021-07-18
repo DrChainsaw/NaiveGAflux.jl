@@ -517,7 +517,7 @@
         dl(name, in, outsize) = mutable(name, Dense(nout(in), outsize), in)
 
         @testset "RemoveEdgeMutation SizeStack" begin
-            m = RemoveEdgeMutation(valuefun=v->1:nout_org(v))
+            m = RemoveEdgeMutation(valuefun=v->1:nout(v))
 
             v0 = inputvertex("in", 3, FluxDense())
             v1 = dl("v1", v0, 4)
@@ -544,7 +544,7 @@
         end
 
         @testset "RemoveEdgeMutation SizeInvariant" begin
-            m = RemoveEdgeMutation(valuefun=v->1:nout_org(v))
+            m = RemoveEdgeMutation(valuefun=v->1:nout(v))
 
             v0 = inputvertex("in", 3, FluxDense())
             v1 = dl("v1", v0, nout(v0))
@@ -565,7 +565,6 @@
             @test size(g(indata)) == (nout(v4), 3)
         end
     end
-
 
     @testset "OptimizerMutation" begin
         import NaiveGAflux: sameopt, learningrate

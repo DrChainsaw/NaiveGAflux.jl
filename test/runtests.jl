@@ -35,9 +35,8 @@ using Test
     @info "Testing archspace"
     include("archspace.jl")
 
-    @warn "Skipping mutation"
-    #@info "Testing mutation"
-    #include("mutation.jl")
+    @info "Testing mutation"
+    include("mutation.jl")
 
     @warn "Skipping crossover"
     #@info "Testing crossover"
