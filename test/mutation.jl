@@ -227,6 +227,17 @@
             @test inputs(v2) == [inpt]
             @test [nout(inpt)] == nin(v2) == [3]
         end
+
+        @testset "Size cycle" begin
+            inpt = inputvertex("in", 3, FluxDense())
+            v1 = dense(inpt, 4)
+            v2a = dense(v1, 2; name="v2a")
+            v2b = dense(v1, 2; name="v2b")
+            v3 = concat("v3", v2a, v2b)
+            v4 = "v4" >> v3 + v1
+
+            @test_logs (:warn, r"Size cycle detected!") RemoveVertexMutation()(v2b)
+        end
     end
 
     @testset "KernelSizeMutation $convtype" for convtype in (Conv, ConvTranspose, DepthwiseConv)
