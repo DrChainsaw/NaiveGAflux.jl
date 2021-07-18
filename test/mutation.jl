@@ -441,7 +441,7 @@
             indata = ones(Float32,5,4,3,2)
             @test size(g(indata)) == (2,2,2,2)
 
-            m = AddEdgeMutation(1.0, mergefun = default_mergefun(pconc), valuefun = v -> 1:nout_org(v))
+            m = AddEdgeMutation(1.0, mergefun = default_mergefun(pconc), valuefun = v -> 1:nout(v))
 
             # edge to v2 not possible as v1 is input to it already
             @test m(v1) == v1
@@ -475,7 +475,7 @@
             v2b1 = cl("v2b1", v2, 3)
             v3 = "v3" >> v2a1 + v2b1
   
-            m = AddEdgeMutation(1.0,  mergefun = default_mergefun(0.0), valuefun = v -> 1:nout_org(v))
+            m = AddEdgeMutation(1.0,  mergefun = default_mergefun(0.0), valuefun = v -> 1:nout(v))
             
             m(v2a1)
             # Synopsis: v2b1 is selected as a suitable candidate
@@ -485,29 +485,31 @@
         end
 
         @testset "AddEdgeMutation fail" begin
-            m = AddEdgeMutation(1.0, mergefun=default_mergefun(1), valuefun=v -> 1:nout_org(v))
+            m = AddEdgeMutation(1.0, mergefun=default_mergefun(1), valuefun=v -> 1:nout(v))
 
-            v0 = inputvertex("in", 3, FluxConv{2}())
+            v0 = inputvertex("in", 4, FluxConv{2}())
             v1 = cl("v1", v0, 4)
 
-            # No suitable vertx as v0 is already output to v1
+            # No suitable vertex as v0 is already output to v1
             @test m(v0) == v0
             @test all_in_graph(v0) == [v0, v1]
             @test outputs(v0) == [v1]
 
-            v2 = cl("v2", v1, 3)
+            v2 = cl("v2", v1, nout(v0) ÷ 2)
 
             # No suitable vertx as v1 is already output to v2
             @test m(v1) == v1
             @test all_in_graph(v0) == [v0, v1, v2]
             @test outputs(v1) == [v2]
 
-            v3 = concat("v3", v2)
+            v3 = concat("v3", v2, v2)
             v4 = "v4" >> v0 + v3
 
             # Will try to add v1 as input to v3, but v4 can not change size as v0 is immutable
-            @test_logs (:warn, "Selection for vertex v1 failed! Reverting...") m(v1)
+            @test_logs (:warn, "Could not align sizes of v2 and v4!") m(v2)
             @test Set(all_in_graph(v0)) == Set([v0, v1, v2, v3, v4])
+            @test outputs(v2) == [v3, v3]
+            @test inputs(v4) == [v0, v3]
         end
     end
 

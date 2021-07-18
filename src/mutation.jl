@@ -322,7 +322,7 @@ default_mergefun(pconc = 0.5; rng=rng_default, traitfun = MutationShield ∘ Rem
     if rand(rng) > pconc
         return invariantvertex(layerfun(+), vin, traitdecoration=traitfun ∘ named(name(vin) * ".add"))
     end
-    return concat(vin ,mutation=IoChange, traitfun = traitfun ∘ named(name(vin) * ".cat"), layerfun=layerfun)
+    return concat(vin, traitfun = traitfun ∘ named(name(vin) * ".cat"), layerfun=layerfun)
 end
 
 function no_shapechange(vi)
@@ -402,27 +402,20 @@ singleinput(v) = isempty(inputs(v)) || length(inputs(v)) == 1
 create_edge_strat(v::AbstractVertex, valuefun) = create_edge_strat(trait(v), valuefun)
 create_edge_strat(d::DecoratingTrait, valuefun) = create_edge_strat(base(d), valuefun)
 function create_edge_strat(::SizeInvariant, valuefun)
-    alignstrat = IncreaseSmaller(DecreaseBigger(AlignSizeBoth(FailAlignSizeWarn(msgfun = (vin,vout) -> "Could not align sizes of $(name(vin)) and $(name(vout))!"))))
+    warnfailalign = FailAlignSizeWarn(msgfun = (vin,vout) -> "Could not align sizes of $(name(vin)) and $(name(vout))!")
+    mapstrat = WithValueFun(valuefun)
+    alignstrat = IncreaseSmaller(;mapstrat, fallback = DecreaseBigger(;mapstrat, fallback=AlignSizeBoth(;mapstrat, fallback = warnfailalign)))
+    # Tricky failure case: It is possible that CheckCreateEdgeNoSizeCycle does not detect any size cycle until after the edge has been created?
+    sizecyclewarn = FailAlignSizeWarn(msgfun = (vin,vout) -> "Could not align sizes of $(name(vin)) and $(name(vout))! Size cycle detected!") 
 
-    selectstrat = OutSelect{Exact}(LogSelectionFallback("Reverting...", NoutRevert()))
-
-    okstrat = PostApplyMutation(SelectOutputs(selectstrat, alignstrat, valuefun))
-
-    # Tricky failure case: It is possible that CheckCreateEdgeNoSizeCycle does not detect any size cycle until after the edge has been created. When this happens, we run PostSelectOutputs to revert all size changes before removing the edge. The latter might not be strictly needed (I really don't know actually), but it does stay true to the contract of "no size change if operation does not succeed".
-    nokstrat = FailAlignSizeWarn(msgfun = (vin,vout) -> "Could not align sizes of $(name(vin)) and $(name(vout))! Size cycle detected! Reverting...", andthen=PostSelectOutputs(select=NoutRevert(), align=NoSizeChange(), fallback=FailAlignSizeRevert())) # NoutRevert returns success=false, meaning that fallback will be invoked
-
-    return CheckCreateEdgeNoSizeCycle(okstrat, nokstrat)
+    return CheckCreateEdgeNoSizeCycle(ifok=alignstrat, ifnok=sizecyclewarn)
 end
 function create_edge_strat(::SizeStack, valuefun)
+    warnfailalign = FailAlignSizeWarn(msgfun = (vin,vout) -> "Could not align sizes of $(name(vin)) and $(name(vout))!")
+    alignstrat = PostAlign(TruncateInIndsToValid(WithValueFun(valuefun, AlignNinToNout(;fallback=ΔSizeFailNoOp()))), fallback=warnfailalign)
 
-    alignstrat = PostAlignJuMP(DefaultJuMPΔSizeStrategy(), fallback=FailAlignSizeWarn(msgfun = (vin,vout) -> "Could not align sizes of $(name(vin)) and $(name(vout))!"))
-
-    selectstrat = OutSelect{Exact}(LogSelectionFallback("Reverting...", NoutRevert()))
-
-    okstrat = PostApplyMutation(PostSelectOutputs(selectstrat, alignstrat, valuefun, FailAlignSizeRevert()))
-
-    nokstrat = FailAlignSizeWarn(msgfun = (vin,vout) -> "Could not align sizes of $(name(vin)) and $(name(vout))! Size cycle detected! Reverting...")
-    return CheckCreateEdgeNoSizeCycle(okstrat, nokstrat)
+    sizecyclewarn = FailAlignSizeWarn(msgfun = (vin,vout) -> "Could not align sizes of $(name(vin)) and $(name(vout))! Size cycle detected!")
+    return CheckCreateEdgeNoSizeCycle(ifok=alignstrat, ifnok=sizecyclewarn)
 end
 
 """
