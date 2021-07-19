@@ -263,23 +263,16 @@ function check_singleinput!(v1, v2, mergefun)
     return v1, v2
 end
 
-function default_crossoverswap_strategy(valuefun = default_neuronselect)
-    alignstrat = PostAlignJuMP(DefaultJuMPΔSizeStrategy(), fallback=FailAlignSizeWarn(FailAlignSizeNoOp(), (vin,vout) -> "Failed to align sizes for vertices $(name(vin)) and $(name(vout)) for crossover. Reverting..."))
-
-    # Must have exact solution as OutSelect{Relaxed} is allowed to change the nout/nin and this leads to size mismatches when vertices whose outputs are not part of all_in_Δsize_graph are changed.
-
-    # This could perhaps be considered a bug in NaiveNASlib, maybe even the same as https://github.com/DrChainsaw/NaiveNASlib.jl/issues/39 as it also here is unclear why nout is changed when there is no constraint in place (or?) and neuron value is guaranteed to be positive.
-    selectstrat = OutSelect{Exact}(LogSelectionFallback("Reverting...", NoutRevert())) |> TruncateInIndsToValid
-
-    return PostSelectOutputs(selectstrat, alignstrat, valuefun, FailAlignSizeNoOp()) |> PostApplyMutation
+function default_crossoverswap_strategy(valuefun = NaiveNASlib.default_outvalue)
+    warnfailalign = FailAlignSizeWarn(msgfun = (vin,vout) -> "Failed to align sizes for vertices $(name(vin)) and $(name(vout)) for crossover. Attempt aborted!")
+    return PostAlign(TruncateInIndsToValid(WithValueFun(valuefun, AlignNinToNout(;fallback=ΔSizeFailNoOp()))), fallback=warnfailalign)
 end
 
 stripedges!(vin, vout) = stripinedges!(vin) ,stripoutedges!(vout)
 
 function stripinedges!(v)
-    # Unfortunately remove_edge! also removes metadata, causing subsequent create_edge! to create new neurons instead of keeping old ones.
-
-    # Instead we create a dummyvertex between v and each of its inputs to act as a buffer and remove the edges from v's inputs to the dummyvertex. The dummyvertex will be removed by addinedges!
+    # We would like to just remove all input edges using remove_edge!, but this messes up the order of inputs to the outputs of v if v is not the only input
+    # Instead we add a  dummyvertex after each input to v and disconnect it (which preserves order as we know it has only one input)
     i = copy(inputs(v))
 
     for (ind, vi) in enumerate(i)
@@ -292,15 +285,71 @@ function stripinedges!(v)
         push!(outputs(dummy), v)
         deleteat!(outputs(vi), findall(vx -> vx == v, outputs(vi)))
 
-        remove_edge!(vi, dummy, strategy = NoSizeChange())
+        remove_edge!(vi, dummy, strategy = NoSizeChange())     
     end
     return i
 end
 
+struct SizeMirror{T} <: NaiveNASlib.DecoratingTrait
+    base::T
+end
+NaiveNASlib.base(t::SizeMirror) = t.base
+NaiveNASlib.nin(::SizeMirror, v::AbstractVertex) = isempty(inputs(v)) ? nin(NaiveNASlib.findterminating(v, outputs, inputs)[1]) : nout.(inputs(v))
+#NaiveNASlib.nout(::SizeMirror, v::AbstractVertex) = isempty(outputs(v)) ? nout(inputs(v)[1]) : nin(outputs(v)[1])[1] 
+trace_nin_forwards(v, from) = trace_nin_forwards(trait(v), v, from)
+trace_nin_forwards(t::NaiveNASlib.DecoratingTrait, v, from) = trace_nin_forwards(base(t), v, from)
+function trace_nin_forwards(::SizeStack, v, from)
+
+end
+
+struct NonZero{T} <: NaiveNASlib.DecoratingTrait
+    base::T
+end
+NaiveNASlib.base(t::NonZero) = t.base
+NaiveNASlib.nin(t::NonZero, v::AbstractVertex) = max.(1, nin(base(t), v))
+NaiveNASlib.nout(t::NonZero, v::AbstractVertex) = max(1, nout(base(t), v))
+
 # Invariant vertex so that removal is trivial.
 # Using size absorbing dummies leads to selection of input neurons which dont exist (e.g. take input nr 243 from a layer with 16 inputs).
 # Using size stacking dummies leads to neurons being whiped out (e.g. when connecting a 16 neuron output to a 8 neuron input then all 8 are replaced with new neurons).
-dummyvertex(v) = invariantvertex(ActivationContribution(identity), v; traitdecoration = named("$(name(v)).dummy"))
+dummyvertex(v) = invariantvertex(ActivationContribution(identity), v; traitdecoration = named("$(name(v)).dummy") ∘ NonZero)
+
+mutable struct SizeDummy1
+    nin::Vector{Int}
+    nout::Int
+    function SizeDummy1(nin, nout)
+        #@assert nout != 18 "aaa $nin"
+        nin = isempty(nin) ? [1] : nin
+        nout = nout == 0 ? 1 : nout
+        new(nin, nout) 
+    end
+end
+NaiveNASlib.nin(s::SizeDummy1) = s.nin
+NaiveNASlib.nout(s::SizeDummy1) = s.nout
+NaiveNASlib.default_outvalue(s::SizeDummy1) = 1
+
+function NaiveNASlib.Δsize!(s::SizeDummy1, ins::AbstractVector, outs::AbstractVector)
+    if !isempty(ins)
+        s.nin = map(enumerate(ins)) do (i, newins)
+            newins === missing && return s.nin[i]
+            length(newins)
+        end
+    end
+    @show ins
+    @show outs
+
+    s.nout = length(outs)
+end
+
+function NaiveNASlib.compconstraint!(case, ::NaiveNASlib.AbstractJuMPΔSizeStrategy, ::SizeDummy1, data) 
+    v = data.vertex
+    for vi in inputs(v)
+        NaiveNASflux.@constraint(data.model, data.noutdict[vi] == data.noutdict[v])
+    end
+end
+
+#dummyvertex(v) = absorbvertex(SizeDummy1(nin(v), nout(v)), v; traitdecoration = named("$(name(v)).dummy") ∘ NaiveNASflux.SizeNinNoutConnected)
+
 
 function addinedges!(v, ins, strat = default_crossoverswap_strategy)
     dummies = copy(inputs(v))
@@ -318,18 +367,16 @@ function addinedges!(v, ins, strat = default_crossoverswap_strategy)
         vrm = pop!(dummies)
         remove!(vrm, RemoveStrategy(ConnectNone(), NoSizeChange()))
     end
-
     create_edge_strat = (i == length(ins) ? strat() : NoSizeChange() for i in eachindex(ins))
+    # TODO: Why s instead of strat() no longer works?
     success = map((iv, ov, s) -> create_edge!(iv, ov; strategy = s), ins, outs, create_edge_strat) |> all
     remove_dummy_strat = (i == length(dummies) ? strat() : NoSizeChange() for i in eachindex(dummies))
     return success && map((dv,  s)-> remove!(dv, RemoveStrategy(s)), dummies, remove_dummy_strat) |> all
 end
 
 function stripoutedges!(v)
-    # Similar story as stripinedges to avoid destroying the mutation metadata in the outputs, eventually
-    # causing neurons to be unnecessary recreated. Instead, we insert a new dummy neuron which acts as a buffer for
-    # which we don't care that it is corrupted as we will anyways remove it.
-    insert!(v, dummyvertex, reverse)
+    # Similar story as stripinedges to avoid messing with the input order for outputs to v.
+    insert!(v, dummyvertex, reverse) 
     dummy = outputs(v)[]
     remove_edge!(v, dummy; strategy = NoSizeChange())
     return dummy
