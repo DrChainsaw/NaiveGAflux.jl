@@ -268,6 +268,22 @@ function default_crossoverswap_strategy(valuefun = NaiveNASlib.default_outvalue)
     return PostAlign(TruncateInIndsToValid(WithValueFun(valuefun, AlignNinToNout(;fallback=ΔSizeFailNoOp()))), fallback=warnfailalign)
 end
 
+struct NonZeroSizeTrait{T <: NaiveNASlib.MutationTrait} <: NaiveNASlib.DecoratingTrait
+    minsize::Int
+    base::T
+end
+NonZeroSizeTrait(base) = NonZeroSizeTrait(1, base)
+
+NaiveNASlib.base(t::NonZeroSizeTrait) = t.base
+NaiveNASlib.nin(t::NonZeroSizeTrait, v::AbstractVertex) = max.(t.minsize, nin(base(t), v))
+NaiveNASlib.nout(t::NonZeroSizeTrait, v::AbstractVertex) = max(t.minsize, nout(base(t), v))
+
+# Invariant vertex so that removal is trivial.
+# Using size absorbing dummies leads to selection of input neurons which dont exist (e.g. take input nr 243 from a layer with 16 inputs).
+# Using size stacking dummies leads to neurons being whiped out (e.g. when connecting a 16 neuron output to a 8 neuron input then all 8 are replaced with new neurons).
+# We must ensure size is non-zero though, or else NaiveNASlib will not generate any variables for setting the size
+dummyvertex(v) = invariantvertex(ActivationContribution(identity), v; traitdecoration = named("$(name(v)).dummy") ∘ NonZeroSizeTrait)
+
 stripedges!(vin, vout) = stripinedges!(vin) ,stripoutedges!(vout)
 
 function stripinedges!(v)
@@ -290,67 +306,6 @@ function stripinedges!(v)
     return i
 end
 
-struct SizeMirror{T} <: NaiveNASlib.DecoratingTrait
-    base::T
-end
-NaiveNASlib.base(t::SizeMirror) = t.base
-NaiveNASlib.nin(::SizeMirror, v::AbstractVertex) = isempty(inputs(v)) ? nin(NaiveNASlib.findterminating(v, outputs, inputs)[1]) : nout.(inputs(v))
-#NaiveNASlib.nout(::SizeMirror, v::AbstractVertex) = isempty(outputs(v)) ? nout(inputs(v)[1]) : nin(outputs(v)[1])[1] 
-trace_nin_forwards(v, from) = trace_nin_forwards(trait(v), v, from)
-trace_nin_forwards(t::NaiveNASlib.DecoratingTrait, v, from) = trace_nin_forwards(base(t), v, from)
-function trace_nin_forwards(::SizeStack, v, from)
-
-end
-
-struct NonZero{T} <: NaiveNASlib.DecoratingTrait
-    base::T
-end
-NaiveNASlib.base(t::NonZero) = t.base
-NaiveNASlib.nin(t::NonZero, v::AbstractVertex) = max.(1, nin(base(t), v))
-NaiveNASlib.nout(t::NonZero, v::AbstractVertex) = max(1, nout(base(t), v))
-
-# Invariant vertex so that removal is trivial.
-# Using size absorbing dummies leads to selection of input neurons which dont exist (e.g. take input nr 243 from a layer with 16 inputs).
-# Using size stacking dummies leads to neurons being whiped out (e.g. when connecting a 16 neuron output to a 8 neuron input then all 8 are replaced with new neurons).
-dummyvertex(v) = invariantvertex(ActivationContribution(identity), v; traitdecoration = named("$(name(v)).dummy") ∘ NonZero)
-
-mutable struct SizeDummy1
-    nin::Vector{Int}
-    nout::Int
-    function SizeDummy1(nin, nout)
-        #@assert nout != 18 "aaa $nin"
-        nin = isempty(nin) ? [1] : nin
-        nout = nout == 0 ? 1 : nout
-        new(nin, nout) 
-    end
-end
-NaiveNASlib.nin(s::SizeDummy1) = s.nin
-NaiveNASlib.nout(s::SizeDummy1) = s.nout
-NaiveNASlib.default_outvalue(s::SizeDummy1) = 1
-
-function NaiveNASlib.Δsize!(s::SizeDummy1, ins::AbstractVector, outs::AbstractVector)
-    if !isempty(ins)
-        s.nin = map(enumerate(ins)) do (i, newins)
-            newins === missing && return s.nin[i]
-            length(newins)
-        end
-    end
-    @show ins
-    @show outs
-
-    s.nout = length(outs)
-end
-
-function NaiveNASlib.compconstraint!(case, ::NaiveNASlib.AbstractJuMPΔSizeStrategy, ::SizeDummy1, data) 
-    v = data.vertex
-    for vi in inputs(v)
-        NaiveNASflux.@constraint(data.model, data.noutdict[vi] == data.noutdict[v])
-    end
-end
-
-#dummyvertex(v) = absorbvertex(SizeDummy1(nin(v), nout(v)), v; traitdecoration = named("$(name(v)).dummy") ∘ NaiveNASflux.SizeNinNoutConnected)
-
-
 function addinedges!(v, ins, strat = default_crossoverswap_strategy)
     dummies = copy(inputs(v))
     outs = copy(dummies)
@@ -368,7 +323,7 @@ function addinedges!(v, ins, strat = default_crossoverswap_strategy)
         remove!(vrm, RemoveStrategy(ConnectNone(), NoSizeChange()))
     end
     create_edge_strat = (i == length(ins) ? strat() : NoSizeChange() for i in eachindex(ins))
-    # TODO: Why s instead of strat() no longer works?
+    # TODO: Why s instead of strat() no longer catches size mismatch failures when one vertex is immutable?
     success = map((iv, ov, s) -> create_edge!(iv, ov; strategy = s), ins, outs, create_edge_strat) |> all
     remove_dummy_strat = (i == length(dummies) ? strat() : NoSizeChange() for i in eachindex(dummies))
     return success && map((dv,  s)-> remove!(dv, RemoveStrategy(s)), dummies, remove_dummy_strat) |> all

@@ -5,7 +5,6 @@
 
     teststrat() = NaiveGAflux.default_crossoverswap_strategy(v -> 1) 
 
-    
     @testset "CrossoverSwap" begin
         import NaiveGAflux: crossoverswap!, separablefrom
 
