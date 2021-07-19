@@ -38,9 +38,8 @@ using Test
     @info "Testing mutation"
     include("mutation.jl")
 
-    @warn "Skipping crossover"
-    #@info "Testing crossover"
-    #include("crossover.jl")
+    @info "Testing crossover"
+    include("crossover.jl")
 
     @warn "Skipping fitness"
     #@info "Testing fitness"
