@@ -41,29 +41,24 @@ using Test
     @info "Testing crossover"
     include("crossover.jl")
 
-    @warn "Skipping fitness"
-    #@info "Testing fitness"
-    #include("fitness.jl")
+    @info "Testing fitness"
+    include("fitness.jl")
 
-    @warn "Skipping candidate"
-    #@info "Testing candidate"
-    #include("candidate.jl")
+    @info "Testing candidate"
+    include("candidate.jl")
 
-    @warn "Skipping evolve"
-    #@info "Testing evolve"
-    #include("evolve.jl")
+    @info "Testing evolve"
+    include("evolve.jl")
 
-    @warn "Skipping population"
-    #@info "Testing population"
-    #include("population.jl")
+    @info "Testing population"
+    include("population.jl")
 
     @warn "Skipping iterators"
     #@info "Testing iterators"
     #include("iterators.jl")
 
-    @warn "Skipping visualization"
-    #@info "Testing visualization"
-    #include("visualization/callbacks.jl")
+    @info "Testing visualization"
+    include("visualization/callbacks.jl")
 
     if VERSION === v"1.6.1"
         @warn "Skipping readme examples"

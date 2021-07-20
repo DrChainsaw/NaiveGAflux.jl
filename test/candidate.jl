@@ -45,7 +45,7 @@
                     @test optimizer(newcand) !== optimizer(cand) !== Nothing
                 end
 
-                teststrat() = NaiveGAflux.default_crossoverswap_strategy(v -> ones(nout_org(v)))
+                teststrat() = NaiveGAflux.default_crossoverswap_strategy(v -> 1)
                 graphcrossover = VertexCrossover(CrossoverSwap(;pairgen = (v1,v2) -> (1,1), strategy=teststrat); pairgen = (v1,v2;ind1) -> ind1==1 ? (2,3) : nothing)
                 optcrossover = OptimizerCrossover()
                 crossfun = evolvemodel(graphcrossover, optcrossover)
