@@ -293,6 +293,8 @@ function (m::RemoveVertexMutation)(v::AbstractVertex)
     return v
 end
 
+default_neuronselect(args...) = NaiveNASlib.default_outvalue(args...)
+
 """
     AddEdgeMutation <: AbstractMutation{AbstractVertex}
     AddEdgeMutation(p; rng=rng_default, mergefun=default_mergefun(rng=rng), filtfun=no_shapechange, valuefun=default_neuronselect)
@@ -304,7 +306,7 @@ Higher values of `p` will give more preference to earlier vertices of `vs`.
 
 If `vo` is not capable of having multiple inputs (determined by `singleinput(v) == true`), `vm = mergefun(voi)` where `voi` is a randomly selected input to `vo` will be used instead of `vo` and `vo` will be added as the output of `vm`.
 
-When selecting neurons/outputs after any eventual size change the values `valuefun(v)` will be used to determine the value of each output in vertex `v`. Note that `length(valuefun(v)) == nout_org(v)` must hold.
+When selecting neurons/outputs after any eventual size change the values `valuefun(v)` will be used to determine the value of each output in vertex `v`. Note that `length(valuefun(v)) == nout(v)` must hold.
 
 Note: High likelyhood of large accuracy degradation after applying this mutation.
 """
@@ -428,7 +430,7 @@ Vertex `vi` must have more than one output and vertex `vo` must have more than o
 
 If there are multiple edges between `vi` and `vo` no change will be made due to NaiveNASlib not being able to revert a failed operation in this case..
 
-When selecting neurons/outputs after any eventual size change the values `valuefun(v)` will be used to determine the value of each output in vertex `v`. Note that `length(valuefun(v)) == nout_org(v)` must hold.
+When selecting neurons/outputs after any eventual size change the values `valuefun(v)` will be used to determine the value of each output in vertex `v`. Note that `length(valuefun(v)) == nout(v)` must hold.
 
 Note: High likelyhood of large accuracy degradation after applying this mutation.
 """

@@ -53,22 +53,19 @@ using Test
     @info "Testing population"
     include("population.jl")
 
-    @warn "Skipping iterators"
-    #@info "Testing iterators"
-    #include("iterators.jl")
+    @info "Testing iterators"
+    include("iterators.jl")
 
     @info "Testing visualization"
     include("visualization/callbacks.jl")
 
-    if VERSION === v"1.6.1"
-        @warn "Skipping readme examples"
-        #@info "Testing README examples"
-        #include("examples.jl")
+    if VERSION === v"1.6.2"
+        @info "Testing README examples"
+        include("examples.jl")
     else
-        @warn "README examples will only be tested in julia version 1.6.1 due to rng dependency. Skipping..."
+        @warn "README examples will only be tested in julia version 1.6.2 due to rng dependency. Skipping..."
     end
 
-    @warn "Skipping autoflux"
-    #@info "Testing AutoFlux"
-    #include("app/autoflux.jl")
+    @info "Testing AutoFlux"
+    include("app/autoflux.jl")
 end

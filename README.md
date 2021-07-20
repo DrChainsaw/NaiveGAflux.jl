@@ -294,7 +294,7 @@ mutation = VertexMutation(mutation)
 mutation(graph)
 
 # Input vertex is never mutated
-@test nout.(vertices(graph)) == [3,5,8]
+@test nout.(vertices(graph)) == [3,5,4]
 
 # Use the MutationShield trait to protect vertices from mutation
 outlayer = mutable(Dense(nout(layer2), 10), layer2, traitfun = MutationShield)
@@ -302,67 +302,40 @@ graph = CompGraph(invertex, outlayer)
 
 mutation(graph)
 
-@test nout.(vertices(graph)) == [3,6,5,10]
+@test nout.(vertices(graph)) == [3,4,3,10]
 
 # In most cases it makes sense to mutate with a certain probability
 mutation = VertexMutation(MutationProbability(NoutMutation(-0.5, 0.5), 0.5))
 
 mutation(graph)
 
-@test nout.(vertices(graph)) == [3,7,5,10]
+@test nout.(vertices(graph)) == [3,3,2,10]
 
 # Or just chose to either mutate the whole graph or don't do anything
-mutation = MutationProbability(VertexMutation(NoutMutation(-0.5, 0.5)), 0.5)
+mutation = MutationProbability(VertexMutation(NoutMutation(-0.5, 0.5)), 0.98)
 
 mutation(graph)
 
-@test nout.(vertices(graph)) == [3,10,6,10]
-
-# Up until now, size changes have only been kept track of, but not actually applied
-@test nout_org.(vertices(graph)) == [3,4,5,10]
-
-Δoutputs(graph, v -> ones(nout_org(v)))
-apply_mutation(graph)
-
-@test nout.(vertices(graph)) == nout_org.(vertices(graph)) == [3,10,6,10]
-@test size(graph(ones(3,1))) == (10, 1)
-
-# NeuronSelectMutation keeps track of changed vertices and performs the above steps when invoked
-mutation = VertexMutation(NeuronSelectMutation(NoutMutation(-0.5,0.5)))
-
-mutation(graph)
-
-@test nout.(vertices(graph)) == [3,11,7,10]
-@test nout_org.(vertices(graph)) == [3,10,6,10]
-
-select(mutation.m)
-
-@test nout_org.(vertices(graph)) == [3,11,7,10]
+@test nout.(vertices(graph)) == [3,4,3,10]
 @test size(graph(ones(3,1))) == (10, 1)
 
 # Mutation can also be conditioned:
-mutation = VertexMutation(MutationFilter(v -> nout(v) < 8, RemoveVertexMutation()))
+mutation = VertexMutation(MutationFilter(v -> nout(v) < 4, RemoveVertexMutation()))
 
 mutation(graph)
 
-@test nout.(vertices(graph)) == [3,11,10]
+@test nout.(vertices(graph)) == [3,4,10]
 
 # When adding vertices it is probably a good idea to try to initialize them as identity mappings
 addmut = AddVertexMutation(VertexSpace(DenseSpace(5, identity)), IdentityWeightInit())
 
 # Chaining mutations is also useful:
-noutmut = NeuronSelectMutation(NoutMutation(-0.8, 0.8))
+noutmut = NoutMutation(-0.8, 0.8)
 mutation = VertexMutation(MutationChain(addmut, noutmut))
-# For deeply composed blobs like this, it can be cumbersome to "dig up" the NeuronSelectMutation.
-# neuronselect helps finding NeuronSelectMutations in the compositional hierarchy
 
-# PostMutation lets us add actions to perform after a mutation is done (such as neuronselect)
-logselect(m, g) = @info "Selecting parameters..."
-mutation = PostMutation(mutation, logselect, neuronselect)
+mutation(graph)
 
-@test_logs (:info, "Selecting parameters...") mutation(graph)
-
-@test nout.(vertices(graph)) == nout_org.(vertices(graph)) == [3,8,11,10]
+@test nout.(vertices(graph)) == [3,3,4,10]
 ```
 
 ### Crossover

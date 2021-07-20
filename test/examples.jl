@@ -66,7 +66,6 @@
     # Maybe in a loop :)
 end
 
-
 @testset "ParSpace example" begin
     # Set seed of default random number generator for reproducible results
     using NaiveGAflux, Random
@@ -211,27 +210,6 @@ end
     mutation(graph)
 
     @test nout.(vertices(graph)) == [3,4,3,10]
-
-    # Up until now, size changes have only been kept track of, but not actually applied
-    @test nout_org.(vertices(graph)) == [3,4,5,10]
-
-    Δoutputs(graph, v -> ones(nout_org(v)))
-    apply_mutation(graph)
-
-    @test nout.(vertices(graph)) == nout_org.(vertices(graph)) == [3,4,3,10]
-    @test size(graph(ones(3,1))) == (10, 1)
-
-    # NeuronSelectMutation keeps track of changed vertices and performs the above steps when invoked
-    mutation = VertexMutation(NeuronSelectMutation(NoutMutation(-0.5,0.5)))
-
-    mutation(graph)
-
-    @test nout.(vertices(graph)) == [3,3,4,10]
-    @test nout_org.(vertices(graph)) == [3,4,3,10]
-
-    select(mutation.m)
-
-    @test nout_org.(vertices(graph)) == [3,3,4,10]
     @test size(graph(ones(3,1))) == (10, 1)
 
     # Mutation can also be conditioned:
@@ -245,18 +223,12 @@ end
     addmut = AddVertexMutation(VertexSpace(DenseSpace(5, identity)), IdentityWeightInit())
 
     # Chaining mutations is also useful:
-    noutmut = NeuronSelectMutation(NoutMutation(-0.8, 0.8))
+    noutmut = NoutMutation(-0.8, 0.8)
     mutation = VertexMutation(MutationChain(addmut, noutmut))
-    # For deeply composed blobs like this, it can be cumbersome to "dig up" the NeuronSelectMutation.
-    # neuronselect helps finding NeuronSelectMutations in the compositional hierarchy
+    
+    mutation(graph)
 
-    # PostMutation lets us add actions to perform after a mutation is done (such as neuronselect)
-    logselect(m, g) = @info "Selecting parameters..."
-    mutation = PostMutation(mutation, logselect, neuronselect)
-
-    @test_logs (:info, "Selecting parameters...") mutation(graph)
-
-    @test nout.(vertices(graph)) == nout_org.(vertices(graph)) == [3,2,4,10]
+    @test nout.(vertices(graph)) == [3,3,4,10]
 end
 
 @testset "Crossover examples" begin
@@ -378,7 +350,6 @@ end
     @test fitness(gpuaccfitness, candidate1) == 0
     @test fitness(gpuaccfitness, candidate2) == 1
 end
-
 
 @testset "Candidate handling" begin
 
