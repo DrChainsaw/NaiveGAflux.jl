@@ -4,8 +4,13 @@
 Abstract type defining a mutation operation on entities of type `T`.
 
 Implementations are expected to be callable using an entity of type `T` as only input.
+
+May also implement a callable accepting a `AbstractVector{<:T}` if it is useful to work on
+all items to mutate at once.
 """
 abstract type AbstractMutation{T} end
+
+(m::AbstractMutation{T})(es::AbstractVector{<:T}) where T = m.(es)
 
 """
     AbstractCrossover{T}
@@ -14,12 +19,15 @@ Type alias for `AbstractMutation{Tuple{T,T}}` defining a crossover of two entiti
 
 Implementations are expected to be callable using a tuple of two type `T` as only input.
 """
-AbstractCrossover{T} = AbstractMutation{Tuple{T,T}}
+const AbstractCrossover{T} = AbstractMutation{Tuple{T,T}}
 
 """
     DecoratingMutation{T}
 
 Abstract type indicating that the type itself does not perform any mutation but wraps a type which might do.
+
+Must either implement callable method for `AbstractVector{<:T}` or accept keyword arguments `next=wrapped(m)` and
+`noop=identity` along with a single `T`.
 """
 abstract type DecoratingMutation{T} <: AbstractMutation{T} end
 wrapped(m::DecoratingMutation) = m.m
@@ -28,6 +36,34 @@ mutationleaves(m::DecoratingMutation) = (mutationleaves(wrapped(m))...,)
 mutationleaves(tm::Tuple) = mapreduce(mutationleaves, (t1,t2) -> (t1...,t2...), tm)
 mutationleaves(m) = tuple(m)
 
+# Apart from being overengineered this helps protecting against forgetting to handle arrays in a DecoratingMutation
+# The next/noop happens to work with most existing DecoratingMutations, but it is a bit arbitrary and in some cases 
+# one must implement both the per-element and the vector of elements versions.
+function (m::DecoratingMutation{T})(es::AbstractVector{<:T}) where T 
+    cnt = Ref(1)
+    fornext = Int[]
+    next = function(e) 
+        push!(fornext, cnt[])
+        cnt[] += 1
+        e
+    end
+    noop = function(e)
+        cnt[] += 1
+        e
+    end
+
+    allres = m.(es; next, noop)
+    mres = wrapped(m)(es[fornext])
+
+    # Mutation might accidentally widen the type compared to allres and then we can't insert mres into allres.
+    # Lets fix that if it happens
+    RT = typejoin(eltype(allres), eltype(mres))
+    res = RT === eltype(allres) ? allres :  convert(Vector{RT}, allres)
+
+    res[fornext] = mres
+    return res
+end
+
 """
     MutationProbability{T} <: DecoratingMutation{T}
     MutationProbability(m::AbstractMutation{T}, p::Probability)
@@ -35,12 +71,12 @@ mutationleaves(m) = tuple(m)
 
 Applies `m` with probability `p`.
 """
-struct MutationProbability{T} <: DecoratingMutation{T}
+struct MutationProbability{T, P<:Probability} <: DecoratingMutation{T}
     m::AbstractMutation{T}
-    p::Probability
+    p::P
 end
 MutationProbability(m::AbstractMutation{T}, p::Number) where T = MutationProbability(m, Probability(p))
-(m::MutationProbability)(e) = apply(() -> m.m(e), m.p, () -> e)
+(m::MutationProbability{T})(e::T; next=m.m, noop=identity) where T = apply(() -> next(e), m.p, () -> noop(e))
 
 """
     WeightedMutationProbability{T,F} <: DecoratingMutation{T}
@@ -52,7 +88,7 @@ struct WeightedMutationProbability{T,F} <: DecoratingMutation{T}
     m::AbstractMutation{T}
     pfun::F
 end
-(m::WeightedMutationProbability)(e) = apply(() -> m.m(e), m.pfun(e), () -> e)
+(m::WeightedMutationProbability{T})(e::T; next=m.m, noop=identity) where T = apply(() -> next(e), m.pfun(e), () -> noop(e))
 
 """
     HighValueMutationProbability(m::AbstractMutation{T}, pbase::Real, rng=rng_default; spread=0.5)
@@ -110,7 +146,9 @@ struct MutationChain{T} <: DecoratingMutation{T}
     m::Tuple{Vararg{AbstractMutation{T}}}
 end
 MutationChain(m::AbstractMutation{T}...) where T = MutationChain(m)
-(m::MutationChain)(e) = foldl((ei, mi) -> mi(ei), m.m; init=e)
+# Identical, but can't use Union due to ambiguity
+(m::MutationChain{T})(es::AbstractVector{<:T}) where T = foldl((ei, mi) -> mi(ei), m.m; init=es)
+(m::MutationChain{T})(e::T) where T = foldl((ei, mi) -> mi(ei), m.m; init=e)
 
 """
     RecordMutation{T} <: DecoratingMutation{T}
@@ -125,8 +163,8 @@ struct RecordMutation{T} <: DecoratingMutation{T}
     mutated::Vector{T}
 end
 RecordMutation(m::AbstractMutation{T}) where T = RecordMutation(m, T[])
-function (m::RecordMutation)(e)
-    em = m.m(e)
+function (m::RecordMutation{T})(e::T; next=m.m, noop=identity) where T
+    em = next(e)
     push!(m.mutated, em)
     return em
 end
@@ -149,16 +187,16 @@ Calling `nextlogfun(e)` where `e` is the entity to mutate produces an `AbstractL
 
 By default, this is used to add a level of indentation to subsequent logging calls which makes logs of hierarchical mutations (e.g. mutate a CompGraph by applying mutations to some of its vertices) easier to read. Set `nextlogfun = e -> current_logger()` to remove this behaviour.
 """
-struct LogMutation{F,L<:LogLevel,LF,T} <: DecoratingMutation{T}
+struct LogMutation{T,F,L<:LogLevel,LF} <: DecoratingMutation{T}
     strfun::F
     level::L
     nextlogfun::LF
     m::AbstractMutation{T}
 end
 LogMutation(strfun, m::AbstractMutation{T}; level = Logging.Info, nextlogfun=e -> PrefixLogger("   ")) where T = LogMutation(strfun, level, nextlogfun, m)
-function (m::LogMutation)(e)
+function (m::LogMutation{T})(e::T; next=m.m, noop=identity) where T
     @logmsg m.level m.strfun(e)
-    return with_logger(() -> m.m(e), m.nextlogfun(e))
+    return with_logger(() -> next(e), m.nextlogfun(e))
 end
 
 """
@@ -167,13 +205,13 @@ end
 
 Applies mutation `m` only for entities `e` for which `predicate(e)` returns true.
 """
-struct MutationFilter{P,T} <: DecoratingMutation{T}
+struct MutationFilter{T,P} <: DecoratingMutation{T}
     predicate::P
     m::AbstractMutation{T}
 end
-function (m::MutationFilter)(e)
-    m.predicate(e) && return m.m(e)
-    return e
+function (m::MutationFilter{T})(e::T; next=m.m, noop=identity) where T
+    m.predicate(e) && return next(e)
+    return noop(e)
 end
 
 
@@ -192,9 +230,7 @@ struct VertexMutation{S<:AbstractVertexSelection} <: DecoratingMutation{CompGrap
 end
 VertexMutation(m::AbstractMutation{AbstractVertex}) = VertexMutation(m, FilterMutationAllowed())
 function (m::VertexMutation)(g::CompGraph)
-    for v in select(m.s, g, m)
-        m.m(v)
-    end
+    m.m(select(m.s, g, m))
     return g
 end
 
@@ -204,9 +240,10 @@ end
     NoutMutation(limit, rng::AbstractRNG=rng_default)
     NoutMutation(l1,l2)
 
-Mutate the out size of a vertex.
+Mutate the out size of a vertex or vector of vertices.
 
-Size is changed by `x * nout(v)` quantized to closest non-zero integer of `minΔnoutfactor(v)` where `x` is drawn from `U(minrel, maxrel)` where `minrel` and `maxrel` are `l1` and `l2` if `l1 < l2` and `l2` and `l1` otherwise.
+Size is changed by `x * nout(v)` quantized to closest non-zero integer of `minΔnoutfactor(v)` where `x` is drawn from `U(minrel, maxrel)` where 
+`minrel` and `maxrel` are `l1` and `l2` if `l1 < l2` and `l2` and `l1` otherwise.
 """
 struct NoutMutation{R<:Real, RNG<:AbstractRNG} <:AbstractMutation{AbstractVertex}
     minrel::R
@@ -219,26 +256,37 @@ struct NoutMutation{R<:Real, RNG<:AbstractRNG} <:AbstractMutation{AbstractVertex
 end
 NoutMutation(limit, rng::AbstractRNG=rng_default) = NoutMutation(0, limit, rng)
 NoutMutation(l1,l2) = NoutMutation(l1,l2, rng_default)
-function (m::NoutMutation)(v::AbstractVertex)
-    Δfactor = minΔnoutfactor(v)
-    # Missing Δfactor means vertex can't be mutated, for example if it touches an immutable vertex such as an input vertex
-    ismissing(Δfactor) && return v
+(m::NoutMutation)(v::AbstractVertex) = first(m([v]))
+function (m::NoutMutation)(vs::AbstractVector{<:AbstractVertex})
 
-    shift = m.minrel
-    scale = m.maxrel - m.minrel
+    Δs = Dict{AbstractVertex, Int}()
+    for v in vs
 
-    x = rand(m.rng) * scale + shift
-    xq = (nout(v) * x) ÷ Δfactor
-    Δ = Int(sign(x) * max(Δfactor, abs(xq) * Δfactor))
+        Δfactor = minΔnoutfactor(v)
+        # Missing Δfactor means vertex can't be mutated, for example if it touches an immutable vertex such as an input vertex
+        ismissing(Δfactor) && continue
 
-    minsize = min(nout(v), minimum(nout.(findterminating(v, inputs))))
-    minsize + Δ <= Δfactor && return v
+        shift = m.minrel
+        scale = m.maxrel - m.minrel
 
-    fallback = ΔNoutRelaxed(v, Δ; fallback=LogΔSizeExec("Could not change nout of $v by $(Δ) after relaxation! Vertex not changed!", Logging.Warn, ΔSizeFailNoOp()))
-    strategy = ΔNoutExact(v, Δ; fallback=LogΔSizeExec("Could not change nout of $v by $(Δ)! Relaxing constraints...", Logging.Warn, fallback))
+        x = rand(m.rng) * scale + shift
+        xq = (nout(v) * x) ÷ Δfactor
+        Δ = Int(sign(x) * max(Δfactor, abs(xq) * Δfactor))
 
-    Δsize!(strategy , all_in_Δsize_graph(v, Output()))
-    return v
+        minsize = min(nout(v), minimum(nout.(findterminating(v, inputs))))
+        minsize + Δ <= Δfactor && continue
+
+        Δs[v] = Δ
+    end
+
+    if !isempty(Δs)
+        failmsg = (args...) -> "Could not change nout of $(join(keys(Δs), ", ", " and ")) by $(join(values(Δs), ", ", " and ")). No change!"
+
+        strategy = ΔNoutRelaxed(Δs; fallback=LogΔSizeExec(failmsg, Logging.Warn, ΔSizeFailNoOp()))
+
+        Δsize!(strategy , all_in_Δsize_graph(keys(Δs), Output()))
+    end
+    return vs
 end
 
 """
@@ -543,14 +591,14 @@ Performs a set of actions after a wrapped `AbstractMutation` is applied.
 
 Actions will be invoked with arguments (m::PostMutation{T}, e::T) where m is the enclosing `PostMutation` and `e` is the mutated entity of type `T`.
 """
-struct PostMutation{A,T} <: DecoratingMutation{T}
+struct PostMutation{T,A} <: DecoratingMutation{T}
     actions::A
     m::AbstractMutation{T}
 end
 PostMutation(m::AbstractMutation{T}, actions...) where T = PostMutation(actions, m)
 PostMutation(action::Function, m::AbstractMutation{T}) where T = PostMutation(m, action)
-function (m::PostMutation)(e)
-    eout = m.m(e)
+function (m::PostMutation{T})(e::T; next=m.m, noop=identity) where T
+    eout = next(e)
     foreach(a -> a(m, eout), m.actions)
     return eout
 end
@@ -646,7 +694,7 @@ LearningRateMutation(rng=rng_default) = OptimizerMutation(o -> nudgelr(o, rng))
 
 (m::OptimizerMutation)(opt::Flux.Optimiser) = Flux.Optimiser(m.(opt.os))
 (m::OptimizerMutation)(o::ShieldedOpt) = o;
-(m::OptimizerMutation)(o) = m.optfun(o)
+(m::OptimizerMutation)(o::FluxOptimizer) = m.optfun(o)
 
 
 nudgelr(o, rng=rng_default) = sameopt(o, nudgelr(learningrate(o), rng))
@@ -670,7 +718,7 @@ struct AddOptimizerMutation{F} <: AbstractMutation{FluxOptimizer}
     optgen::F
 end
 (m::AddOptimizerMutation)(o::ShieldedOpt) = o;
-(m::AddOptimizerMutation)(o) = m(Flux.Optimiser([o]))
+(m::AddOptimizerMutation)(o::FluxOptimizer) = m(Flux.Optimiser([o]))
 function (m::AddOptimizerMutation)(opt::Flux.Optimiser)
     newopt = m.optgen(opt)
     return Flux.Optimiser(mergeopts(typeof(newopt), newopt, opt.os...))

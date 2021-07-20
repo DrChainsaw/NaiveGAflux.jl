@@ -3,7 +3,7 @@
 @testset "Mutation" begin
 
     struct NoOpMutation{T} <:AbstractMutation{T} end
-    (m::NoOpMutation)(t) = t
+    (m::NoOpMutation{T})(t::T) where T = t
     ProbeMutation(T) = RecordMutation(NoOpMutation{T}())
 
     @testset "MutationProbability" begin
@@ -17,6 +17,14 @@
         @test probe.mutated == [1,3,4]
     end
 
+    @testset "MutationProbability vector" begin
+        probe = ProbeMutation(Int)
+        m = MutationProbability(probe, Probability(0.3, MockRng([0.2,0.5,0.1])))
+
+        @test m(1:4) == 1:4
+        @test probe.mutated == [1,3,4]
+    end
+
     @testset "WeightedMutationProbability" begin
         probe = ProbeMutation(Real)
         rng = MockRng([0.5])
@@ -26,6 +34,15 @@
         @test m(0.6) == 0.6
         @test m(0.4) == 0.4
         @test m(0.9) == 0.9
+        @test probe.mutated == [0.6,0.9]
+    end
+
+    @testset "WeightedMutationProbability vector" begin
+        probe = ProbeMutation(Real)
+        rng = MockRng([0.5])
+        m = WeightedMutationProbability(probe, p -> Probability(p, rng))
+
+        @test m([0.1, 0.6, 0.4, 0.9]) == [0.1, 0.6, 0.4, 0.9]
         @test probe.mutated == [0.6,0.9]
     end
 
@@ -90,12 +107,27 @@
         @test getfield.(probes, :mutated) == [[1],[1],[1]]
     end
 
+    @testset "MutationChain vector" begin
+        probes = ProbeMutation.(repeat([Int], 3))
+        m = MutationChain(probes...)
+        @test m(1:2) == 1:2
+        @test getfield.(probes, :mutated) == [[1,2],[1,2],[1,2]]
+    end
+
     @testset "LogMutation" begin
         probe = ProbeMutation(Int)
         m = LogMutation(i -> "Mutate $i", probe)
 
         @test @test_logs (:info, "Mutate 17") m(17) == 17
         @test probe.mutated == [17]
+    end
+
+    @testset "LogMutation vector" begin
+        probe = ProbeMutation(Int)
+        m = LogMutation(i -> "Mutate $i", probe)
+
+        @test @test_logs (:info, "Mutate 17") (:info, "Mutate 21") m([17, 21]) == [17, 21]
+        @test probe.mutated == [17, 21]
     end
 
     @testset "MutationFilter" begin
@@ -107,6 +139,14 @@
 
         @test m(4) == 4
         @test probe.mutated == [4]
+    end
+
+    @testset "MutationFilter vector" begin
+        probe = ProbeMutation(Int)
+        m = MutationFilter(i -> i > 3, probe)
+
+        @test m(1:5) == 1:5
+        @test probe.mutated == [4,5]
     end
 
     @testset "PostMutation" begin
@@ -180,6 +220,22 @@
         NoutMutation(-1, rng)(v2)
         @test nout(v2) == 2
         @test nin(v2) == [nout(v0), nout(v1)] == [1, 1]
+    end
+
+    @testset "NoutMutation vector" begin
+        inpt = inputvertex("in", 3, FluxDense())
+        v1 = dense(inpt, 4; name="v1")
+        v2 = dense(v1, 5; name="v2")
+        v3 = dense(v2, 6; name="v3")
+        v4 = dense(v3, 7; name="v4")
+
+        rng = MockRng([0.5])
+        @test NoutMutation(0.8, rng)([inpt,v2,v3]) == [inpt,v2,v3]
+
+        @test nout(v1) == 4
+        @test nout(v2) == 7
+        @test nout(v3) == 8
+        @test nout(v4) == 7
     end
 
     @testset "AddVertexMutation" begin
@@ -594,6 +650,13 @@
             @test typeof.(m(Descent(0.2)).os) == [Descent]
             @test typeof.(m(Momentum(0.2)).os) == [Momentum, Descent]
             @test typeof.(m(Flux.Optimiser(Nesterov(), Descent(), ShieldedOpt(Descent()))).os) == [Nesterov, ShieldedOpt{Descent}, Descent]
+        end
+
+        @testset "MutationChain and LogMutation" begin
+            m = MutationChain(LogMutation(o -> "First", OptimizerMutation((Momentum, ))), LogMutation(o -> "Second", AddOptimizerMutation(o -> Descent())))
+
+            @test_logs (:info, "First") (:info, "Second") typeof.(m(Nesterov()).os) == [Momentum, Descent]
+            @test_logs (:info, "First") (:info, "First") (:info, "Second") (:info, "Second") m([Nesterov(), ADAM()])
         end
     end
 

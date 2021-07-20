@@ -276,12 +276,8 @@ end
     @test typeof.(mm) == [Descent, Descent, Momentum]
 end
 
-@testset "Optimizer trait" begin
-    import NaiveGAflux: opttype, optmap, FluxOptimizer
-
-    @test opttype("Not an optimizer") === nothing
-    @test opttype(Descent()) == FluxOptimizer()
-    @test opttype(Flux.Optimiser(Descent(), ADAM())) == FluxOptimizer()
+@testset "optmap" begin
+    import NaiveGAflux: optmap, FluxOptimizer
 
     isopt = "Is an optimizer!"
     noopt = "Is not an optimizer!"

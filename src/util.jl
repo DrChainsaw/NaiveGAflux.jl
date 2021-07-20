@@ -207,6 +207,13 @@ function(r::BoundedRandomWalk)(x...)
     return y
  end
 
+ """
+    FluxOptimizer
+
+Alias for Flux.Optimise.AbstractOptimiser
+"""
+const FluxOptimizer = Flux.Optimise.AbstractOptimiser 
+
 
 """
     struct ShieldedOpt{O}
@@ -214,7 +221,7 @@ function(r::BoundedRandomWalk)(x...)
 
 Shields `o` from mutation by `OptimizerMutation`.
 """
-struct ShieldedOpt{O}
+struct ShieldedOpt{O<:FluxOptimizer} <: FluxOptimizer
     opt::O
 end
 Flux.Optimise.apply!(o::ShieldedOpt, args...) = Flux.Optimise.apply!(o.opt, args...)
@@ -238,19 +245,6 @@ mergeopts(os...) = first(@set os[1].eta = (prod(learningrate.(os))))
 mergeopts(os::ShieldedOpt{T}...) where T = ShieldedOpt(mergeopts(map(o -> o.opt, os)...))
 mergeopts(os::WeightDecay...) = WeightDecay(mapreduce(o -> o.wd, *, os))
 
-"""
-    struct FluxOptimizer
-
-Trait to indicate something is a Flux optimizer.
-"""
-struct FluxOptimizer end
-
-"""
-    opttype(o::T)
-
-Return `FluxOptimizer()` if `T` is a Flux optimizer, nothing otherwise.
-"""
-opttype(o::T) where T = hasmethod(Flux.Optimise.apply!, (T, Any, Any)) ? FluxOptimizer() : nothing
 
 """
     optmap(fopt, x, felse=identity)
@@ -261,9 +255,8 @@ Return `fopt(x)` if `x` is an optimizer, else return `felse(x)`.
 Call without x to return `x -> optmap(fopt, x, felse)`
 """
 optmap(fopt, felse=identity) = x -> optmap(fopt, x, felse)
-optmap(fopt, x, felse) = optmap(opttype(x), fopt, x, felse)
-optmap(n, fopt, x, felse) = felse(x)
-optmap(::FluxOptimizer, fopt, o, felse) = fopt(o)
+optmap(fopt, x, felse) = felse(x)
+optmap(fopt, o::FluxOptimizer, felse) = fopt(o)
 
 
 """
