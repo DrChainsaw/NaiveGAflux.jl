@@ -123,7 +123,7 @@ function generate_persistent(nr, newpop, mdir, insize, outsize, cwrap=identity, 
         rm(mdir, force=true, recursive=true)
     end
 
-    iv(i) = inputvertex(join(["model", i, ".input"]), insize[3], FluxConv{2}())
+    iv(i) = conv2dinputvertex(join(["model", i, ".input"]), insize[3])
     return Population(PersistentArray(mdir, nr, i -> create_model(join(["model", i]), archspace, iv(i), cwrap)))
 end
 function create_model(name, as, in, cwrap)

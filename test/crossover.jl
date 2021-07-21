@@ -8,8 +8,8 @@
     @testset "CrossoverSwap" begin
         import NaiveGAflux: crossoverswap!, separablefrom
 
-        iv(np) = inputvertex("$np.in", 3, FluxDense())
-        dv(in, outsize, name) = mutable(name, Dense(nout(in), outsize), in)
+        iv(np) = denseinputvertex("$np.in", 3)
+        dv(in, outsize, name) = fluxvertex(name, Dense(nout(in), outsize), in)
 
         @testset "Simple Dense swap" begin
 
@@ -329,7 +329,7 @@
         end
 
         @testset "Partial success" begin
-            idv(in, outsize, name) = mutable(name, Dense(nout(in), outsize), in; traitfun=t -> NamedTrait(Immutable(), name))
+            idv(in, outsize, name) = fluxvertex(name, Dense(nout(in), outsize), in; traitfun=t -> NamedTrait(Immutable(), name))
 
             function g(np, mergesize, mergeop)
                 vi = iv(np)
@@ -362,9 +362,9 @@
         end
 
         @testset "Swap invariant layers" begin
-            bv(in, name) = mutable(name, BatchNorm(nout(in)), in)
-            pv(in, name) = mutable(name, MaxPool((3,3); pad=(1,1)), in)
-            cv(in, outsize, name) = mutable(name, Conv((3,3), nout(in) => outsize; pad=(1,1)), in)
+            bv(in, name) = fluxvertex(name, BatchNorm(nout(in)), in)
+            pv(in, name) = fluxvertex(name, MaxPool((3,3); pad=(1,1)), in)
+            cv(in, outsize, name) = fluxvertex(name, Conv((3,3), nout(in) => outsize; pad=(1,1)), in)
 
             @testset "Linear graph" begin
                 function g(np)
@@ -454,10 +454,10 @@
     @testset "VertexCrossover" begin
         import NaiveGAflux: GlobalPool, sameactdims, default_pairgen
 
-        iv(np) = inputvertex("$np.in", 3, FluxDense())
-        dv(in, outsize, name) = mutable(name, Dense(nout(in), outsize), in)
+        iv(np) = denseinputvertex("$np.in", 3)
+        dv(in, outsize, name) = fluxvertex(name, Dense(nout(in), outsize), in)
         gv(in, name) = invariantvertex(GlobalPool(MaxPool), in; traitdecoration = named(name))
-        cv(in, outsize, name) = mutable(name, Conv((3,3), nout(in) => outsize; pad=(1,1)), in)
+        cv(in, outsize, name) = fluxvertex(name, Conv((3,3), nout(in) => outsize; pad=(1,1)), in)
 
         @testset "Linear graph" begin
             function g(np, cvs, dvs)
@@ -576,8 +576,8 @@
                 NaiveNASflux.forcemutation(ga_new)
                 NaiveNASflux.forcemutation(gb_new)
 
-                lnout(v) = nout(layertype(v), layer(v)) 
-                lnin(v) = [nin(layertype(v), layer(v))]
+                lnout(v) = nout(layer(v)) 
+                lnin(v) = nin(layer(v))
 
                 @test nout(v4n(ga_new, "b.cv2")) == lnout(v4n(ga_new, "b.cv2"))
                 @test nin(v4n(ga_new, "a.cv3")) == lnin(v4n(ga_new, "a.cv3"))
@@ -656,7 +656,7 @@
         end
 
         @testset "Crossover conv size mismatch" begin
-            pv(in, name) = mutable(name, MaxPool((2,2); stride=(2,2)), in)
+            pv(in, name) = fluxvertex(name, MaxPool((2,2); stride=(2,2)), in)
             function g(np)
                 vi = iv(np)
                 cv1 = cv(vi, 4, "$np.cv1")

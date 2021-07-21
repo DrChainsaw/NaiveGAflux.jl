@@ -16,9 +16,9 @@
             ("FittedCandidate ∘ FileCandidate", c -> FittedCandidate(1, 0.78, FileCandidate(c)))
             )
 
-            invertex = inputvertex("in", 3, FluxDense())
-            hlayer = mutable("hlayer", Dense(3,4), invertex)
-            outlayer = mutable("outlayer", Dense(4, 2), hlayer)
+            invertex = denseinputvertex("in", 3)
+            hlayer = fluxvertex("hlayer", Dense(3,4), invertex)
+            outlayer = fluxvertex("outlayer", Dense(4, 2), hlayer)
             graph = CompGraph(invertex, outlayer)
 
             try
@@ -81,7 +81,7 @@
             end
 
             @testset "Functor" begin
-                v1 = mutable("v1", Dense(3,3;init=idmapping), inputvertex("in", 3, FluxDense()))
+                v1 = fluxvertex("v1", Dense(3,3;init=Flux.identity_init), denseinputvertex("in", 3))
                 cand1 = FileCandidate(CandidateModel(CompGraph(inputs(v1)[], v1)))
 
                 mul(x::AbstractArray) = 2 .* x
@@ -95,7 +95,7 @@
             @testset "Serialization" begin
                 using Serialization
 
-                v = mutable("v1", Dense(3,3), inputvertex("in", 3, FluxDense()))
+                v = fluxvertex("v1", Dense(3,3), denseinputvertex("in", 3))
                 secand = FileCandidate(CandidateModel(CompGraph(inputs(v)[], v)))
 
                 indata = randn(3, 2)
@@ -180,7 +180,7 @@
         end
 
         @testset "Global learning rate scaling" begin
-            v1 = inputvertex("in", 3, FluxDense())
+            v1 = denseinputvertex("in", 3)
             pop = CandidateOptModel.(Descent.(0.1:0.1:1.0), Ref(CompGraph(v1, v1)))
 
             lr(c) = c.opt.eta

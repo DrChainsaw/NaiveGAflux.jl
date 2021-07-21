@@ -12,7 +12,7 @@
     @testset "LogFitness" begin
         import NaiveGAflux: FittedCandidate
         iv = inputvertex("in", 2)
-        c = CompGraph(iv, mutable(Dense(2,3), iv)) |> CandidateModel
+        c = CompGraph(iv, fluxvertex(Dense(2,3), iv)) |> CandidateModel
         lf = LogFitness(MockFitness(3))
         @test @test_logs (:info, " Candidate:   1\tvertices:   2\tparams:  0.01k\tfitness: 3") fitness(lf, c) == 3
         @test @test_logs (:info, " Candidate:   2\tvertices:   2\tparams:  0.01k\tfitness: 3") fitness(lf, c) == 3
@@ -50,7 +50,7 @@
 
     @testset "TrainThenFitness" begin
         iv = inputvertex("in", 2)
-        ov = mutable(Dense(2, 2), iv)
+        ov = fluxvertex(Dense(2, 2), iv)
         cand = CandidateModel(CompGraph(iv, ov))
 
         ttf = TrainThenFitness(

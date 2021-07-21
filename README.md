@@ -94,7 +94,7 @@ initial_searchspace = ArchSpaceChain(initial_hidden, outlayer)
 
 # Sample 5 models from the initial search space and make an initial population
 model(invertex) = CompGraph(invertex, initial_searchspace(invertex))
-models = [model(inputvertex("input", ninputs, FluxDense())) for _ in 1:5]
+models = [model(denseinputvertex("input", ninputs)) for _ in 1:5]
 @test nv.(models) == [4, 3, 4, 5, 3]
 
 population = Population(CandidateModel.(models))
@@ -129,9 +129,8 @@ remlayer = mp(RemoveVertexMutation(), 0.4)
 mutation = MutationChain(remlayer, addlayer)
 
 # Selection:
-# The two best models are not changed
+# The two best models are not changed, the rest are mutated using mutation defined above
 elites = EliteSelection(2)
-# Three new candidates are produced by selecting three canidates from the whole population and mutating them
 mutate = SusSelection(3, EvolveCandidates(evolvemodel(mutation)))
 selection = CombinedEvolution(elites, mutate)
 
@@ -185,7 +184,7 @@ cs = ConvSpace{2}(outsizes=4:32, activations=[relu, elu, selu], kernelsizes=3:9)
 inputsize = 16
 convlayer = cs(inputsize)
 
-@test string(convlayer) == "Conv((8, 3), 16=>22, relu)"
+@test string(convlayer) == "Conv((8, 3), 16 => 22, relu, pad=(4, 3, 1, 1))"
 ```
 
 Lastly, lets look at how to construct a complex search space:
@@ -241,7 +240,7 @@ output = ArchSpaceChain(drep, dout)
 archspace = ArchSpaceChain(featureextract, GlobalPoolSpace(), output)
 
 # Input is 3 channel image
-inputshape = inputvertex("input", 3, FluxConv{2}())
+inputshape = conv2dinputvertex("input", 3)
 
 # Sample one architecture from the search space
 graph1 = CompGraph(inputshape, archspace(inputshape))
@@ -273,9 +272,9 @@ In addition to the basic mutation operations, there are numerous utilities for a
 using NaiveGAflux, Random
 Random.seed!(NaiveGAflux.rng_default, 0)
 
-invertex = inputvertex("in", 3, FluxDense())
-layer1 = mutable(Dense(nout(invertex), 4), invertex)
-layer2 = mutable(Dense(nout(layer1), 5), layer1)
+invertex = denseinputvertex("in", 3)
+layer1 = fluxvertex(Dense(nout(invertex), 4), invertex)
+layer2 = fluxvertex(Dense(nout(layer1), 5), layer1)
 graph = CompGraph(invertex, layer2)
 
 mutation = NoutMutation(-0.5, 0.5)
@@ -297,7 +296,7 @@ mutation(graph)
 @test nout.(vertices(graph)) == [3,5,4]
 
 # Use the MutationShield trait to protect vertices from mutation
-outlayer = mutable(Dense(nout(layer2), 10), layer2, traitfun = MutationShield)
+outlayer = fluxvertex(Dense(nout(layer2), 10), layer2, traitfun = MutationShield)
 graph = CompGraph(invertex, outlayer)
 
 mutation(graph)
@@ -361,11 +360,11 @@ using NaiveGAflux, Random
 import NaiveGAflux: regraph
 Random.seed!(NaiveGAflux.rng_default, 0)
 
-invertex = inputvertex("A.in", 3, FluxDense())
-layer1 = mutable("A.layer1", Dense(nout(invertex), 4), invertex; layerfun=ActivationContribution)
-layer2 = mutable("A.layer2", Dense(nout(layer1), 5), layer1; layerfun=ActivationContribution)
-layer3 = mutable("A.layer3", Dense(nout(layer2), 3), layer2; layerfun=ActivationContribution)
-layer4 = mutable("A.layer4", Dense(nout(layer3), 2), layer3; layerfun=ActivationContribution)
+invertex = denseinputvertex("A.in", 3)
+layer1 = fluxvertex("A.layer1", Dense(nout(invertex), 4), invertex; layerfun=ActivationContribution)
+layer2 = fluxvertex("A.layer2", Dense(nout(layer1), 5), layer1; layerfun=ActivationContribution)
+layer3 = fluxvertex("A.layer3", Dense(nout(layer2), 3), layer2; layerfun=ActivationContribution)
+layer4 = fluxvertex("A.layer4", Dense(nout(layer3), 2), layer3; layerfun=ActivationContribution)
 modelA = CompGraph(invertex, layer4)
 
 # Create an exact copy to show how parameter alignment is preserved

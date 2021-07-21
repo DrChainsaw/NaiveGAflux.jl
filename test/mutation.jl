@@ -48,6 +48,7 @@
 
     @testset "Neuron value weighted mutation" begin
         using Statistics
+        import NaiveNASflux: AbstractMutableComp, neuron_value, wrapped
         struct DummyValue{T, W<:AbstractMutableComp} <: AbstractMutableComp
             values::T
             w::W
@@ -55,7 +56,7 @@
         NaiveNASflux.neuron_value(d::DummyValue) = d.values
         NaiveNASflux.wrapped(d::DummyValue) = d.w
 
-        l(in, outsize, value) = mutable(Dense(nout(in), outsize), in, layerfun = l -> DummyValue(value, l))
+        l(in, outsize, value) = fluxvertex(Dense(nout(in), outsize), in, layerfun = l -> DummyValue(value, l))
 
         v0 = inputvertex("in", 3)
         v1 = l(v0, 4, 1:4)
@@ -167,11 +168,11 @@
         @test expect_e == 11
     end
 
-    dense(in, outsize;layerfun = LazyMutable, name="dense") = mutable(name, Dense(nout(in), outsize), in, layerfun=layerfun)
+    dense(in, outsize;layerfun = LazyMutable, name="dense") = fluxvertex(name, Dense(nout(in), outsize), in, layerfun=layerfun)
     dense(in, outsizes...;layerfun = LazyMutable, name="dense") = foldl((next,i) -> dense(next, outsizes[i], name=join([name, i]), layerfun=layerfun), 1:length(outsizes), init=in)
 
     @testset "VertexMutation" begin
-        inpt = inputvertex("in", 4, FluxDense())
+        inpt = denseinputvertex("in", 4)
         outpt = dense(inpt, 3,4,5)
         graph = CompGraph(inpt, outpt)
 
@@ -183,7 +184,7 @@
     end
 
     @testset "NoutMutation" begin
-        inpt = inputvertex("in", 3, FluxDense())
+        inpt = denseinputvertex("in", 3)
 
         # Can't mutate, don't do anything
         @test NoutMutation(0.4)(inpt) == inpt
@@ -223,7 +224,7 @@
     end
 
     @testset "NoutMutation vector" begin
-        inpt = inputvertex("in", 3, FluxDense())
+        inpt = denseinputvertex("in", 3)
         v1 = dense(inpt, 4; name="v1")
         v2 = dense(v1, 5; name="v2")
         v3 = dense(v2, 6; name="v3")
@@ -239,7 +240,7 @@
     end
 
     @testset "AddVertexMutation" begin
-        inpt = inputvertex("in", 3, FluxDense())
+        inpt = denseinputvertex("in", 3)
         v1 = dense(inpt, 5)
 
         @test inputs(v1) == [inpt]
@@ -263,7 +264,7 @@
 
     @testset "RemoveVertexMutation" begin
         @testset "Simple" begin
-            inpt = inputvertex("in", 3, FluxDense())
+            inpt = denseinputvertex("in", 3)
             v1 = dense(inpt, 5)
             v2 = dense(v1, 3)
 
@@ -274,7 +275,7 @@
         end
 
         @testset "Simple aligned" begin
-            inpt = inputvertex("in", 3, FluxDense())
+            inpt = denseinputvertex("in", 3)
             v1 = dense(inpt, 3)
             v2 = dense(v1, 3)
 
@@ -285,7 +286,7 @@
         end
 
         @testset "Size cycle" begin
-            inpt = inputvertex("in", 3, FluxDense())
+            inpt = denseinputvertex("in", 3)
             v1 = dense(inpt, 4)
             v2a = dense(v1, 2; name="v2a")
             v2b = dense(v1, 2; name="v2b")
@@ -297,7 +298,7 @@
     end
 
     @testset "KernelSizeMutation $convtype" for convtype in (Conv, ConvTranspose, DepthwiseConv)
-        v = mutable(convtype((3,5), 2=>2, pad=(1,1,2,2)), inputvertex("in", 2))
+        v = fluxvertex(convtype((3,5), 2=>2, pad=(1,1,2,2)), inputvertex("in", 2))
         indata = ones(Float32, 7,7,2,2)
         @test size(v(indata)) == size(indata)
 
@@ -314,45 +315,45 @@
     end
 
     @testset "ActivationFunctionMutation Dense" begin
-        v = mutable(Dense(2,3), inputvertex("in", 2))
+        v = fluxvertex(Dense(2,3), inputvertex("in", 2))
         @test ActivationFunctionMutation(elu)(v) == v
         @test layer(v).σ == elu
     end
 
     @testset "ActivationFunctionMutation RNN" begin
-        v = mutable(RNN(2,3), inputvertex("in", 2))
+        v = fluxvertex(RNN(2,3), inputvertex("in", 2))
         @test ActivationFunctionMutation(elu)(v) == v
         @test layer(v).cell.σ == elu
     end
 
     @testset "ActivationFunctionMutation $convtype" for convtype in (Conv, ConvTranspose, DepthwiseConv)
-        v = mutable(convtype((3,5), 2=>2), inputvertex("in", 2))
+        v = fluxvertex(convtype((3,5), 2=>2), inputvertex("in", 2))
         @test ActivationFunctionMutation(elu)(v) == v
         @test layer(v).σ == elu
     end
 
     Flux.GroupNorm(n) = GroupNorm(n,n)
     @testset "ActivationFunctionMutation $normtype" for normtype in (BatchNorm, InstanceNorm, GroupNorm)
-        v = mutable(normtype(2), inputvertex("in", 2))
+        v = fluxvertex(normtype(2), inputvertex("in", 2))
         @test ActivationFunctionMutation(elu)(v) == v
         @test layer(v).λ == elu
     end
 
     @testset "RemoveZeroNout" begin
-        inpt = inputvertex("in", 4, FluxDense())
-        v0 = mutable("v0", Dense(nout(inpt), 5), inpt)
-        v1 = mutable("v1", Dense(nout(v0), 5), v0)
-        v2 = mutable("v2", Dense(nout(v1), 5), v1)
+        inpt = denseinputvertex("in", 4)
+        v0 = fluxvertex("v0", Dense(nout(inpt), 5), inpt)
+        v1 = fluxvertex("v1", Dense(nout(v0), 5), v0)
+        v2 = fluxvertex("v2", Dense(nout(v1), 5), v1)
 
         function path(bname, add=nothing)
-            p1 = mutable("$(bname)1", Dense(nout(v2), 6), v2)
-            p2pa1 = mutable("$(bname)2pa1", Dense(nout(p1), 2), p1)
-            p2pa2 = mutable("$(bname)2pa2", Dense(nout(p2pa1), 2), p2pa1)
-            p2pb1 = mutable("$(bname)2pb1", Dense(nout(p1), 1), p1)
-            p2pb2 = mutable("$(bname)2pb2", Dense(nout(p2pb1), 5), p2pb1)
+            p1 = fluxvertex("$(bname)1", Dense(nout(v2), 6), v2)
+            p2pa1 = fluxvertex("$(bname)2pa1", Dense(nout(p1), 2), p1)
+            p2pa2 = fluxvertex("$(bname)2pa2", Dense(nout(p2pa1), 2), p2pa1)
+            p2pb1 = fluxvertex("$(bname)2pb1", Dense(nout(p1), 1), p1)
+            p2pb2 = fluxvertex("$(bname)2pb2", Dense(nout(p2pb1), 5), p2pb1)
             if !isnothing(add) p2pb2 = traitconf(named("$(bname)2add")) >> p2pb2 + add end
             p3 = concat(p2pa2,p2pb2, traitfun=named("$(bname)3"))
-            return mutable("$(bname)4", Dense(nout(p3), 4), p3)
+            return fluxvertex("$(bname)4", Dense(nout(p3), 4), p3)
         end
 
         vert(want::String, graph::CompGraph) = vertices(graph)[name.(vertices(graph)) .== want][]
@@ -368,11 +369,11 @@
                     pb = path("pb")
 
                     v3 = concat(pa,pb, traitfun = named("v3"))
-                    v4 = mutable("v4", Dense(nout(v3), 6), v3)
+                    v4 = fluxvertex("v4", Dense(nout(v3), 6), v3)
                     if !isnothing(vconc_out)
                         v4 = concat(v4, vert(vconc_out, v4), traitfun = named("v4$(vconc_out)_conc"))
                     end
-                    v5 = mutable("v5", Dense(nout(v4), 5), v4)
+                    v5 = fluxvertex("v5", Dense(nout(v4), 5), v4)
 
                     g = copy(CompGraph(inpt, v5))
                     @test size(g(ones(4,2))) == (5,2)
@@ -392,17 +393,17 @@
 
     @testset "AddEdgeMutation" begin
         import NaiveGAflux: default_mergefun
-        cl(name, in, outsize; kwargs...) = mutable(name, Conv((1,1), nout(in)=>outsize; kwargs...), in)
-        dl(name, in, outsize) = mutable(name, Dense(nout(in), outsize), in)
+        cl(name, in, outsize; kwargs...) = fluxvertex(name, Conv((1,1), nout(in)=>outsize; kwargs...), in)
+        dl(name, in, outsize) = fluxvertex(name, Dense(nout(in), outsize), in)
  
         @testset "No shapechange" begin
             import NaiveGAflux: no_shapechange
 
             @testset "Test size changing ops" begin
-                v0 = inputvertex("in", 3, FluxConv{2}())
+                v0 = conv2dinputvertex("in", 3)
                 v1 = cl("v1", v0, 4)
                 v2 = cl("v2", v1, 5)
-                v3 = mutable("v3", MaxPool((2,2)), v2)
+                v3 = fluxvertex("v3", MaxPool((2,2)), v2)
                 v4 = cl("v4", v3, 4)
                 v5 = cl("v5", v4, 3)
                 v6 = cl("v6", v5, 2; stride=2)
@@ -425,7 +426,7 @@
             end
 
             @testset "Branchy graph" begin
-                v0 = inputvertex("in", 3, FluxConv{2}())
+                v0 = conv2dinputvertex("in", 3)
                 v1 = cl("v1", v0, 4)
 
                 v1a1 = cl("v1a1", v1, 5)
@@ -462,7 +463,7 @@
             end
 
             @testset "With global pool and flatten" begin
-                v0 = inputvertex("in", 3, FluxConv{2}())
+                v0 = conv2dinputvertex("in", 3)
                 v1 = cl("v1", v0, 2)
                 v2 = cl("v2", v1, 3)
                 v3 = cl("v3", v2, 4)
@@ -483,11 +484,11 @@
 
         @testset "AddEdgeMutation pconc=$pconc" for pconc in (0, 1)
 
-            v0 = inputvertex("in", 3, FluxConv{2}())
+            v0 = conv2dinputvertex("in", 3)
             v1 = cl("v1", v0, 4)
             v2 = cl("v2", v1, 5)
             v3 = cl("v3", v2, 3)
-            v4 = mutable("v4", MaxPool((2,2)), v3)
+            v4 = fluxvertex("v4", MaxPool((2,2)), v3)
             v5 = cl("v5", v4, 4)
             v6 = cl("v6", v5, 3)
             v7 = cl("v7", v6, 2)
@@ -524,7 +525,7 @@
         end
 
         @testset "AddEdgeMutation first in path from multi-input capable" begin
-            v0 = inputvertex("in", 3, FluxConv{2}())
+            v0 = conv2dinputvertex("in", 3)
             v1 = cl("v1", v0, 3)
             v2 = "v2" >> v0 + v1
             v2a1 = cl("v2a1", v2, 3)
@@ -543,7 +544,7 @@
         @testset "AddEdgeMutation fail" begin
             m = AddEdgeMutation(1.0, mergefun=default_mergefun(1), valuefun=v -> 1:nout(v))
 
-            v0 = inputvertex("in", 4, FluxConv{2}())
+            v0 = conv2dinputvertex("in", 4)
             v1 = cl("v1", v0, 4)
 
             # No suitable vertex as v0 is already output to v1
@@ -570,12 +571,12 @@
     end
 
     @testset "RemoveEdgeMutation" begin
-        dl(name, in, outsize) = mutable(name, Dense(nout(in), outsize), in)
+        dl(name, in, outsize) = fluxvertex(name, Dense(nout(in), outsize), in)
 
         @testset "RemoveEdgeMutation SizeStack" begin
             m = RemoveEdgeMutation(valuefun=v->1:nout(v))
 
-            v0 = inputvertex("in", 3, FluxDense())
+            v0 = denseinputvertex("in", 3)
             v1 = dl("v1", v0, 4)
             v2 = dl("v2", v1, 5)
 
@@ -602,7 +603,7 @@
         @testset "RemoveEdgeMutation SizeInvariant" begin
             m = RemoveEdgeMutation(valuefun=v->1:nout(v))
 
-            v0 = inputvertex("in", 3, FluxDense())
+            v0 = denseinputvertex("in", 3)
             v1 = dl("v1", v0, nout(v0))
             v2 = dl("v2", v1, 5)
             v3 = dl("v3", v0, nout(v0))

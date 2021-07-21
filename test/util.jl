@@ -31,10 +31,11 @@
 end
 
 @testset "MutationShield" begin
+    import NaiveNASflux: validated
     v1 = inputvertex("v1", 3)
-    v2 = mutable("v2", Dense(nout(v1), 5), v1)
-    v3 = mutable("v3", Dense(nout(v2), 4), v2, traitfun = MutationShield)
-    v4 = mutable("v4", Dense(nout(v3), 2), v3, traitfun = validated() ∘ MutationShield)
+    v2 = fluxvertex("v2", Dense(nout(v1), 5), v1)
+    v3 = fluxvertex("v3", Dense(nout(v2), 4), v2, traitfun = MutationShield)
+    v4 = fluxvertex("v4", Dense(nout(v3), 2), v3, traitfun = validated() ∘ MutationShield)
 
     @test !allow_mutation(v1)
     @test allow_mutation(v2)
@@ -55,9 +56,9 @@ end
 @testset "VertexSelection" begin
 
     v1 = inputvertex("v1", 3)
-    v2 = mutable("v2", Dense(nout(v1), 5), v1)
-    v3 = mutable("v3", Dense(nout(v2), 4), v2, traitfun = MutationShield)
-    v4 = mutable("v4", Dense(nout(v2), 2), v3)
+    v2 = fluxvertex("v2", Dense(nout(v1), 5), v1)
+    v3 = fluxvertex("v3", Dense(nout(v2), 4), v2, traitfun = MutationShield)
+    v4 = fluxvertex("v4", Dense(nout(v2), 2), v3)
     g1 = CompGraph(v1, v4)
 
     @testset "AllVertices" begin
@@ -92,10 +93,10 @@ end
     end
 
     v1 = inputvertex("v1", 3)
-    v2 = mutable("v2", Dense(nout(v1), 5), v1)
-    v3 = mutable("v3", Dense(nout(v2), 4), v2, traitfun = TestShield)
-    v4 = mutable("v4", Dense(nout(v3), 2), v3, traitfun = validated() ∘ TestShield)
-    v5 = mutable("v5", Dense(nout(v4), 1), v4)
+    v2 = fluxvertex("v2", Dense(nout(v1), 5), v1)
+    v3 = fluxvertex("v3", Dense(nout(v2), 4), v2, traitfun = TestShield)
+    v4 = fluxvertex("v4", Dense(nout(v3), 2), v3, traitfun = validated() ∘ TestShield)
+    v5 = fluxvertex("v5", Dense(nout(v4), 1), v4)
     g1 = CompGraph(v1, v5)
 
     @testset "Test allowed $m" for m in (
@@ -150,7 +151,7 @@ end
     end
 
     v1 = inputvertex("v1", 3)
-    v2 = mutable("v2", Dense(nout(v1), 5), v1; traitfun = TestShield)
+    v2 = fluxvertex("v2", Dense(nout(v1), 5), v1; traitfun = TestShield)
 
     @test allow_mutation(v2, m1())
     @test allow_mutation(v2, m2())
@@ -169,7 +170,7 @@ end
     TestShield(t) = MutationShield(t, SelectWithMutationMutation1)
 
     v1 = inputvertex("v1", 3)
-    v2 = mutable("v2", Dense(nout(v1), 5), v1; traitfun = TestShield)
+    v2 = fluxvertex("v2", Dense(nout(v1), 5), v1; traitfun = TestShield)
 
     @test name.(select(FilterMutationAllowed(), [v1,v2])) == []
 
@@ -183,12 +184,12 @@ end
 
 @testset "remove_redundant_vertices" begin
     v1 = inputvertex("in", 3)
-    v2 = mutable("v2", Dense(nout(v1), 5), v1)
-    v3 = mutable("V3", Dense(nout(v1), 5), v1)
+    v2 = fluxvertex("v2", Dense(nout(v1), 5), v1)
+    v3 = fluxvertex("V3", Dense(nout(v1), 5), v1)
     v4 = traitconf(t -> RemoveIfSingleInput(NamedTrait(t, "v4"))) >>  v2 + v3
-    v5 = mutable("v5", BatchNorm(nout(v4)), v4)
+    v5 = fluxvertex("v5", BatchNorm(nout(v4)), v4)
     v6 = concat("v6", v3, v5, traitfun = t -> RemoveIfSingleInput(t))
-    v7 = mutable("v7", Dense(nout(v6), 2), v6)
+    v7 = fluxvertex("v7", Dense(nout(v6), 2), v6)
 
     g = CompGraph(v1, v7)
 

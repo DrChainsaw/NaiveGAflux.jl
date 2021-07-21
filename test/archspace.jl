@@ -188,14 +188,14 @@
             space = ArchSpace(ConvSpace{2}(outsizes=3, kernelsizes=2:5), BatchNormSpace(relu), PoolSpace{2}(windowsizes=2))
 
             v = space("conv", inpt, rng)
-            @test layertype(v) == FluxConv{2}()
+            @test layer(v) isa Flux.Conv
             @test nin(v) == [2]
             @test nout(v) == 3
             @test name(v) == "conv"
 
             rng.ind = 1
             v = space("bn", inpt, rng)
-            @test layertype(v) == FluxBatchNorm()
+            @test layer(v) isa BatchNorm
             @test nin(v) == [2]
             @test nout(v) == 2
             @test name(v) == "bn"
@@ -263,7 +263,7 @@
     @testset "ForkArchSpace" begin
         # No concatenation when only one path is rolled
         space = ForkArchSpace(VertexSpace(BatchNormSpace(relu)), 1)
-        inpt = inputvertex("in", 3, FluxDense())
+        inpt = denseinputvertex("in", 3)
         v = space(inpt)
         @test inputs(v) == [inpt]
 
@@ -313,13 +313,13 @@
         v = space(inpt)
         @test nin(v) == [4, 4]
         @test nout(v) == 4
-        @test layertype(inputs(v)[2]) == FluxDense()
+        @test layer(inputs(v)[2]) isa Dense
 
         v = space("v", inpt)
         @test name.(NaiveNASlib.flatten(v)) == ["in", "v.res", "v.add"]
         @test nin(v) == [4, 4]
         @test nout(v) == 4
-        @test layertype(inputs(v)[2]) == FluxDense()
+        @test layer(inputs(v)[2]) isa Dense
     end
 
     @testset "FunctionSpace" begin

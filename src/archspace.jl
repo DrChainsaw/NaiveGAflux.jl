@@ -203,8 +203,8 @@ DenseSpace(outsizes, activations) = DenseSpace(BaseLayerSpace(outsizes, activati
 (s::DenseSpace)(in::Integer,rng=rng_default; outsize=outsize(s.base,rng), wi=DefaultWeightInit(), densefun=Dense) = densefun(in, outsize, activation(s.base,rng); denseinitW(wi)...)
 
 denseinitW(::DefaultWeightInit) = ()
-denseinitW(::IdentityWeightInit) = (init = idmapping,)
-denseinitW(wi::PartialIdentityWeightInit) = (init = (args...) -> circshift(idmapping_nowarn(args...),(wi.outoffset, wi.inoffset)),)
+denseinitW(::IdentityWeightInit) = (init = Flux.identity_init,)
+denseinitW(wi::PartialIdentityWeightInit) = (init = (args...) -> Flux.identity_init(args...;shift=(wi.outoffset, wi.inoffset)),)
 denseinitW(::ZeroWeightInit) = (init = zeros,)
 
 """
@@ -248,8 +248,8 @@ function (s::ConvSpace)(insize::Integer, rng=rng_default; outsize = outsize(s.ba
 end
 
 convinitW(::DefaultWeightInit) = ()
-convinitW(::IdentityWeightInit) = (init=idmapping,)
-convinitW(wi::PartialIdentityWeightInit) = (init = (args...) -> circshift(idmapping_nowarn(args...), (0,0,wi.inoffset, wi.outoffset)),)
+convinitW(::IdentityWeightInit) = (init=Flux.identity_init,)
+convinitW(wi::PartialIdentityWeightInit) = (init = (args...) -> Flux.identity_init(args...;shift=(0,0,wi.inoffset, wi.outoffset)),)
 convinitW(::ZeroWeightInit) = (init=(args...) -> zeros(Float32,args...),)
 
 """
@@ -320,8 +320,8 @@ Shielded(base=LayerVertexConf(); allowed = tuple()) = let Shield(t) = MutationSh
 end
 
 
-(c::LayerVertexConf)(in::AbstractVertex, l) = mutable(l,in,layerfun=c.layerfun, traitfun=c.traitfun)
-(c::LayerVertexConf)(name::String, in::AbstractVertex, l) = mutable(name, l,in,layerfun=c.layerfun, traitfun=c.traitfun)
+(c::LayerVertexConf)(in::AbstractVertex, l) = fluxvertex(l,in,layerfun=c.layerfun, traitfun=c.traitfun)
+(c::LayerVertexConf)(name::String, in::AbstractVertex, l) = fluxvertex(name, l,in,layerfun=c.layerfun, traitfun=c.traitfun)
 
 Base.Broadcast.broadcastable(c::LayerVertexConf) = Ref(c)
 

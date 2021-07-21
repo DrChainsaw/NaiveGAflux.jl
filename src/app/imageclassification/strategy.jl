@@ -342,8 +342,8 @@ function rename_models(pop)
 
 function rename_model(i, cand)
     rename_model(str::String; cf) = replace(str, r"^model\d+\.*" => "model$i.")
-    rename_model(x...;cf) = clone(x...; cf=cf)
-    rename_model(m::AbstractMutableComp; cf) = m # No need to copy below this level
+    rename_model(x...;cf=clone) = clone(x...; cf=cf)
+    rename_model(::CompVertex; cf=clone) = m # No need to copy below this level
     return NaiveGAflux.mapcandidate(g -> copy(g, rename_model))(cand)
 end
 
@@ -453,7 +453,7 @@ end
 
 allowkernelmutation(v) = allowkernelmutation(layertype(v), v)
 allowkernelmutation(l, v) = false
-allowkernelmutation(::FluxConvolutional{N}, v) where N = all(isodd, size(NaiveNASflux.weights(layer(v)))[1:N])
+allowkernelmutation(::NaiveNASflux.FluxConvolutional{N}, v) where N = all(isodd, size(NaiveNASflux.weights(layer(v)))[1:N])
     
 function add_vertex_mutation(acts)
 
@@ -471,10 +471,7 @@ function add_vertex_mutation(acts)
 end
 
 is_convtype(v::AbstractVertex) = any(is_globpool.(outputs(v))) || any(is_convtype.(outputs(v)))
-is_globpool(v::AbstractVertex) = is_globpool(base(v))
-is_globpool(v::InputVertex) = false
-is_globpool(v::CompVertex) = is_globpool(v.computation)
-is_globpool(l::AbstractMutableComp) = is_globpool(NaiveNASflux.wrapped(l))
+is_globpool(v::AbstractVertex) = is_globpool(layer(v))
 is_globpool(f) = f isa NaiveGAflux.GlobalPool
 
 struct SelectGlobalPool <:AbstractVertexSelection

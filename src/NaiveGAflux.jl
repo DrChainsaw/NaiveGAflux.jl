@@ -2,7 +2,8 @@ module NaiveGAflux
 
 using Reexport
 @reexport using NaiveNASflux
-import NaiveNASflux: nograd
+import NaiveNASflux: FluxDense, FluxConv, FluxConvolutional, FluxNoParLayer, FluxParNorm, FluxRnn, FluxBatchNorm
+import NaiveNASflux: validated, named, logged, nograd
 using Random
 using Logging
 using Statistics

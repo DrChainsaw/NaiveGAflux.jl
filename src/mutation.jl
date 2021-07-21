@@ -110,12 +110,12 @@ LowValueMutationProbability(m::AbstractMutation{T}, pbase::Real, rng=rng_default
 
 
 weighted_neuron_value_high(pbase, rng=rng_default; spread=0.5) = function(v::AbstractVertex)
-    ismissing(neuron_value(v)) && return pbase
+    ismissing(NaiveNASflux.neuron_value(v)) && return pbase
     return Probability(fixnan(pbase ^ normexp(v, spread), pbase), rng)
 end
 
 weighted_neuron_value_low(pbase, rng=rng_default;spread=2) = function(v::AbstractVertex)
-    ismissing(neuron_value(v)) && return pbase
+    ismissing(NaiveNASflux.neuron_value(v)) && return pbase
     return Probability(fixnan(pbase ^ (1/normexp(v, 1/spread)), pbase), rng)
 end
 
@@ -124,11 +124,11 @@ fixnan(x, rep) = isnan(x) ? rep : clamp(x, 0.0, 1.0)
 # This is pretty hacky and arbitrary. Change to something better
 function normexp(v::AbstractVertex, s)
     allvertices = filter(allow_mutation, all_in_graph(v))
-    allvalues = map(vi -> neuron_value(vi), allvertices)
+    allvalues = map(vi -> NaiveNASflux.neuron_value(vi), allvertices)
     meanvalues = map(mean, skipmissing(allvalues))
     meanvalue = mean(meanvalues)
     maxvalue = maximum(meanvalues)
-    value = mean(neuron_value(v))
+    value = mean(NaiveNASflux.neuron_value(v))
     # Basic idea: maxvalue - value means the (to be) exponent is <= 0 while the division seems to normalize so that average of pbase ^ normexp across allvertices is near pbase (no proof!). The factor 2 is just to prevent probability of vertex with maxvalue to be 1.
     return (2maxvalue^s - value^s) / (2maxvalue^s - meanvalue^s)
 end
@@ -564,23 +564,13 @@ function (m::ActivationFunctionMutation)(v::AbstractVertex)
     return v
 end
 function (m::ActivationFunctionMutation)(t, v) end
-(m::ActivationFunctionMutation)(::Union{FluxDense, FluxConvolutional}, v) = setlayer(v, (σ = m.actspace(m.rng),))
-(m::ActivationFunctionMutation)(::FluxParNorm, v) = setlayer(v, (λ = m.actspace(m.rng),))
+(m::ActivationFunctionMutation)(::Union{FluxDense, FluxConvolutional}, v) = NaiveNASflux.setlayer!(v, (σ = m.actspace(m.rng),))
+(m::ActivationFunctionMutation)(::FluxParNorm, v) = NaiveNASflux.setlayer!(v, (λ = m.actspace(m.rng),))
 function (m::ActivationFunctionMutation)(::FluxRnn, v)
     newcell = setproperties(layer(v).cell, (σ = m.actspace(m.rng),))
-    setlayer(v, (cell = newcell,))
+    NaiveNASflux.setlayer!(v, (cell = newcell,))
 end
 
-# TODO: Move to NaiveNASflux??
-function setlayer(x, propval) end
-setlayer(v::AbstractVertex, propval) = setlayer(base(v), propval)
-setlayer(v::CompVertex, propval) = setlayer(v.computation, propval)
-setlayer(m::AbstractMutableComp, propval) = setlayer(NaiveNASflux.wrapped(m), propval)
-setlayer(m::NaiveNASflux.ResetLazyMutable, propval) = setlayer(m.wrapped, propval)
-setlayer(m::NaiveNASflux.MutationTriggered, propval) = setlayer(m.wrapped, propval)
-function setlayer(m::MutableLayer, propval)
-    m.layer = setproperties(m.layer, propval)
-end
 
 """
     PostMutation{T} <: DecoratingMutation{T}
