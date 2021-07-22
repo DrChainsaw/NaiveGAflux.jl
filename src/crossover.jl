@@ -183,7 +183,6 @@ function crossoverswap(v1, v2; pairgen=default_inputs_pairgen, selection=FilterM
     # To mitigate this a backup copy is used. It is however not easy to backup a single vertex as it is connected to all other vertices in the graph, meaning that the whole graph must be copied. Sigh...
     function copyvertex(v)
         g = regraph(v)
-        # Would like to just shallow-copy the graph (i.e copy mutation metadata, but not actual weights), but crossoverswap! needs to apply the mutation after each step in order to increase chances of success, meaning that we risk corrupting the input vertices if operation fails.
         vs = vertices(copy(g))
         return vs[indexin([v], vertices(g))][], filter(vv -> isempty(inputs(vv)), vs)
     end
@@ -222,7 +221,7 @@ Vertices must come from different graphs.
 
 This operation can fail, leaving one or both graphs in a corrupted state where evaluating them results in an error (typically a `DimensionMismatch` error).
 
-Return a tuple `(success1, success2)` where `success1` is true if `vin2` and `vou2` was successfully swapped in to the graph which previously contained `vin1` and `vout1` and vice versa for `success2`.
+Return a tuple `(success1, success2)` where `success1` is true if `vin2` and `vout2` was successfully swapped in to the graph which previously contained `vin1` and `vout1` and vice versa for `success2`.
 """
 crossoverswap!(v1::AbstractVertex, v2::AbstractVertex; kwargs...) = crossoverswap!(v1,v1,v2,v2; kwargs...)
 
@@ -235,9 +234,11 @@ function crossoverswap!(vin1::AbstractVertex, vout1::AbstractVertex, vin2::Abstr
     i1, o1 = stripedges!(vin1, vout1)
     i2, o2 = stripedges!(vin2, vout2)
 
-    # success1 mapped to vin2 and vout2 looks backwards, but remember that vin2 and vout2 are the new guys being inserted in everything connected to i1 and o1
-    # Returning success status instead of acting as a noop at failure is not very nice, but I could not come up with a way which was 100% to revert a botched attempt and making a backup of vertices before doing any changes is not easy to deal with for the receiver either
-
+    # success1 mapped to vin2 and vout2 looks backwards, but remember that vin2 and vout2 are the new guys being inserted 
+    # in everything connected to i1 and o1
+    # Returning success status instead of acting as a noop at failure is not very nice, but I could not come up with a way 
+    # which was 100% to revert a botched attempt and making a backup of vertices before doing any changes is not easy to deal 
+    # with for the receiver either
     success1 = addinedges!(vin2, i1, strategy)
     success1 &= success1 && addoutedges!(vout2, o1, strategy)
 
@@ -265,7 +266,8 @@ end
 
 function default_crossoverswap_strategy(valuefun = NaiveNASlib.default_outvalue)
     warnfailalign = FailAlignSizeWarn(msgfun = (vin,vout) -> "Failed to align sizes for vertices $(name(vin)) and $(name(vout)) for crossover. Attempt aborted!")
-    return PostAlign(TruncateInIndsToValid(WithValueFun(valuefun, AlignNinToNout(;fallback=ΔSizeFailNoOp()))), fallback=warnfailalign)
+    alignstrat = TruncateInIndsToValid(WithValueFun(valuefun, AlignNinToNout(;fallback=ΔSizeFailNoOp())))
+    return PostAlign(alignstrat, fallback=warnfailalign)
 end
 
 struct NonZeroSizeTrait{T <: NaiveNASlib.MutationTrait} <: NaiveNASlib.DecoratingTrait
@@ -323,7 +325,6 @@ function addinedges!(v, ins, strat = default_crossoverswap_strategy)
         remove!(vrm, RemoveStrategy(ConnectNone(), NoSizeChange()))
     end
     create_edge_strat = (i == length(ins) ? strat() : NoSizeChange() for i in eachindex(ins))
-    # TODO: Why s instead of strat() no longer catches size mismatch failures when one vertex is immutable?
     success = map((iv, ov, s) -> create_edge!(iv, ov; strategy = s), ins, outs, create_edge_strat) |> all
     remove_dummy_strat = (i == length(dummies) ? strat() : NoSizeChange() for i in eachindex(dummies))
     return success && map((dv,  s)-> remove!(dv, RemoveStrategy(s)), dummies, remove_dummy_strat) |> all
