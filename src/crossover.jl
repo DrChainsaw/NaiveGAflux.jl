@@ -270,6 +270,18 @@ function default_crossoverswap_strategy(valuefun = NaiveNASlib.default_outvalue)
     return PostAlign(alignstrat, fallback=warnfailalign)
 end
 
+"""
+    NonZeroSizeTrait{T <: NaiveNASlib.MutationTrait} <: NaiveNASlib.DecoratingTrait
+
+Decorating trait which "lies" about sizes to that they never appear to be zero. Not intended for use except 
+in very special circumstances!
+
+This is a bit of a hack as when we do crossover we will end up with size transparent vertices with zero inputs.
+NaiveNASlib thinks such things are invalid and does not attempt to handle them in any way.
+It turns out that in the context of what we are doing in crossover, the only issue is that we end up with a vertex of 
+zero size and this means that NaiveNASlib creates zero variables to determine the new size which in turn means that any
+size change is impossible. Just one single variable is enough though to create as many new neurons as needed.
+"""
 struct NonZeroSizeTrait{T <: NaiveNASlib.MutationTrait} <: NaiveNASlib.DecoratingTrait
     minsize::Int
     base::T
