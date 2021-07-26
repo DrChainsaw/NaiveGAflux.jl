@@ -280,9 +280,9 @@ function (m::NoutMutation)(vs::AbstractVector{<:AbstractVertex})
     end
 
     if !isempty(Δs)
-        failmsg = (args...) -> "Could not change nout of $(join(keys(Δs), ", ", " and ")) by $(join(values(Δs), ", ", " and ")). No change!"
+        failmsg = (args...) -> "Could not change nout of $(join(NaiveNASlib.nameorrepr.(keys(Δs)), ", ", " and ")) by $(join(values(Δs), ", ", " and ")). No change!"
 
-        strategy = ΔNoutRelaxed(Δs; fallback=LogΔSizeExec(failmsg, Logging.Warn, ΔSizeFailNoOp()))
+        strategy = NaiveNASlib.TimeOutAction(;base=ΔNoutRelaxed(Δs), fallback=LogΔSizeExec(failmsg, Logging.Warn, ΔSizeFailNoOp()))
 
         Δsize!(strategy , all_in_Δsize_graph(keys(Δs), Output()))
     end
@@ -453,8 +453,7 @@ create_edge_strat(v::AbstractVertex, valuefun) = create_edge_strat(trait(v), val
 create_edge_strat(d::DecoratingTrait, valuefun) = create_edge_strat(base(d), valuefun)
 function create_edge_strat(::SizeInvariant, valuefun)
     warnfailalign = FailAlignSizeWarn(msgfun = (vin,vout) -> "Could not align sizes of $(name(vin)) and $(name(vout))!")
-    mapstrat = WithValueFun(valuefun)
-    alignstrat = IncreaseSmaller(;mapstrat, fallback = DecreaseBigger(;mapstrat, fallback=AlignSizeBoth(;mapstrat, fallback = warnfailalign)))
+    alignstrat = AlignSizeBoth(;mapstrat=WithValueFun(valuefun), fallback = warnfailalign)
     # Tricky failure case: It is possible that CheckCreateEdgeNoSizeCycle does not detect any size cycle until after the edge has been created?
     sizecyclewarn = FailAlignSizeWarn(msgfun = (vin,vout) -> "Could not align sizes of $(name(vin)) and $(name(vout))! Size cycle detected!") 
 

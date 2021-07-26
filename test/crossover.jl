@@ -165,6 +165,30 @@
             end
         end
 
+        @testset "Dummy shall pass size validation" begin
+            import NaiveNASflux: named, validated, traitconf
+            # Evilness from this case: We want to swap out tv1 to dv2, but both tv1 and dv2 is input 
+            # to a elementwise addition. NaiveNASlib handles this, but if the dummy vertex does not 
+            # adjust its output size NaiveNASlib will think that the graph is size inconsistent as
+            # it does not know that we intend to remove the dummy vertex.
+
+            function g(np, sz)
+                vi = iv(np)
+                dv1 = dv(vi, sz, "$np.dv1")
+                tv1 = invariantvertex(identity, dv1; traitdecoration=named("$np.tv1") ∘ validated())
+                tv2 = invariantvertex(identity, tv1; traitdecoration=named("$np.tv2") ∘ validated())
+                dv2 = dv(tv2, nout(tv2), "$np.dv2")
+                add = traitconf(named("$np.add") ∘ validated()) >> dv2 + tv1
+                dv3 = dv(add, 2, "$np.dv3")
+                return CompGraph(vi, dv3), tv1, dv2
+            end
+
+            ga, vin1, vout1 = g("a", 2)
+            gb, vin2, vout2 = g("b", 4)
+
+            @test crossoverswap!(vin1, vout1, vin2, vout2; strategy=teststrat) == (true, true)
+        end
+
         @testset "Find swappable path" begin
 
             @testset "Residual on input" begin
@@ -547,7 +571,7 @@
                 @test name.(vertices(gb_new)) == ["b.in", "b.cv1", "a.cv1", "a.cv2", "b.pv1", "b.dv1", "a.dv1", "a.dv2"]
 
                 @test size(ga_new(ones(Float32, 4,4,3,2))) == (7, 2)
-                @test size(gb_new(ones(Float32, 4,4,3,2))) == (6, 2)
+                @test size(gb_new(ones(Float32, 4,4,3,2))) == (7, 2)
             end
 
             @testset "VertexCrossover" begin

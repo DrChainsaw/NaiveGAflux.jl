@@ -396,6 +396,15 @@ create_layer(::Missing, insize::Integer, ls::AbstractLayerSpace, wi, rng) = ls(i
 create_layer(outsize::Integer, insize::Integer, ls::AbstractLayerSpace, wi, rng) = ls(insize, rng, outsize=outsize, wi=wi)
 
 """
+    NoOpArchSpace <: AbstractArchSpace
+
+Returns input vertex without any modification.
+"""
+struct NoOpArchSpace <: AbstractArchSpace end
+(::NoOpArchSpace)(v::AbstractVertex, args...; kwargs...) = v
+(::NoOpArchSpace)(name::String, v::AbstractVertex, args...; kwargs...) = v
+
+"""
     ArchSpace <:AbstractArchSpace
 
 Search space of `AbstractArchSpace`s.
@@ -410,6 +419,25 @@ ArchSpace(s::AbstractArchSpace, ss::AbstractArchSpace...) = ArchSpace(ParSpace([
 
 (s::ArchSpace)(in::AbstractVertex, rng=rng_default; outsize=missing, wi=DefaultWeightInit()) = s.s(rng)(in, rng, outsize=outsize, wi=wi)
 (s::ArchSpace)(name::String, in::AbstractVertex, rng=rng_default; outsize=missing, wi=DefaultWeightInit()) = s.s(rng)(name, in, rng, outsize=outsize, wi=wi)
+
+"""
+    ConditionalArchSpace{P, S1, S2} <: AbstractArchSpace
+    ConditionalArchSpace(predicate, iftrue, iffalse=NoOpArchSpace())
+    ConditionalArchSpace(;predicate, iftrue, iffalse=NoOpArchSpace())
+
+Use `iftrue` if `predicate(invertex)` returns true, `iffalse` otherwise.
+"""
+Base.@kwdef struct ConditionalArchSpace{P, S1, S2} <: AbstractArchSpace
+    predicate::P
+    iftrue::S1
+    iffalse::S2 = NoOpArchSpace()
+    ConditionalArchSpace(predicate::P, iftrue::S1, iffalse::S2=NoOpArchSpace()) where {P, S1, S2} =new{P, S1, S2}(predicate, iftrue, iffalse)
+end
+
+(s::ConditionalArchSpace)(in::AbstractVertex, args...; kwargs...) = s.predicate(in) ? s.iftrue(in, args...; kwargs...) : s.iffalse(in, args...; kwargs...)
+(s::ConditionalArchSpace)(name::String, in::AbstractVertex, args...; kwargs...) = s.predicate(in) ? s.iftrue(name, in, args...; kwargs...) : s.iffalse(name, in, args...; kwargs...)
+
+
 
 """
     RepeatArchSpace <:AbstractArchSpace

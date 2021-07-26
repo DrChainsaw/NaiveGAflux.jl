@@ -163,8 +163,16 @@
         @test nout(v) == 3
     end
 
+    @testset "NoOpArchSpace" begin
+        inpt = inputvertex("in", 4)
+        @test NoOpArchSpace()(inpt) === inpt  
+    end
+
     @testset "ArchSpace" begin
         inpt = inputvertex("in", 2)
+
+        @test ArchSpace(NoOpArchSpace())(inpt) === inpt  
+
         @testset "Singleton Dense" begin
             bs = BaseLayerSpace(3, elu)
             space = ArchSpace(DenseSpace(bs))
@@ -200,6 +208,21 @@
             @test nout(v) == 2
             @test name(v) == "bn"
         end
+    end
+
+    @testset "ConditionalArchSpace" begin
+        s1 = ArchSpace(DenseSpace(1, identity))
+        pred = v -> nout(v) > 2
+
+        v1 = inputvertex("in", 3)
+        @test layer(ConditionalArchSpace(pred, s1)(v1)) isa Dense
+
+        v2 = inputvertex("in", 1)
+        @test ConditionalArchSpace(pred, s1)(v2) === v2
+
+        s2 = ArchSpace(ConvSpace{2}(outsizes=1, kernelsizes=1))
+        @test layer(ConditionalArchSpace(pred, s1,s2)(v1)) isa Dense
+        @test layer(ConditionalArchSpace(pred, s1,s2)(v2)) isa Conv
     end
 
     @testset "RepeatArchSpace" begin

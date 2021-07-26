@@ -271,32 +271,32 @@ function default_crossoverswap_strategy(valuefun = NaiveNASlib.default_outvalue)
 end
 
 """
-    NonZeroSizeTrait{T <: NaiveNASlib.MutationTrait} <: NaiveNASlib.DecoratingTrait
+    CrossoverSizeDummy(startsize::Int)
 
-Decorating trait which "lies" about sizes to that they never appear to be zero. Not intended for use except 
-in very special circumstances!
+Struct whose only purpose is to follow and apply size changes from NaiveNASlib during the crossover operation.
+
+Acts a SizeInvariant operation except for when there are no inputs in which case the latest size seen is given.
 
 This is a bit of a hack as when we do crossover we will end up with size transparent vertices with zero inputs.
 NaiveNASlib thinks such things are invalid and does not attempt to handle them in any way.
 It turns out that in the context of what we are doing in crossover, the only issue is that we end up with a vertex of 
 zero size and this means that NaiveNASlib creates zero variables to determine the new size which in turn means that any
-size change is impossible. Just one single variable is enough though to create as many new neurons as needed.
+size change is impossible. Just one single variable is enough though to create as many new neurons as needed, but we also
+need to reflect any size changes made by NaiveNASlib to satisfy its (optional) size validation check.
 """
-struct NonZeroSizeTrait{T <: NaiveNASlib.MutationTrait} <: NaiveNASlib.DecoratingTrait
-    minsize::Int
-    base::T
+mutable struct CrossoverSizeDummy
+    s::Int
 end
-NonZeroSizeTrait(base) = NonZeroSizeTrait(1, base)
-
-NaiveNASlib.base(t::NonZeroSizeTrait) = t.base
-NaiveNASlib.nin(t::NonZeroSizeTrait, v::AbstractVertex) = max.(t.minsize, nin(base(t), v))
-NaiveNASlib.nout(t::NonZeroSizeTrait, v::AbstractVertex) = max(t.minsize, nout(base(t), v))
+NaiveNASlib.nin(s::CrossoverSizeDummy, t::NaiveNASlib.SizeInvariant, v::AbstractVertex) = isempty(inputs(v)) ? [s.s] : nin(identity, t, v)
+NaiveNASlib.nout(s::CrossoverSizeDummy, t::NaiveNASlib.SizeInvariant, v::AbstractVertex) = isempty(outputs(v)) ? s.s : nout(identity, t, v)
+NaiveNASlib.Δsize!(s::CrossoverSizeDummy, ins::AbstractVector, outs::AbstractVector) = s.s = length(outs)
+NaiveNASlib.default_outvalue(s::CrossoverSizeDummy) = 0
 
 # Invariant vertex so that removal is trivial.
 # Using size absorbing dummies leads to selection of input neurons which dont exist (e.g. take input nr 243 from a layer with 16 inputs).
 # Using size stacking dummies leads to neurons being whiped out (e.g. when connecting a 16 neuron output to a 8 neuron input then all 8 are replaced with new neurons).
 # We must ensure size is non-zero though, or else NaiveNASlib will not generate any variables for setting the size
-dummyvertex(v) = invariantvertex(ActivationContribution(identity), v; traitdecoration = named("$(name(v)).dummy") ∘ NonZeroSizeTrait)
+dummyvertex(v) = invariantvertex(CrossoverSizeDummy(nout(v)), v; traitdecoration = named("$(name(v)).dummy"))
 
 stripedges!(vin, vout) = stripinedges!(vin) ,stripoutedges!(vout)
 
