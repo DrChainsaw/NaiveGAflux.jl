@@ -3,7 +3,7 @@ module NaiveGAflux
 using Reexport
 @reexport using NaiveNASflux
 import NaiveNASflux: FluxDense, FluxConv, FluxConvolutional, FluxNoParLayer, FluxParNorm, FluxRnn, FluxBatchNorm
-import NaiveNASflux: validated, named, logged, nograd
+import NaiveNASflux: validated, named, logged, nograd, layertype
 import Flux
 using Flux: Dense, Conv, ConvTranspose, DepthwiseConv, CrossCor, LayerNorm, BatchNorm, InstanceNorm, GroupNorm, 
             MaxPool, MeanPool, Dropout, AlphaDropout, GlobalMaxPool, GlobalMeanPool, cpu, gpu, WeightDecay,

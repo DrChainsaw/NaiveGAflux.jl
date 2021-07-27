@@ -451,7 +451,7 @@ function maxkernelsize(v::AbstractVertex, inshape)
     return @. ks - !isodd(ks)
 end
 
-allowkernelmutation(v) = allowkernelmutation(layertype(v), v)
+allowkernelmutation(v) = allowkernelmutation(NaiveNASflux.layertype(v), v)
 allowkernelmutation(l, v) = false
 allowkernelmutation(::NaiveNASflux.FluxConvolutional{N}, v) where N = all(isodd, size(NaiveNASflux.weights(layer(v)))[1:N])
     
