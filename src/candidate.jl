@@ -162,7 +162,7 @@ function Serialization.deserialize(s::AbstractSerializer, ::Type{FileCandidate})
 end
 
 # Mutation needs to be enabled here?
-Flux.functor(c::FileCandidate) = callcand(Flux.functor, c)
+Flux.functor(::Type{<:FileCandidate}, c) = callcand(Flux.functor, c)
 
 function wrappedcand(c::FileCandidate) 
     c.hold = true

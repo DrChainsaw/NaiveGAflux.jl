@@ -30,7 +30,7 @@
         end
         
         wascpumapped = false
-        function Flux.cpu(x::MockCandidate{Val{:GpuTest}}) 
+        function Flux.loadparams!(x::MockCandidate{Val{:GpuTest}}, ps) 
             wascpumapped = true
             return x
         end

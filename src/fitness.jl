@@ -60,19 +60,19 @@ end
 
 Move candidates to `gpu` before calculating their fitness according to `fitnesstrategy`.
 
-After fitness has been calculated the candidate is moved back to `cpu`.
+Copies parameters back to the given candidate after fitness have been computed to ensure that updated parameters from training are used. 
+Assumes canidates have parameters on `cpu` for that step.
 
 Note that if no `gpu` is available this should be a noop.
-
-Note: Only works for mutable models, such as `CompGraph` since it can't change the candidate itself. Consider using a `MutableCandidate` if dealing with immutable models.
 """
 struct GpuFitness{F} <: AbstractFitness
     f::F
 end
 function _fitness(s::GpuFitness, c::AbstractCandidate)
-    NaiveNASflux.forcemutation(graph(c)) # Optimization: If there is a LazyMutable somewhere, we want it to do its thing now so we don't end up copying the model to the GPU only to then trigger another copy when the mutations are applied.
-    fitval = _fitness(s.f, c |> gpu)
-    c |> cpu # As some parts, namely CompGraph change internal state when mapping to GPU
+    cgpu = gpu(c)
+    fitval = _fitness(s.f, cgpu)
+    # In case parameters changed. Would like to do this some other way, perhaps return the candidate too, or move training to evolve...
+    Flux.loadparams!(c, cpu(collect(params(cgpu)))) # Can't load CuArray into a normal array
     gpu_gc()
     return fitval
 end
