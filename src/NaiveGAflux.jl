@@ -4,6 +4,10 @@ using Reexport
 @reexport using NaiveNASflux
 import NaiveNASflux: FluxDense, FluxConv, FluxConvolutional, FluxNoParLayer, FluxParNorm, FluxRnn, FluxBatchNorm
 import NaiveNASflux: validated, named, logged, nograd
+import Flux
+using Flux: Dense, Conv, ConvTranspose, DepthwiseConv, CrossCor, LayerNorm, BatchNorm, InstanceNorm, GroupNorm, 
+            MaxPool, MeanPool, Dropout, AlphaDropout, GlobalMaxPool, GlobalMeanPool, cpu, gpu, WeightDecay,
+            SamePad, params
 using Random
 using Logging
 using Statistics

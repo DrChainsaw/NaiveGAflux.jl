@@ -5,6 +5,7 @@ version = "0.9.0"
 
 [deps]
 CUDA = "052768ef-5323-5732-b1bb-66c8b64840ba"
+Flux = "587475ba-b771-5e3f-ad9e-33799f191a9c"
 IterTools = "c8e1da08-722c-5040-9ed9-7db0dc04731e"
 Logging = "56ddb016-857b-54e1-b83d-db4d58db5568"
 MemPool = "f9f48841-c794-520a-933b-121f7ba6ed94"
@@ -19,7 +20,8 @@ Statistics = "10745b16-79ce-11e8-11f9-7d13ad32a3b2"
 Test = "8dfed614-e22c-5e08-85e1-65c5234f0b40"
 
 [compat]
-CUDA = "1, 2, 3"
+CUDA = "3"
+Flux = "0.12"
 IterTools = "1"
 MemPool = "0.3"
 NaiveNASflux = "2"

@@ -78,7 +78,7 @@ Each component is described more in detail below.
 Here is a very basic example just to get a feeling for the package:
 
 ```julia
-using NaiveGAflux, Random
+using NaiveGAflux, Flux, Random
 Random.seed!(NaiveGAflux.rng_default, 0)
 
 nlabels = 3
@@ -153,7 +153,6 @@ Lets start with the most simple search space, a `ParSpace`:
 
 ```julia
 # Set seed of default random number generator for reproducible results
-using NaiveGAflux, Random
 Random.seed!(NaiveGAflux.rng_default, 1)
 
 ps1d = ParSpace([2,4,6,10])
@@ -269,7 +268,6 @@ The following basic mutation operations are currently supported:
 In addition to the basic mutation operations, there are numerous utilities for adding behaviour and convenience. Here are a few examples:
 
 ```julia
-using NaiveGAflux, Random
 Random.seed!(NaiveGAflux.rng_default, 0)
 
 invertex = denseinputvertex("in", 3)
@@ -356,8 +354,6 @@ The following basic crossover operations are currently supported:
 Most of the mutation utilities also work with crossover operations. Here are a few examples:
 
 ```julia
-using NaiveGAflux, Random
-import NaiveGAflux: regraph
 Random.seed!(NaiveGAflux.rng_default, 0)
 
 invertex = denseinputvertex("A.in", 3)
@@ -393,8 +389,8 @@ newA, newB = swapsame((swapA, swapB))
 @test newB ∉ vertices(modelB)
 
 # This is an internal utility which should not be needed in normal use cases.
-modelAnew = regraph(newA)
-modelBnew = regraph(newB)
+modelAnew = NaiveGAflux.regraph(newA)
+modelBnew = NaiveGAflux.regraph(newB)
 
 @test name.(vertices(modelAnew)) == ["A.in", "A.layer1", "B.layer2", "B.layer3", "A.layer4"] 
 @test name.(vertices(modelBnew)) == ["B.in", "B.layer1", "A.layer2", "A.layer3", "B.layer4"]

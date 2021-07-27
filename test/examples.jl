@@ -1,5 +1,5 @@
 @testset "Basic example" begin
-    using NaiveGAflux, Random
+    using NaiveGAflux, Flux, Random
     Random.seed!(NaiveGAflux.rng_default, 0)
 
     nlabels = 3
@@ -68,7 +68,6 @@ end
 
 @testset "ParSpace example" begin
     # Set seed of default random number generator for reproducible results
-    using NaiveGAflux, Random
     Random.seed!(NaiveGAflux.rng_default, 1)
 
     ps1d = ParSpace([2,4,6,10])
@@ -163,7 +162,6 @@ end
 end
 
 @testset "Mutation examples" begin
-    using NaiveGAflux, Random
     Random.seed!(NaiveGAflux.rng_default, 0)
 
     invertex = denseinputvertex("in", 3)
@@ -232,8 +230,6 @@ end
 end
 
 @testset "Crossover examples" begin
-    using NaiveGAflux, Random
-    import NaiveGAflux: regraph
     Random.seed!(NaiveGAflux.rng_default, 0)
 
     invertex = denseinputvertex("A.in", 3)
@@ -269,8 +265,8 @@ end
     @test newB ∉ vertices(modelB)
 
     # This is an internal utility which should not be needed in normal use cases.
-    modelAnew = regraph(newA)
-    modelBnew = regraph(newB)
+    modelAnew = NaiveGAflux.regraph(newA)
+    modelBnew = NaiveGAflux.regraph(newB)
 
     @test name.(vertices(modelAnew)) == ["A.in", "A.layer1", "B.layer2", "B.layer3", "A.layer4"] 
     @test name.(vertices(modelBnew)) == ["B.in", "B.layer1", "A.layer2", "A.layer3", "B.layer4"]
@@ -352,7 +348,6 @@ end
 end
 
 @testset "Candidate handling" begin
-
     struct ExampleCandidate <: AbstractCandidate
         a::Int
         b::Int

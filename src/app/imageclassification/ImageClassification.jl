@@ -2,9 +2,13 @@ module ImageClassification
 
 using ...NaiveGAflux
 using ..AutoFlux: fit
-import NaiveGAflux: GlobalPool
-import NaiveGAflux: shapetrace, squashshapes, fshape, ndimsout
-import NaiveGAflux: StatefulGenerationIter
+using NaiveGAflux: GlobalPool
+using NaiveGAflux: shapetrace, squashshapes, fshape, ndimsout
+using NaiveGAflux: StatefulGenerationIter
+import Flux
+using Flux: Dense, Conv, ConvTranspose, DepthwiseConv, CrossCor, LayerNorm, BatchNorm, InstanceNorm, GroupNorm, 
+            MaxPool, MeanPool, Dropout, AlphaDropout, GlobalMaxPool, GlobalMeanPool, cpu, gpu
+using Flux: Descent, Momentum, Nesterov, ADAM, NADAM, ADAGrad, WeightDecay
 using Random
 import Logging
 using Statistics

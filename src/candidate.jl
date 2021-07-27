@@ -282,7 +282,7 @@ Return a function which scales the learning rate based on the output of `rfun`.
 Intended use is to apply the same learning rate scaling for a whole population of models, e.g to have a global learning rate schedule.
 """
 randomlrscale(rfun = BoundedRandomWalk(-1.0, 1.0)) = function(x...)
-    newopt = ShieldedOpt(Descent(10^rfun(x...)))
+    newopt = ShieldedOpt(Flux.Descent(10^rfun(x...)))
     return AddOptimizerMutation(o -> newopt)
 end
 

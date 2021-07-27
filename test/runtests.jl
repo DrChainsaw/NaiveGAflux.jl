@@ -1,6 +1,7 @@
 using NaiveGAflux
 using Random
 using Logging
+using Flux
 using Test
 
 @testset "NaiveGAflux.jl" begin

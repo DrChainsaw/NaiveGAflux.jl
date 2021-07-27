@@ -6,7 +6,7 @@ default_layerconf() = LayerVertexConf(ActivationContributionLow ∘ LazyMutable,
 # Global pool has its own config because it happens to not be compatible with LazyMutable. Should be fixed someday
 default_globpoolconf() = LayerVertexConf(ActivationContributionLow, MutationShield ∘ NaiveGAflux.default_logging())
 
-default_actfuns() = [identity, relu, elu, selu]
+default_actfuns() = [identity, Flux.relu, Flux.elu, Flux.selu]
 function initial_archspace(inshape, outsize)
 
     layerconf = default_layerconf()
