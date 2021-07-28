@@ -73,6 +73,8 @@ function _fitness(s::GpuFitness, c::AbstractCandidate)
     fitval = _fitness(s.f, cgpu)
     # In case parameters changed. Would like to do this some other way, perhaps return the candidate too, or move training to evolve...
     Flux.loadparams!(c, cpu(collect(params(cgpu)))) # Can't load CuArray into a normal array
+    cgpu = nothing # So we can reclaim the memory
+    # Should not be needed according to CUDA docs, but programs seems to hang every now and then if not done.
     gpu_gc()
     return fitval
 end
