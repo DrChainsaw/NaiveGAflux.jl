@@ -94,11 +94,11 @@ mutable struct FileCandidate{C, R<:Real, L<:Base.AbstractLock} <: AbstractWrappi
     movetimer::Timer
     writelock::L
     hold::Bool
-    function FileCandidate(c::C, movedelay::R) where {C, R}
+    function FileCandidate(c::C, movedelay::R, hold=false) where {C, R}
         cref = MemPool.poolset(c)
         writelock = ReentrantLock()
-        movetimer = asynctodisk(cref, movedelay, writelock)
-        fc = new{C, R, typeof(writelock)}(cref, movedelay, movetimer, writelock, false)
+        movetimer = hold ? asynctodisk(cref, movedelay, writelock) : Timer(movedelay)
+        fc = new{C, R, typeof(writelock)}(cref, movedelay, movetimer, writelock, hold)
         finalizer(gfc -> MemPool.pooldelete(gfc.c), fc)
         return fc
      end
@@ -162,7 +162,13 @@ function Serialization.deserialize(s::AbstractSerializer, ::Type{FileCandidate})
 end
 
 # Mutation needs to be enabled here?
-Flux.functor(::Type{<:FileCandidate}, c) = callcand(Flux.functor, c)
+function Flux.functor(::Type{<:FileCandidate}, c) 
+    xs, re = callcand(Flux.functor, c)
+    return xs, function(newxs)
+        newc = re(newxs)
+        FileCandidate(newc, c.movedelay, c.hold)
+    end
+end
 
 function wrappedcand(c::FileCandidate) 
     c.hold = true
