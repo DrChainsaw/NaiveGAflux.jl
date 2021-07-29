@@ -272,14 +272,11 @@ function mapcandidate(mapgraph, mapothers=deepcopy)
 end
 
 function clearstate(s) end
-clearstate(s::AbstractDict) = foreach(k -> delete!(s, k), keys(s))
+clearstate(s::AbstractDict) = empty!(s)
 
 cleanopt(o::T) where T = foreach(fn -> clearstate(getfield(o, fn)), fieldnames(T))
 cleanopt(o::ShieldedOpt) = cleanopt(o.opt)
 cleanopt(o::Flux.Optimiser) = foreach(cleanopt, o.os)
-cleanopt(c::CandidateModel) = cleanopt(c.opt)
-cleanopt(c::FileCandidate) = callcand(cleanopt, c.c)
-cleanopt(c::AbstractCandidate) = cleanopt(wrappedcand(c))
 
 """
     randomlrscale(rfun = BoundedRandomWalk(-1.0, 1.0))

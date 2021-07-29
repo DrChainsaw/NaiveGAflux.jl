@@ -176,7 +176,16 @@
                 # Also blocked due to locking
                 gettask = @async @test_logs (:warn, r"Try to access FileCandidate which is being moved to disk") wrappedcand(fc)
 
-                notify(finish_serialize)
+                # Hammer the condition to improve robustness towards deadlocks
+                cnt = 0
+                while !istaskdone(gettask)
+                    sleep(0.05)
+                    notify(finish_serialize)
+                    cnt += 1
+                    if cnt == 20
+                        @warn "Task did not complete after $cnt attempts. Testcase might be deadlocked!"
+                    end
+                end
 
                 @test fetch(gettask) == TakesLongToSerialize()
                 # Calling wrappedcand causes FileCandidate to hold the candidate in memory until released 
