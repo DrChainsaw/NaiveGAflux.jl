@@ -172,9 +172,10 @@ end
 
 function wrappedcand(c::FileCandidate) 
     c.hold = true
-    close(c.movetimer)
-    MemPool.poolget(c.c)
+    callcand(identity, c)
 end
+# Could also implement getproperty using wrappedcand/callcand, but there is no need for it so not gonna bother now
+
 graph(c::FileCandidate, f) = callcand(graph, c, f)
 opt(c::FileCandidate) = callcand(opt, c)
 

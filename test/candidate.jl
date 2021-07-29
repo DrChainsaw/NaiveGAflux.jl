@@ -87,9 +87,18 @@
                 mul(x::AbstractArray) = 2 .* x
                 mul(x) = x
                 cand2 = Flux.fmap(mul, cand1)
+                @test cand2 isa FileCandidate
+
+                @test cand1.hold == cand2.hold == false
 
                 indata = collect(Float32, reshape(1:6,3,2))
                 @test graph(cand2)(indata) == 2 .* indata
+                @test cand2.hold == true
+
+                # We accessed wrappedcand when calling graph, so now we hold the model in memory until release!:d 
+                # Make sure this is the case for fmapped candidates too
+                cand3 = Flux.fmap(identity, cand2)
+                @test cand3.hold == cand2.hold == true
             end
 
             @testset "Serialization" begin
@@ -127,7 +136,7 @@
                 
                 #1 test the testcase: Change true to false after move to disk
                 x = testref(fc, identity) # And neither should this now
-                @test isopen(fc.movetimer)
+                @test isopen(fc.movetimer) == true
 
                 t0 = time()
                 while candinmem(fc) && time() - t0 < 5
@@ -143,8 +152,42 @@
                 @test !isopen(fc.movetimer)
                 NaiveGAflux.release!(fc)
                 @test isopen(fc.movetimer)
-
             end
+
+            @testset "Move to disk collision" begin
+                using NaiveGAflux: AbstractCandidate, wrappedcand, release!
+                using Serialization
+
+                struct TakesLongToSerialize <: AbstractCandidate end
+
+                finish_serialize = Condition()
+                function Serialization.serialize(s::AbstractSerializer, ::TakesLongToSerialize)      
+                    wait(finish_serialize)
+                    Serialization.writetag(s.io, Serialization.OBJECT_TAG)
+                    serialize(s, TakesLongToSerialize)
+                end
+
+                fc = FileCandidate(TakesLongToSerialize(), 10.0)
+                # Waiting for timer to end does not seem to be reliable, so we'll just stop the timer and call the timeout function manually
+                close(fc.movetimer)
+                # Async as the serialization will block
+                movetask = @async NaiveGAflux.candtodisk(fc.c, fc.writelock)
+
+                # Also blocked due to locking
+                gettask = @async @test_logs (:warn, r"Try to access FileCandidate which is being moved to disk") wrappedcand(fc)
+
+                notify(finish_serialize)
+
+                @test fetch(gettask) == TakesLongToSerialize()
+                # Calling wrappedcand causes FileCandidate to hold the candidate in memory until released 
+                @test isopen(fc.movetimer) == false
+
+                release!(fc)
+
+                @test isopen(fc.movetimer) == true
+                close(fc.movetimer) # So we don't create garbage after fc.movedelay seconds
+            end
+
         finally
             MemPool.cleanup()
         end

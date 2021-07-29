@@ -120,7 +120,7 @@ be used.
 
 The data used for training is the result of `itergeneration(dataiter, gen)` where `gen`
 is the generation number. This defaults to returning `dataiter` but allows for more 
-complex iterators such as [`StatefulGenerationIter`](@gen).
+complex iterators such as [`StatefulGenerationIter`](@ref).
 
 If the model loss is ever `NaN` or `Inf` the training will be stopped and `invalidfitness`
 will be returned without calculating the fitness using `fitstrat`. 
