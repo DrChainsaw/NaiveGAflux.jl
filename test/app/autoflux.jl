@@ -82,7 +82,7 @@
 
         @testset "Test $ne epochs and $nbpg batches per generation" for ne in (1, 2, 10), nbpg in (2, 10)
             bs = 3
-            s = TrainIterConfig(nbatches_per_gen=nbpg, baseconfig=ShuffleIterConfig(batchsize=bs))
+            s = TrainIterConfig(nbatches_per_gen=nbpg, baseconfig=ShuffleIterConfig(batchsize=bs, iterwrap=identity))
             itr =  Iterators.take(dataiter(s, x, y), cld(ne * nexamples, nbpg))
 
             totnrofexamples = ne * nexamples
