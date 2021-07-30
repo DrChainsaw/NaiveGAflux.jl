@@ -294,7 +294,7 @@ function (s::PoolSpace)(in::Integer, rng=rng_default;outsize=nothing, wi=nothing
     poolfun(ws, stride=stride, pad=pad)
 end
 
-default_logging() = logged(level=Logging.Debug, info=NameAndIOInfoStr())
+default_logging() = logged(level=Logging.Debug, info=NaiveNASlib.NameAndIOInfoStr())
 """
     LayerVertexConf
 

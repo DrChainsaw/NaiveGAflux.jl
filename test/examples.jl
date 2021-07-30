@@ -162,7 +162,7 @@ end
 end
 
 @testset "Mutation examples" begin
-    Random.seed!(NaiveGAflux.rng_default, 0)
+    Random.seed!(NaiveGAflux.rng_default, 1)
 
     invertex = denseinputvertex("in", 3)
     layer1 = fluxvertex(Dense(nout(invertex), 4), invertex)
@@ -175,17 +175,17 @@ end
 
     mutation(layer2)
 
-    @test nout(layer2) == 6
+    @test nout(layer2) == 4
 
     # VertexMutation applies the wrapped mutation to all vertices in a CompGraph
     mutation = VertexMutation(mutation)
 
-    @test nout.(vertices(graph)) == [3,4,6]
+    @test nout.(vertices(graph)) == [3,4,4]
 
     mutation(graph)
 
     # Input vertex is never mutated
-    @test nout.(vertices(graph)) == [3,5,4]
+    @test nout.(vertices(graph)) == [3,3,3]
 
     # Use the MutationShield trait to protect vertices from mutation
     outlayer = fluxvertex(Dense(nout(layer2), 10), layer2, traitfun = MutationShield)
@@ -193,7 +193,7 @@ end
 
     mutation(graph)
 
-    @test nout.(vertices(graph)) == [3,4,3,10]
+    @test nout.(vertices(graph)) == [3,2,2,10]
 
     # In most cases it makes sense to mutate with a certain probability
     mutation = VertexMutation(MutationProbability(NoutMutation(-0.5, 0.5), 0.5))

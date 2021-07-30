@@ -1,8 +1,5 @@
-using NaiveGAflux
-using Random
-using Logging
-using Flux
-using Test
+using NaiveGAflux, Random, Logging, Flux, Test
+using NaiveNASlib.Advanced, NaiveNASlib.Extend
 
 @testset "NaiveGAflux.jl" begin
 

@@ -289,7 +289,7 @@ Base.merge(v::AbstractVertex, trs::ShapeTrace...) = ShapeTrace(v, v, tuple(tuple
 Return a `AbstractShapeTrace` (default `ShapeTrace`) between `v` and `vs` where `vs` must be input ascendants to `v`. If `vs` is omitted then all input vertices will be used.
 """
 function shapetrace(v::AbstractVertex; trfun = v -> ShapeTrace(v))
-    ins = filter(v -> isempty(inputs(v)), NaiveNASlib.flatten(v))
+    ins = filter(v -> isempty(inputs(v)), ancestors(v))
     memo = Dict{AbstractVertex, Any}(ins .=> trfun.(ins))
     return output!(memo, v)
 end
