@@ -16,6 +16,7 @@ abstract type AbstractFitness end
 Base.Broadcast.broadcastable(c::AbstractCandidate) = Ref(c)
 
 release!(::AbstractCandidate) = nothing
+hold!(::AbstractCandidate) = nothing
 graph(c::AbstractCandidate, f=identity; default=nothing) = f(default)
 opt(c::AbstractCandidate; default=nothing) = default
 lossfun(c::AbstractCandidate; default=nothing) = default
@@ -37,6 +38,7 @@ abstract type AbstractWrappingCandidate <: AbstractCandidate end
 wrappedcand(c::AbstractWrappingCandidate) = c.c
 
 release!(c::AbstractWrappingCandidate) = release!(wrappedcand(c))
+hold!(c::AbstractWrappingCandidate) = hold!(wrappedcand(c))
 
 graph(c::AbstractWrappingCandidate) = graph(wrappedcand(c))
 # This is mainly for FileCandidate to allow for writing the graph back to disk after f is done
@@ -149,6 +151,8 @@ function release!(c::FileCandidate)
     return nothing
 end
 
+# wrappedcand will do the work for us to actually hold 
+hold!(c::FileCandidate) = hold!(wrappedcand(c))
 
 function Serialization.serialize(s::AbstractSerializer, c::FileCandidate)
     Serialization.writetag(s.io, Serialization.OBJECT_TAG)

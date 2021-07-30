@@ -6,6 +6,7 @@
 Compute the fitness metric `f` for candidate `c`.
 """
 function fitness(f::AbstractFitness, c::AbstractCandidate)
+    hold!(c)
     val = _fitness(f, c)
     release!(c)
     return val
