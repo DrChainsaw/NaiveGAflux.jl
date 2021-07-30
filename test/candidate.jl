@@ -2,7 +2,8 @@
 
     struct DummyFitness <: AbstractFitness end
     NaiveGAflux._fitness(::DummyFitness, f::AbstractCandidate) = 17
-    import NaiveGAflux: FileCandidate, AbstractWrappingCandidate, opt, FittedCandidate
+    using NaiveGAflux: FileCandidate, AbstractWrappingCandidate, opt, FittedCandidate
+    using Functors: fmap
     import MemPool
     @testset "$ctype" for (ctype, candfun) in (
         (CandidateModel, CandidateModel),
@@ -39,10 +40,13 @@
 
                 optimizer(c) = typeof(opt(c)) 
 
-                if ctype === CandidateModel
-                    @test optimizer(newcand) === optimizer(cand) === Nothing
-                else
+                if ctype === CandidateOptModel
                     @test optimizer(newcand) !== optimizer(cand) !== Nothing
+                    fmapped = fmap(identity, newcand)
+                    @test opt(fmapped) !== opt(newcand)
+                    @test optimizer(fmapped) === optimizer(newcand)
+                else
+                    @test optimizer(newcand) === optimizer(cand) === Nothing
                 end
 
                 teststrat() = NaiveGAflux.default_crossoverswap_strategy(v -> 1)

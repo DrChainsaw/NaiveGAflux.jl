@@ -164,7 +164,7 @@ function _fitness(s::TrainThenFitness, c::AbstractCandidate)
         end
         iter = itergeneration(s.dataiter, gen)
         Flux.train!(nanguard, params(model), iter, o)
-        cleanopt(o)
+        cleanopt!(o)
         valid
     end
     return valid ? _fitness(s.fitstrat, c) : s.invalidfitness

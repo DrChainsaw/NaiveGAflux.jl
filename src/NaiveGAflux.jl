@@ -14,6 +14,7 @@ using Statistics
 import CUDA
 import MemPool
 import IterTools
+import Functors
 using Printf
 
 using Setfield

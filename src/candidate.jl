@@ -59,7 +59,7 @@ struct CandidateModel{G} <: AbstractCandidate
     graph::G
 end
 
-Flux.@functor CandidateModel
+Functors.@functor CandidateModel
 
 graph(c::CandidateModel, f=identity; kwargs...) = f(c.graph)
 
@@ -77,7 +77,17 @@ struct CandidateOptModel{O, C <: AbstractCandidate} <: AbstractWrappingCandidate
 end
 CandidateOptModel(opt, g::CompGraph) = CandidateOptModel(opt, CandidateModel(g))
 
-Flux.@functor CandidateOptModel
+function Functors.functor(::Type{<:CandidateOptModel}, c) 
+    return (opt=c.opt, c=c.c), function ((newopt, newc),)
+        # Optimizers are stateful and having multiple candidates pointing to the same instance is downright scary
+        # User would need to go out of its way to make it the same instance (e.g. by using a wrapper type and dispatch on it in CandidateOptModel)
+        # Hope that we get stateless optimizers soon
+        if newopt === c.opt
+            newopt = deepcopy(cleanopt!(newopt))
+        end
+        CandidateOptModel(newopt, newc)
+    end
+end
 
 opt(c::CandidateOptModel; kwargs...) = c.opt 
 
@@ -165,12 +175,10 @@ function Serialization.deserialize(s::AbstractSerializer, ::Type{FileCandidate})
     return FileCandidate(wrapped)
 end
 
-# Mutation needs to be enabled here?
-function Flux.functor(::Type{<:FileCandidate}, c) 
-    xs, re = callcand(Flux.functor, c)
-    return xs, function(newxs)
-        newc = re(newxs)
-        FileCandidate(newc, c.movedelay, c.hold)
+function Functors.functor(::Type{<:FileCandidate}, c) 
+    # we can allow the wrapped candidate to be moved to disk while user decides what to do with the
+    return (c=callcand(identity, c), movedelay=c.movedelay), function(xs)
+        FileCandidate(xs..., c.hold)
     end
 end
 
@@ -181,7 +189,6 @@ end
 # Could also implement getproperty using wrappedcand/callcand, but there is no need for it so not gonna bother now
 
 graph(c::FileCandidate, f) = callcand(graph, c, f)
-opt(c::FileCandidate) = callcand(opt, c)
 
 newcand(c::FileCandidate, mapfield) = FileCandidate(callcand(newcand, c, mapfield), c.movedelay)
 
@@ -202,7 +209,7 @@ end
 FittedCandidate(c::AbstractCandidate, f::AbstractFitness, gen) = FittedCandidate(gen, fitness(f, c), c)
 FittedCandidate(c::FittedCandidate, f::AbstractFitness, gen) = FittedCandidate(gen, fitness(f, c), wrappedcand(c))
 
-Flux.@functor FittedCandidate
+Functors.@functor FittedCandidate
 
 fitness(c::FittedCandidate; default=nothing) = c.fitness
 generation(c::FittedCandidate; default=nothing) = c.gen
@@ -272,15 +279,16 @@ end
 function mapcandidate(mapgraph, mapothers=deepcopy)
     mapfield(g::CompGraph) = mapgraph(g)
     mapfield(f) = mapothers(f)
+    # TODO: Replace with fmap now that we fully support Functors?
     return c -> newcand(c, mapfield)
 end
 
-function clearstate(s) end
-clearstate(s::AbstractDict) = empty!(s)
+function clearstate!(s) end
+clearstate!(s::AbstractDict) = empty!(s)
 
-cleanopt(o::T) where T = foreach(fn -> clearstate(getfield(o, fn)), fieldnames(T))
-cleanopt(o::ShieldedOpt) = cleanopt(o.opt)
-cleanopt(o::Flux.Optimiser) = foreach(cleanopt, o.os)
+cleanopt!(o::T) where T = (foreach(fn -> clearstate!(getfield(o, fn)), fieldnames(T)); return o)
+cleanopt!(o::ShieldedOpt) = (cleanopt!(o.opt); return o)
+cleanopt!(o::Flux.Optimiser) = (foreach(cleanopt!, o.os); return o)
 
 """
     randomlrscale(rfun = BoundedRandomWalk(-1.0, 1.0))
