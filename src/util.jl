@@ -327,8 +327,6 @@ GlobalPool(PT) = GlobalPool{PT}()
 
 NaiveNASflux.layertype(gp::GlobalPool) = gp
 NaiveNASflux.layer(gp::GlobalPool) = gp
-NaiveNASlib.minΔninfactor(::GlobalPool) = 1
-NaiveNASlib.minΔnoutfactor(::GlobalPool) = 1
 
 """
     ninputs(model)

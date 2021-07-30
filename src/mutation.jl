@@ -242,7 +242,7 @@ end
 
 Mutate the out size of a vertex or vector of vertices.
 
-Size is changed by `x * nout(v)` quantized to closest non-zero integer of `minΔnoutfactor(v)` where `x` is drawn from `U(minrel, maxrel)` where 
+Size is changed by `x * nout(v)` rounded away from from zero where `x` is drawn from `U(minrel, maxrel)` where 
 `minrel` and `maxrel` are `l1` and `l2` if `l1 < l2` and `l2` and `l1` otherwise.
 """
 struct NoutMutation{R<:Real, RNG<:AbstractRNG} <:AbstractMutation{AbstractVertex}
@@ -265,7 +265,7 @@ function (m::NoutMutation)(vs::AbstractVector{<:AbstractVertex})
 
     for v in vs
         terminputs = findterminating(v, inputs)
-        
+
         # We are basically just searching for Immutable vertices here, allow_mutation(trait(v)) happens to do just that
         any(tv -> allow_mutation(trait(tv)), terminputs) || continue
         

@@ -282,8 +282,6 @@ ewma(curr, ::Nothing, α) = curr
 Measure fitness as time to evaluate a function.
 
 Time for first `nskip` evaluations will be discarded.
-
-Function needs to be instrumented using [`instrument`](@ref).
 """
 struct TimeFitness{T} <: AbstractFitness
     fitstrat::T
@@ -299,10 +297,6 @@ end
     SizeFitness()
 
 Measure fitness as the total number of parameters in the function to be evaluated.
-
-Note: relies on Flux.params which does not work for functions which have been instrumented through [`instrument`](@ref).
-
-To handle intrumentation, an attempt to extract the size is also made when instrumenting for `Validation`. Whether this works or not depends on the order in which fitness functions are combined.
 """
 struct SizeFitness <: AbstractFitness end
 _fitness(s::SizeFitness, c::AbstractCandidate) = nparams(c)
