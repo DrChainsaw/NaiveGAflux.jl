@@ -232,7 +232,7 @@
         @test nv(CompGraph(inpt, v)) == 4
 
         v = space("test", inpt)
-        @test name.(NaiveNASlib.flatten(v)) == ["in", "test.1", "test.2", "test.3"]
+        @test name.(ancestors(v)) == ["in", "test.1", "test.2", "test.3"]
 
         space = RepeatArchSpace(VertexSpace(BatchNormSpace(relu)), [2,5])
         rng = SeqRng()
@@ -248,7 +248,7 @@
         @test nin(v) == [4]
 
         v = space("test", inpt, outsize=4)
-        @test name.(NaiveNASlib.flatten(v)) == ["in", "test.1", "test.2"]
+        @test name.(ancestors(v)) == ["in", "test.1", "test.2"]
         @test nout(v) == 4
         @test nin(v) == [4]
 
@@ -266,7 +266,7 @@
         @test nin(v) == [2]
 
         v = space("v", inpt)
-        @test name.(NaiveNASlib.flatten(v)) == ["in", "v.1", "v.2"]
+        @test name.(ancestors(v)) == ["in", "v.1", "v.2"]
         @test nv(CompGraph(inpt, v)) == 3
         @test nout(v) == 3
         @test nin(v) == [2]
@@ -277,7 +277,7 @@
         @test nin(v) == [4]
 
         v = space("v", inpt, outsize=4)
-        @test name.(NaiveNASlib.flatten(v)) == ["in", "v.1", "v.2"]
+        @test name.(ancestors(v)) == ["in", "v.1", "v.2"]
         @test nv(CompGraph(inpt, v)) == 3
         @test nout(v) == 4
         @test nin(v) == [4]
@@ -295,7 +295,7 @@
         @test length(inputs(v)) == 3
 
         v = space("test", inpt)
-        @test name.(NaiveNASlib.flatten(v)) == ["in", "test.path1", "test.path2", "test.path3", "test.cat"]
+        @test name.(ancestors(v)) == ["in", "test.path1", "test.path2", "test.path3", "test.cat"]
 
         space = ForkArchSpace(VertexSpace(BatchNormSpace(relu)), [2,5])
         rng = SeqRng()
@@ -339,7 +339,7 @@
         @test layer(inputs(v)[2]) isa Dense
 
         v = space("v", inpt)
-        @test name.(NaiveNASlib.flatten(v)) == ["in", "v.res", "v.add"]
+        @test name.(ancestors(v)) == ["in", "v.res", "v.add"]
         @test nin(v) == [4, 4]
         @test nout(v) == 4
         @test layer(inputs(v)[2]) isa Dense

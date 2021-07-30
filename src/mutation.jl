@@ -260,21 +260,22 @@ NoutMutation(l1,l2) = NoutMutation(l1,l2, rng_default)
 function (m::NoutMutation)(vs::AbstractVector{<:AbstractVertex})
 
     Δs = Dict{AbstractVertex, Int}()
+    shift = m.minrel
+    scale = m.maxrel - m.minrel
+
     for v in vs
+        terminputs = findterminating(v, inputs)
+        
+        # We are basically just searching for Immutable vertices here, allow_mutation(trait(v)) happens to do just that
+        any(tv -> allow_mutation(trait(tv)), terminputs) || continue
+        
+        Δfloat = rand(m.rng) * scale + shift
 
-        Δfactor = minΔnoutfactor(v)
-        # Missing Δfactor means vertex can't be mutated, for example if it touches an immutable vertex such as an input vertex
-        ismissing(Δfactor) && continue
-
-        shift = m.minrel
-        scale = m.maxrel - m.minrel
-
-        x = rand(m.rng) * scale + shift
-        xq = (nout(v) * x) ÷ Δfactor
-        Δ = Int(sign(x) * max(Δfactor, abs(xq) * Δfactor))
-
-        minsize = min(nout(v), minimum(nout.(findterminating(v, inputs))))
-        minsize + Δ <= Δfactor && continue
+        Δ = ceil(Int, abs(Δfloat)) *  sign(Δfloat)
+        minsize = minimum(nout.(terminputs))
+        # Or else we might increase the size despite Δ being negative which would be surprising to a user who has specified 
+        # strictly negative size changes
+        minsize + Δ <= 0 && continue
 
         Δs[v] = Δ
     end
@@ -282,9 +283,9 @@ function (m::NoutMutation)(vs::AbstractVector{<:AbstractVertex})
     if !isempty(Δs)
         failmsg = (args...) -> "Could not change nout of $(join(NaiveNASlib.nameorrepr.(keys(Δs)), ", ", " and ")) by $(join(values(Δs), ", ", " and ")). No change!"
 
-        strategy = NaiveNASlib.TimeOutAction(;base=ΔNoutRelaxed(Δs), fallback=LogΔSizeExec(failmsg, Logging.Warn, ΔSizeFailNoOp()))
+        strategy = TimeOutAction(;base=ΔNoutRelaxed(Δs), fallback=LogΔSizeExec(failmsg, Logging.Warn, ΔSizeFailNoOp()))
 
-        Δsize!(strategy , all_in_Δsize_graph(keys(Δs), Output()))
+        Δsize!(strategy)
     end
     return vs
 end
@@ -377,7 +378,7 @@ end
 
 function no_shapechange(vi)
     # all_in_graph is not sorted, and we want some kind of topoligical order here so that earlier indices are closer to vi
-    allsorted = mapreduce(NaiveNASlib.flatten, vcat, filter(v -> isempty(outputs(v)), all_in_graph(vi))) |> unique
+    allsorted = mapreduce(ancestors, vcat, filter(v -> isempty(outputs(v)), all_in_graph(vi))) |> unique
     
     # Vertices which have the same input as vi and are singleinput
     #   Reason is that this will cause a new vertex to be added between the target output vertex vo
@@ -385,7 +386,7 @@ function no_shapechange(vi)
     #   try_add_edge to fail.
     inouts = filter(singleinput, mapreduce(outputs, vcat, inputs(vi); init=[]))
     # All vertices which are after vi in the topology
-    vsafter = setdiff(allsorted, NaiveNASlib.flatten(vi), outputs(vi), inouts)
+    vsafter = setdiff(allsorted, ancestors(vi), outputs(vi), inouts)
     
     vitrace = shapetrace(vi) 
     viorder = allΔshapetypes(vitrace)
@@ -425,7 +426,7 @@ function try_add_edge(vi, vo, mergefun, valuefun=default_neuronselect)
         voi = inputs(vo)[1]
         # If the input to vo is capable of multi input we don't need to create a new vertex
         # We must also check that this input does not happen to be an input to vi as this would create a cycle in the graph
-        if singleinput(voi) || voi in NaiveNASlib.flatten(vi)
+        if singleinput(voi) || voi in ancestors(vi)
             vm = mergefun(voi)
             # Insert vm between voi and vo, i.e voi -> vo turns into voi -> vm -> vo
             # vs -> [vo] means only add the new vertex between voi and vo as voi could have other outputs

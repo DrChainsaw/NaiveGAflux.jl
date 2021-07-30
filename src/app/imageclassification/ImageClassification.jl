@@ -5,6 +5,7 @@ using ..AutoFlux: fit
 using NaiveGAflux: GlobalPool
 using NaiveGAflux: shapetrace, squashshapes, fshape, ndimsout
 using NaiveGAflux: StatefulGenerationIter
+using NaiveNASlib.Advanced, NaiveNASlib.Extend
 import Flux
 using Flux: Dense, Conv, ConvTranspose, DepthwiseConv, CrossCor, LayerNorm, BatchNorm, InstanceNorm, GroupNorm, 
             MaxPool, MeanPool, Dropout, AlphaDropout, GlobalMaxPool, GlobalMeanPool, cpu, gpu

@@ -199,9 +199,9 @@
         v = dense(inpt, 11)
 
         @test NoutMutation(0.4, rng)(v) == v
-        @test nout(v) == 13
+        @test nout(v) == 12
 
-        NoutMutation(-0.4, rng)(v)
+        @test NoutMutation(-0.4, rng)(v) == v
         @test nout(v) == 11
 
         NoutMutation(-0.001, rng)(v)
@@ -234,8 +234,8 @@
         @test NoutMutation(0.8, rng)([inpt,v2,v3]) == [inpt,v2,v3]
 
         @test nout(v1) == 4
-        @test nout(v2) == 7
-        @test nout(v3) == 8
+        @test nout(v2) == 6
+        @test nout(v3) == 7
         @test nout(v4) == 7
     end
 
@@ -357,7 +357,7 @@
         end
 
         vert(want::String, graph::CompGraph) = vertices(graph)[name.(vertices(graph)) .== want][]
-        vert(want::String, v::AbstractVertex) = NaiveNASlib.flatten(v)[name.(NaiveNASlib.flatten(v)) .== want][]
+        vert(want::String, v::AbstractVertex) = ancestors(v)[name.(ancestors(v)) .== want][]
 
         for to_rm in ["pa4", "pa2pa2"]
             for vconc_out in [nothing, "pa1", "pa2pa2", "pa3", "pa4"]
