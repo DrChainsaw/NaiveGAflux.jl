@@ -16,6 +16,7 @@ import CUDA
 import MemPool
 import IterTools
 import Functors
+using Functors: @functor, functor, fmap
 using Printf
 
 using Setfield

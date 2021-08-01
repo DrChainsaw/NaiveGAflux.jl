@@ -59,7 +59,7 @@ struct CandidateModel{G} <: AbstractCandidate
     graph::G
 end
 
-Functors.@functor CandidateModel
+@functor CandidateModel
 
 graph(c::CandidateModel, f=identity; kwargs...) = f(c.graph)
 
@@ -209,7 +209,7 @@ end
 FittedCandidate(c::AbstractCandidate, f::AbstractFitness, gen) = FittedCandidate(gen, fitness(f, c), c)
 FittedCandidate(c::FittedCandidate, f::AbstractFitness, gen) = FittedCandidate(gen, fitness(f, c), wrappedcand(c))
 
-Functors.@functor FittedCandidate
+@functor FittedCandidate
 
 fitness(c::FittedCandidate; default=nothing) = c.fitness
 generation(c::FittedCandidate; default=nothing) = c.gen
@@ -229,7 +229,7 @@ nparams(x) = mapreduce(prod ∘ size, +, params(x).order; init=0)
     evolvemodel(m::AbstractMutation{CompGraph}, mapothers=deepcopy)
     evolvemodel(m::AbstractMutation{CompGraph}, om::AbstractMutation{FluxOptimizer}, mapothers=deepcopy)
 
-Return a function which maps a `AbstractCandidate c1` to a new `AbstractCandidate c2` where any `CompGraph`s `g` in `c1` will be m(copy(g))` in `c2`. Same principle is applied to any optimisers if `om` is present.
+Return a function which maps a `AbstractCandidate c1` to a new `AbstractCandidate c2` where any `CompGraph`s `g` in `c1` will be m(deepcopy(g))` in `c2`. Same principle is applied to any optimisers if `om` is present.
 
 All other fields are mapped through the function `mapothers` (default `deepcopy`).
 
@@ -237,7 +237,7 @@ Intended use is together with [`EvolveCandidates`](@ref).
 """
 function evolvemodel(m::AbstractMutation{CompGraph}, mapothers=deepcopy)
     function copymutate(g::CompGraph)
-        ng = copy(g)
+        ng = deepcopy(g)
         m(ng)
         return ng
     end
@@ -249,7 +249,7 @@ evolvemodel(m::AbstractMutation{CompGraph}, om::AbstractMutation{FluxOptimizer},
     evolvemodel(m::AbstractCrossover{CompGraph}, mapothers1=deepcopy, mapothers2=deepcopy)
     evolvemodel(m::AbstractCrossover{CompGraph}, om::AbstractCrossover{FluxOptimizer}, mapothers1=deepcopy, mapothers2=deepcopy)
 
-Return a function which maps a tuple of `AbstractCandidate`s `(c1,c2)` to two new candidates `c1', c2'` where any `CompGraph`s `g1` and `g2` in `c1` and `c2` respectively will be `g1', g2' = m((copy(g1), copy(g2)))` in `c1'` and `c2'` respectively. Same principle applies to any optimisers if `om` is present.
+Return a function which maps a tuple of `AbstractCandidate`s `(c1,c2)` to two new candidates `c1', c2'` where any `CompGraph`s `g1` and `g2` in `c1` and `c2` respectively will be `g1', g2' = m((deepcopy(g1), deepcopy(g2)))` in `c1'` and `c2'` respectively. Same principle applies to any optimisers if `om` is present.
 
 All other fields in `c1` will be mapped through the function `mapothers1` and likewise for `c2` and `mapothers2`.
 
@@ -261,7 +261,7 @@ evolvemodel(m::AbstractCrossover{CompGraph}, mapothers1=deepcopy, mapothers2=dee
     g1 = graph(c1, identity)
     g2 = graph(c2, identity)
 
-    g1, g2 = m((copy(g1), copy(g2)))
+    g1, g2 = m((deepcopy(g1), deepcopy(g2)))
 
     return mapcandidate(g -> g1, mapothers1)(c1), mapcandidate(g -> g2, mapothers2)(c2)
 end
@@ -282,13 +282,6 @@ function mapcandidate(mapgraph, mapothers=deepcopy)
     # TODO: Replace with fmap now that we fully support Functors?
     return c -> newcand(c, mapfield)
 end
-
-function clearstate!(s) end
-clearstate!(s::AbstractDict) = empty!(s)
-
-cleanopt!(o::T) where T = (foreach(fn -> clearstate!(getfield(o, fn)), fieldnames(T)); return o)
-cleanopt!(o::ShieldedOpt) = (cleanopt!(o.opt); return o)
-cleanopt!(o::Flux.Optimiser) = (foreach(cleanopt!, o.os); return o)
 
 """
     randomlrscale(rfun = BoundedRandomWalk(-1.0, 1.0))

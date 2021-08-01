@@ -47,8 +47,9 @@ Note that vertex might still be modified if an adjacent vertex is mutated in a w
 struct MutationShield{T<:MutationTrait, S} <:DecoratingTrait
     t::T
     allowed::S
-    MutationShield(t::T, allowed...) where T = new{T, typeof(allowed)}(t, allowed)
+    MutationShield(t::T, allowed::Tuple) where T = new{T, typeof(allowed)}(t, allowed)
 end
+MutationShield(t, allowed...) = MutationShield(t, allowed)
 
 NaiveNASlib.base(t::MutationShield) = t.t
 allow_mutation(v::AbstractVertex, ms...) = allow_mutation(trait(v), ms...)
@@ -57,6 +58,8 @@ allow_mutation(::MutationTrait, ms...) = true
 allow_mutation(::Immutable, ms...) = false
 allow_mutation(t::MutationShield, ms...) = !isempty(ms) && all(mt -> any(amt -> mt <: amt, t.allowed), typeof.(mutationleaves(ms)))
 NaiveNASlib.clone(t::MutationShield;cf=clone) = MutationShield(cf(base(t); cf=cf), t.allowed...)
+
+@functor MutationShield
 
 """
     AbstractVertexSelection
@@ -124,7 +127,7 @@ check_apply(t::ApplyIf, v) = t.predicate(v) && t.apply(v)
 function check_apply(t, v) end
 
 NaiveNASlib.clone(t::ApplyIf;cf=clone) = ApplyIf(cf(t.predicate, cf=cf), cf(t.apply, cf=cf), cf(base(t), cf=cf))
-
+@functor ApplyIf
 
 """
     PersistentArray{T, N} <: AbstractArray{T, N}
@@ -226,7 +229,6 @@ struct ShieldedOpt{O<:FluxOptimizer} <: FluxOptimizer
 end
 Flux.Optimise.apply!(o::ShieldedOpt, args...) = Flux.Optimise.apply!(o.opt, args...)
 
-
 """
     mergeopts(t::Type{T}, os...) where T
     mergeopts(os::T...)
@@ -257,6 +259,13 @@ Call without x to return `x -> optmap(fopt, x, felse)`
 optmap(fopt, felse=identity) = x -> optmap(fopt, x, felse)
 optmap(fopt, x, felse) = felse(x)
 optmap(fopt, o::FluxOptimizer, felse) = fopt(o)
+
+function clearstate!(s) end
+clearstate!(s::AbstractDict) = empty!(s)
+
+cleanopt!(o::T) where T = (foreach(fn -> clearstate!(getfield(o, fn)), fieldnames(T)); return o)
+cleanopt!(o::ShieldedOpt) = (cleanopt!(o.opt); return o)
+cleanopt!(o::Flux.Optimiser) = (foreach(cleanopt!, o.os); return o)
 
 
 """

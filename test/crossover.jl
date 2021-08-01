@@ -6,7 +6,8 @@
     teststrat() = NaiveGAflux.default_crossoverswap_strategy(v -> 1) 
 
     @testset "CrossoverSwap" begin
-        import NaiveGAflux: crossoverswap!, separablefrom
+        using NaiveGAflux: crossoverswap!, separablefrom
+        using Functors: fmap
 
         iv(np) = denseinputvertex("$np.in", 3)
         dv(in, outsize, name) = fluxvertex(name, Dense(nout(in), outsize), in)
@@ -53,9 +54,7 @@
             @testset "Swap same graph is noop" begin
                 ga = g(4:7, "a")
 
-                ren(str::String;cf=ren) = "b" * str[2:end]
-                ren(x...;cf=ren) = clone(x...;cf=cf)
-                gb = copy(ga, ren)
+                gb = fmap(x -> x isa String ? "b" * x[2:end] : x, ga)
 
                 indata = reshape(collect(Float32, 1:3*2),3,:)
                 orgout = ga(indata)
@@ -330,7 +329,7 @@
             end
 
             g_org = g("a")
-            g_new = copy(g_org)
+            g_new = deepcopy(g_org)
 
             indata = randn(MersenneTwister(0), 3, 2)
             out_org = g_org(indata)
@@ -439,7 +438,7 @@
                     indata = randn(Float32, 4,4,3,2)
                     out_org = g_org(indata)
 
-                    g_new = copy(g_org)
+                    g_new = deepcopy(g_org)
 
                     @test crossoverswap!(v4n(g_org, "a.bv1"), v4n(g_new, "a.bv1"); strategy=teststrat) == (true, true)
 

@@ -375,7 +375,7 @@
                     end
                     v5 = fluxvertex("v5", Dense(nout(v4), 5), v4)
 
-                    g = copy(CompGraph(inpt, v5))
+                    g = deepcopy(CompGraph(inpt, v5))
                     @test size(g(ones(4,2))) == (5,2)
 
                     to_remove = vert(to_rm, g)

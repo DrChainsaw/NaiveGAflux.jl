@@ -43,11 +43,12 @@ end
     @test !allow_mutation(v4)
 
 
-    @testset "Clone" begin
+    @testset "Functor" begin
+        using Functors: fmap
         t = MutationShield(SizeAbsorb())
-        ct(::SizeAbsorb;cf) = SizeInvariant()
-        ct(x...;cf=ct) = clone(x...,cf=cf)
-        tn = ct(t)
+        toinvariant(::SizeAbsorb) = SizeInvariant()
+        toinvariant(x) = x
+        tn = fmap(toinvariant, t)
         @test base(tn) == SizeInvariant()
         @test tn.allowed == t.allowed
     end
@@ -87,9 +88,9 @@ end
 
     TestShield(t) = MutationShield(t, MutationShieldTestMutation1)
 
-    @testset "Clone" begin
+    @testset "Functor" begin
         t1 = TestShield(SizeAbsorb())
-        @test clone(t1) == t1
+        @test fmap(identity, t1) == t1
     end
 
     v1 = inputvertex("v1", 3)
@@ -145,9 +146,9 @@ end
 
     TestShield(t) = MutationShield(t, MutationShieldAbstractTestAbstractMutation)
 
-    @testset "Clone" begin
+    @testset "Functor" begin
         t1 = TestShield(SizeAbsorb())
-        @test clone(t1) == t1
+        @test fmap(identity, t1) == t1
     end
 
     v1 = inputvertex("v1", 3)
@@ -211,11 +212,12 @@ end
     @test nv_pre == nv(g) + 3
 end
 
-@testset "Clone ApplyIf" begin
+@testset "ApplyIf functor" begin
+    using Functors: fmap
     t = ApplyIf(x -> true, identity, SizeAbsorb())
-    ct(::SizeAbsorb;cf) = SizeInvariant()
-    ct(x...;cf=ct) = clone(x...,cf=cf)
-    tn = ct(t)
+    toinvariant(::SizeAbsorb) = SizeInvariant()
+    toinvariant(x) = x
+    tn = fmap(toinvariant, t)
     @test base(tn) == SizeInvariant()
 end
 

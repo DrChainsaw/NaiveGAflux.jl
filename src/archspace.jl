@@ -1,7 +1,7 @@
 """
     AbstractArchSpace
 
-Abstract functor representing an architecture search space.
+Abstract callable struct representing an architecture search space.
 
 Architecture spaces define a range of possible hyperparameters for a model architecture. Used to create new models or parts of models.
 
@@ -12,7 +12,7 @@ abstract type AbstractArchSpace end
 """
     AbstractLayerSpace
 
-Abstract functor representing a search space of layers.
+Abstract callable struct representing a search space of layers.
 
 Return a layer in the search space given an input size and (optionally) a random number generator.
 """
@@ -21,7 +21,7 @@ abstract type AbstractLayerSpace end
 """
     AbstractParSpace{N, T}
 
-Abstract functor representing a seach space of `N`D parameters of type `T`.
+Abstract callable struct representing a seach space of `N`D parameters of type `T`.
 
 Return a tuple of parameters from the search space when invoked. Random number generator may be supplied.
 """

@@ -354,6 +354,7 @@ The following basic crossover operations are currently supported:
 Most of the mutation utilities also work with crossover operations. Here are a few examples:
 
 ```julia
+import Functors
 Random.seed!(NaiveGAflux.rng_default, 0)
 
 invertex = denseinputvertex("A.in", 3)
@@ -365,9 +366,7 @@ modelA = CompGraph(invertex, layer4)
 
 # Create an exact copy to show how parameter alignment is preserved
 # Prefix names with B so we can show that something actually happened
-changeprefix(str::String; cf) = replace(str, r"^A.\.*" => "B.")
-changeprefix(x...;cf=clone) = clone(x...; cf=cf)
-modelB = copy(modelA, changeprefix)
+modelB = Functors.fmap(x -> x isa String ? replace(x, r"^A.\.*" => "B.") : x, modelA)
 
 indata = reshape(collect(Float32, 1:3*2), 3,2)
 @test modelA(indata) == modelB(indata)

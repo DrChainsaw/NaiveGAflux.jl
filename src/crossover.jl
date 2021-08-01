@@ -183,7 +183,7 @@ function crossoverswap(v1, v2; pairgen=default_inputs_pairgen, selection=FilterM
     # To mitigate this a backup copy is used. It is however not easy to backup a single vertex as it is connected to all other vertices in the graph, meaning that the whole graph must be copied. Sigh...
     function copyvertex(v)
         g = regraph(v)
-        vs = vertices(copy(g))
+        vs = vertices(deepcopy(g))
         return vs[indexin([v], vertices(g))][], filter(vv -> isempty(inputs(vv)), vs)
     end
     v1c, ivs1 = copyvertex(v1)

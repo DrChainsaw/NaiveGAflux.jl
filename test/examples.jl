@@ -230,6 +230,7 @@ end
 end
 
 @testset "Crossover examples" begin
+    import Functors
     Random.seed!(NaiveGAflux.rng_default, 0)
 
     invertex = denseinputvertex("A.in", 3)
@@ -241,9 +242,7 @@ end
 
     # Create an exact copy to show how parameter alignment is preserved
     # Prefix names with B so we can show that something actually happened
-    changeprefix(str::String; cf) = replace(str, r"^A.\.*" => "B.")
-    changeprefix(x...;cf=clone) = clone(x...; cf=cf)
-    modelB = copy(modelA, changeprefix)
+    modelB = Functors.fmap(x -> x isa String ? replace(x, r"^A.\.*" => "B.") : x, modelA)
 
     indata = reshape(collect(Float32, 1:3*2), 3,2)
     @test modelA(indata) == modelB(indata)

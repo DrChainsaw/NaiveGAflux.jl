@@ -341,10 +341,10 @@ function rename_models(pop)
  end
 
 function rename_model(i, cand)
-    rename_model(str::String; cf) = replace(str, r"^model\d+\.*" => "model$i.")
-    rename_model(x...;cf=clone) = clone(x...; cf=cf)
-    rename_model(::CompVertex; cf=clone) = m # No need to copy below this level
-    return NaiveGAflux.mapcandidate(g -> copy(g, rename_model))(cand)
+    # No need to copy layers now
+    return fmap(cand; walk=(f, x) -> x isa NaiveNASflux.AbstractMutableComp ? x : Functors._default_walk(f, x)) do x
+        x isa String ? replace(x, r"^model\d+\.*" => "model$i.") : x
+    end
 end
 
 function optcrossover(poptswap=0.3, plrswap=0.4)

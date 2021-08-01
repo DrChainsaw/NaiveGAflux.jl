@@ -10,6 +10,8 @@ import Flux
 using Flux: Dense, Conv, ConvTranspose, DepthwiseConv, CrossCor, LayerNorm, BatchNorm, InstanceNorm, GroupNorm, 
             MaxPool, MeanPool, Dropout, AlphaDropout, GlobalMaxPool, GlobalMeanPool, cpu, gpu
 using Flux: Descent, Momentum, Nesterov, ADAM, NADAM, ADAGrad, WeightDecay
+import Functors
+using Functors: fmap
 using Random
 import Logging
 using Statistics
