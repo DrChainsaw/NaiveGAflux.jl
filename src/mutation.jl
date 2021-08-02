@@ -93,29 +93,29 @@ end
 """
     HighValueMutationProbability(m::AbstractMutation{T}, pbase::Real, rng=rng_default; spread=0.5)
 
-Return a `WeightedMutationProbability` which applies `m` to vertices with an (approximately) average probability of `pbase` and where high `neuron_value` compared to other vertices in same graph means higher probability.
+Return a `WeightedMutationProbability` which applies `m` to vertices with an (approximately) average probability of `pbase` and where high `neuronutility` compared to other vertices in same graph means higher probability.
 
 Parameter `spread` can be used to control how much the difference in probability is between high and low values. High spread means high difference while low spread means low difference.
 """
-HighValueMutationProbability(m::AbstractMutation{T}, pbase::Real, rng=rng_default;spread=0.5) where T <: AbstractVertex = WeightedMutationProbability(m, weighted_neuron_value_high(pbase, rng,spread=spread))
+HighValueMutationProbability(m::AbstractMutation{T}, pbase::Real, rng=rng_default;spread=0.5) where T <: AbstractVertex = WeightedMutationProbability(m, weighted_neuronutility_high(pbase, rng,spread=spread))
 
 """
     LowValueMutationProbability(m::AbstractMutation{T}, pbase::Real, rng=rng_default; spread=2)
 
-Return a `WeightedMutationProbability` which applies `m` to vertices with an (approximately) average probability of `pbase` and where low `neuron_value` compared to other vertices in same graph means higher probability.
+Return a `WeightedMutationProbability` which applies `m` to vertices with an (approximately) average probability of `pbase` and where low `neuronutility` compared to other vertices in same graph means higher probability.
 
 Parameter `spread` can be used to control how much the difference in probability is between high and low values. High spread means high difference while low spread means low difference.
 """
-LowValueMutationProbability(m::AbstractMutation{T}, pbase::Real, rng=rng_default;spread=2) where T <: AbstractVertex = WeightedMutationProbability(m, weighted_neuron_value_low(pbase, rng, spread=spread))
+LowValueMutationProbability(m::AbstractMutation{T}, pbase::Real, rng=rng_default;spread=2) where T <: AbstractVertex = WeightedMutationProbability(m, weighted_neuronutility_low(pbase, rng, spread=spread))
 
 
-weighted_neuron_value_high(pbase, rng=rng_default; spread=0.5) = function(v::AbstractVertex)
-    ismissing(NaiveNASflux.neuron_value(v)) && return pbase
+weighted_neuronutility_high(pbase, rng=rng_default; spread=0.5) = function(v::AbstractVertex)
+    ismissing(NaiveNASflux.neuronutility(v)) && return pbase
     return Probability(fixnan(pbase ^ normexp(v, spread), pbase), rng)
 end
 
-weighted_neuron_value_low(pbase, rng=rng_default;spread=2) = function(v::AbstractVertex)
-    ismissing(NaiveNASflux.neuron_value(v)) && return pbase
+weighted_neuronutility_low(pbase, rng=rng_default;spread=2) = function(v::AbstractVertex)
+    ismissing(NaiveNASflux.neuronutility(v)) && return pbase
     return Probability(fixnan(pbase ^ (1/normexp(v, 1/spread)), pbase), rng)
 end
 
@@ -124,11 +124,11 @@ fixnan(x, rep) = isnan(x) ? rep : clamp(x, 0.0, 1.0)
 # This is pretty hacky and arbitrary. Change to something better
 function normexp(v::AbstractVertex, s)
     allvertices = filter(allow_mutation, all_in_graph(v))
-    allvalues = map(vi -> NaiveNASflux.neuron_value(vi), allvertices)
+    allvalues = map(vi -> NaiveNASflux.neuronutility(vi), allvertices)
     meanvalues = map(mean, skipmissing(allvalues))
     meanvalue = mean(meanvalues)
     maxvalue = maximum(meanvalues)
-    value = mean(NaiveNASflux.neuron_value(v))
+    value = mean(NaiveNASflux.neuronutility(v))
     # Basic idea: maxvalue - value means the (to be) exponent is <= 0 while the division seems to normalize so that average of pbase ^ normexp across allvertices is near pbase (no proof!). The factor 2 is just to prevent probability of vertex with maxvalue to be 1.
     return (2maxvalue^s - value^s) / (2maxvalue^s - meanvalue^s)
 end
@@ -342,7 +342,7 @@ function (m::RemoveVertexMutation)(v::AbstractVertex)
     return v
 end
 
-default_neuronselect(args...) = NaiveNASlib.default_outvalue(args...)
+default_neuronselect(args...) = NaiveNASlib.defaultutility(args...)
 
 """
     AddEdgeMutation <: AbstractMutation{AbstractVertex}

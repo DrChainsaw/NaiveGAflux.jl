@@ -264,7 +264,7 @@ function check_singleinput!(v1, v2, mergefun)
     return v1, v2
 end
 
-function default_crossoverswap_strategy(valuefun = NaiveNASlib.default_outvalue)
+function default_crossoverswap_strategy(valuefun = NaiveNASlib.defaultutility)
     warnfailalign = FailAlignSizeWarn(msgfun = (vin,vout) -> "Failed to align sizes for vertices $(name(vin)) and $(name(vout)) for crossover. Attempt aborted!")
     alignstrat = TruncateInIndsToValid(WithValueFun(valuefun, AlignNinToNout(;fallback=ΔSizeFailNoOp())))
     return PostAlign(alignstrat, fallback=warnfailalign)
@@ -290,7 +290,7 @@ end
 NaiveNASlib.nin(s::CrossoverSizeDummy, t::NaiveNASlib.SizeInvariant, v::AbstractVertex) = isempty(inputs(v)) ? [s.s] : nin(identity, t, v)
 NaiveNASlib.nout(s::CrossoverSizeDummy, t::NaiveNASlib.SizeInvariant, v::AbstractVertex) = isempty(outputs(v)) ? s.s : nout(identity, t, v)
 NaiveNASlib.Δsize!(s::CrossoverSizeDummy, ins::AbstractVector, outs::AbstractVector) = s.s = length(outs)
-NaiveNASlib.default_outvalue(s::CrossoverSizeDummy) = 0
+NaiveNASlib.defaultutility(s::CrossoverSizeDummy) = 0
 
 # Invariant vertex so that removal is trivial.
 # Using size absorbing dummies leads to selection of input neurons which dont exist (e.g. take input nr 243 from a layer with 16 inputs).

@@ -403,7 +403,7 @@ function graphmutation(inshape)
     dsize = MutationChain(mremv, dnout, dkern, mreme, maddd)
     # ...and another which is not guaranteed to decrease the size
     csize = MutationChain(mremv, cnout, ckern, mreme, madde, maddd, maddv)
-    # Add mutation last as new vertices with neuron_value == 0 screws up outputs selection as per https://github.com/DrChainsaw/NaiveNASlib.jl/issues/39
+    # Add mutation last as new vertices with neuronutility == 0 screws up outputs selection as per https://github.com/DrChainsaw/NaiveNASlib.jl/issues/39
 
     mgp = VertexMutation(MutationProbability(LogMutation(v -> "Mutate global pool type for $(name(v))", MutateGlobalPool()), 0.1), SelectGlobalPool())
 

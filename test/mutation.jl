@@ -48,12 +48,12 @@
 
     @testset "Neuron value weighted mutation" begin
         using Statistics
-        import NaiveNASflux: AbstractMutableComp, neuron_value, wrapped
+        import NaiveNASflux: AbstractMutableComp, neuronutility, wrapped
         struct DummyValue{T, W<:AbstractMutableComp} <: AbstractMutableComp
             values::T
             w::W
         end
-        NaiveNASflux.neuron_value(d::DummyValue) = d.values
+        NaiveNASflux.neuronutility(d::DummyValue) = d.values
         NaiveNASflux.wrapped(d::DummyValue) = d.w
 
         l(in, outsize, value) = fluxvertex(Dense(nout(in), outsize), in, layerfun = l -> DummyValue(value, l))
@@ -63,9 +63,9 @@
         v2 = l(v1, 3, 100:300)
         v3 = l(v2, 5, 0.1:0.1:0.5)
 
-        @testset "weighted_neuron_value_high pbase $pbase" for pbase in (0.05, 0.1, 0.3, 0.7, 0.9, 0.95)
-            import NaiveGAflux: weighted_neuron_value_high
-            wnv = weighted_neuron_value_high(pbase, spread=0.5)
+        @testset "weighted_neuronutility_high pbase $pbase" for pbase in (0.05, 0.1, 0.3, 0.7, 0.9, 0.95)
+            import NaiveGAflux: weighted_neuronutility_high
+            wnv = weighted_neuronutility_high(pbase, spread=0.5)
             wp = map(p -> p.p, wnv.([v1,v2,v3]))
             @test wp[2] > wp[1] > wp[3]
             @test mean(wp) ≈ pbase rtol = 0.1
@@ -82,9 +82,9 @@
             @test probe.mutated == [v2]
         end
 
-        @testset "weighted_neuron_value_low pbase $pbase" for pbase in (0.05, 0.1, 0.3, 0.7, 0.9, 0.95)
-            import NaiveGAflux: weighted_neuron_value_low
-            wnv = weighted_neuron_value_low(pbase,spread=0.8)
+        @testset "weighted_neuronutility_low pbase $pbase" for pbase in (0.05, 0.1, 0.3, 0.7, 0.9, 0.95)
+            import NaiveGAflux: weighted_neuronutility_low
+            wnv = weighted_neuronutility_low(pbase,spread=0.8)
             wp = map(p -> p.p, wnv.([v1,v2,v3]))
             @test wp[2] < wp[1] < wp[3]
             @test mean(wp) ≈ pbase rtol = 0.1
