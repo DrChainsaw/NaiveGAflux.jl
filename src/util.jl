@@ -57,7 +57,6 @@ allow_mutation(t::DecoratingTrait, ms...) = allow_mutation(base(t), ms...)
 allow_mutation(::MutationTrait, ms...) = true
 allow_mutation(::Immutable, ms...) = false
 allow_mutation(t::MutationShield, ms...) = !isempty(ms) && all(mt -> any(amt -> mt <: amt, t.allowed), typeof.(mutationleaves(ms)))
-NaiveNASlib.clone(t::MutationShield;cf=clone) = MutationShield(cf(base(t); cf=cf), t.allowed...)
 
 @functor MutationShield
 
@@ -126,7 +125,6 @@ check_apply(t::DecoratingTrait, v) = check_apply(base(t), v)
 check_apply(t::ApplyIf, v) = t.predicate(v) && t.apply(v)
 function check_apply(t, v) end
 
-NaiveNASlib.clone(t::ApplyIf;cf=clone) = ApplyIf(cf(t.predicate, cf=cf), cf(t.apply, cf=cf), cf(base(t), cf=cf))
 @functor ApplyIf
 
 """
