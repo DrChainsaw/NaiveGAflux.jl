@@ -35,8 +35,8 @@
                 evofun = evolvemodel(graphmutation, optmutation)
                 newcand = evofun(cand)
 
-                @test NaiveGAflux.graph(newcand, nv) == 4
-                @test NaiveGAflux.graph(cand, nv) == 3
+                @test NaiveGAflux.graph(newcand, nvertices) == 4
+                @test NaiveGAflux.graph(cand, nvertices) == 3
 
                 optimizer(c) = typeof(opt(c)) 
 
@@ -59,8 +59,8 @@
                 @test optimizer(newcand1) === optimizer(newcand)
                 @test optimizer(newcand2) === optimizer(cand)
 
-                @test NaiveGAflux.graph(newcand1, nv) == 4
-                @test NaiveGAflux.graph(newcand2, nv) == 3
+                @test NaiveGAflux.graph(newcand1, nvertices) == 4
+                @test NaiveGAflux.graph(newcand2, nvertices) == 3
             finally
                 MemPool.cleanup()
             end

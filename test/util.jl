@@ -194,22 +194,22 @@ end
 
     g = CompGraph(v1, v7)
 
-    nv_pre = nv(g)
+    nv_pre = nvertices(g)
 
     check_apply(g)
     # Nothing is redundant
-    @test nv_pre == nv(g)
+    @test nv_pre == nvertices(g)
 
     remove_edge!(v3, v4)
     check_apply(g)
 
-    @test nv_pre == nv(g)+1
+    @test nv_pre == nvertices(g)+1
 
     # Note, v3 also disappears from the graph as it is no longer used to compute the output
     remove_edge!(v3, v6)
     check_apply(g)
 
-    @test nv_pre == nv(g) + 3
+    @test nv_pre == nvertices(g) + 3
 end
 
 @testset "ApplyIf functor" begin

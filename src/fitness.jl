@@ -42,7 +42,7 @@ function _fitness(lf::LogFitness, c::AbstractCandidate)
 end
 
 function default_fitnessmsgfun(i, c, f; level::Logging.LogLevel = Logging.Info)
-    nvs, nps = graph(c, g -> (nv(g), nparams(g)))
+    nvs, nps = graph(c, g -> (nvertices(g), nparams(g)))
     if nps > 1e8
         nps = @sprintf "%5.2fG" (nps / 1e9)
     elseif nps > 1e5

@@ -8,7 +8,7 @@
             nv::Int
             np::Int
         end
-        NaiveNASlib.nv(g::DummyGraph) = g.nv
+        NaiveNASlib.nvertices(g::DummyGraph) = g.nv
         NaiveGAflux.nparams(g::DummyGraph) = g.np
         struct PlotTestCand <: AbstractCandidate
             fitness::Real

@@ -16,7 +16,7 @@
     # Sample 5 models from the initial search space and make an initial population
     model(invertex) = CompGraph(invertex, initial_searchspace(invertex))
     models = [model(denseinputvertex("input", ninputs)) for _ in 1:5]
-    @test nv.(models) == [4, 3, 4, 5, 3]
+    @test nvertices.(models) == [4, 3, 4, 5, 3]
 
     population = Population(CandidateModel.(models))
     @test generation(population) == 1
@@ -154,11 +154,11 @@ end
 
     # Sample one architecture from the search space
     graph1 = CompGraph(inputshape, archspace(inputshape))
-    @test nv(graph1) == 79
+    @test nvertices(graph1) == 79
 
     # And one more...
     graph2 = CompGraph(inputshape, archspace(inputshape))
-    @test nv(graph2) == 128
+    @test nvertices(graph2) == 128
 end
 
 @testset "Mutation examples" begin

@@ -229,7 +229,7 @@
         space = RepeatArchSpace(VertexSpace(BatchNormSpace(relu)), 3)
         inpt = inputvertex("in", 3)
         v = space(inpt)
-        @test nv(CompGraph(inpt, v)) == 4
+        @test nvertices(CompGraph(inpt, v)) == 4
 
         v = space("test", inpt)
         @test name.(ancestors(v)) == ["in", "test.1", "test.2", "test.3"]
@@ -237,10 +237,10 @@
         space = RepeatArchSpace(VertexSpace(BatchNormSpace(relu)), [2,5])
         rng = SeqRng()
         v = space(inpt, rng)
-        @test nv(CompGraph(inpt, v)) == 3
+        @test nvertices(CompGraph(inpt, v)) == 3
 
         v = space(inpt, rng)
-        @test nv(CompGraph(inpt, v)) == 6
+        @test nvertices(CompGraph(inpt, v)) == 6
 
         space = RepeatArchSpace(VertexSpace(DenseSpace(3, relu)), 2)
         v = space(inpt, outsize=4)
@@ -261,24 +261,24 @@
         inpt = inputvertex("in", 3)
 
         v = space(inpt)
-        @test nv(CompGraph(inpt, v)) == 3
+        @test nvertices(CompGraph(inpt, v)) == 3
         @test nout(v) == 3
         @test nin(v) == [2]
 
         v = space("v", inpt)
         @test name.(ancestors(v)) == ["in", "v.1", "v.2"]
-        @test nv(CompGraph(inpt, v)) == 3
+        @test nvertices(CompGraph(inpt, v)) == 3
         @test nout(v) == 3
         @test nin(v) == [2]
 
         v = space(inpt, outsize=4)
-        @test nv(CompGraph(inpt, v)) == 3
+        @test nvertices(CompGraph(inpt, v)) == 3
         @test nout(v) == 4
         @test nin(v) == [4]
 
         v = space("v", inpt, outsize=4)
         @test name.(ancestors(v)) == ["in", "v.1", "v.2"]
-        @test nv(CompGraph(inpt, v)) == 3
+        @test nvertices(CompGraph(inpt, v)) == 3
         @test nout(v) == 4
         @test nin(v) == [4]
     end

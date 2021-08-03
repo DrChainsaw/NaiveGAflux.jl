@@ -397,7 +397,7 @@ function graphmutation(inshape)
     madde = mph(LogMutation(v -> "Add edge from $(name(v))", add_edge), 0.02)
     mreme = mpn(MutationFilter(v -> length(outputs(v)) > 1, LogMutation(v -> "Remove edge from $(name(v))", rem_edge)), 0.02)
 
-    mremv = MutationFilter(g -> nv(g) > 5, mremv)
+    mremv = MutationFilter(g -> nvertices(g) > 5, mremv)
 
     # Create two possible mutations: One which is guaranteed to not increase the size:
     dsize = MutationChain(mremv, dnout, dkern, mreme, maddd)

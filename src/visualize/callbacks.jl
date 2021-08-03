@@ -81,7 +81,7 @@ end
 
 function plotfitness(p::ScatterPop, population)
     fits = fitness.(population)
-    nverts = nv.(graph.(population))
+    nverts = nvertices.(graph.(population))
     npars = nparams.(population)
 
     push!(p.data, hcat(nverts, fits, npars))
