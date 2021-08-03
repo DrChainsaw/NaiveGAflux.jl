@@ -264,9 +264,9 @@ function check_singleinput!(v1, v2, mergefun)
     return v1, v2
 end
 
-function default_crossoverswap_strategy(valuefun = NaiveNASlib.defaultutility)
+function default_crossoverswap_strategy(utilityfun = NaiveNASlib.defaultutility)
     warnfailalign = FailAlignSizeWarn(msgfun = (vin,vout) -> "Failed to align sizes for vertices $(name(vin)) and $(name(vout)) for crossover. Attempt aborted!")
-    alignstrat = TruncateInIndsToValid(WithValueFun(valuefun, AlignNinToNout(;fallback=ΔSizeFailNoOp())))
+    alignstrat = TruncateInIndsToValid(WithUtilityFun(utilityfun, AlignNinToNout(;fallback=ΔSizeFailNoOp())))
     return PostAlign(alignstrat, fallback=warnfailalign)
 end
 

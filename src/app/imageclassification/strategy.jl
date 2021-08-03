@@ -383,8 +383,8 @@ function graphmutation(inshape)
 
     # Create a shorthand alias for MutationProbability
     mpn(m, p) = VertexMutation(MutationProbability(m, p))
-    mph(m, p) = VertexMutation(HighValueMutationProbability(m, p))
-    mpl(m, p) = VertexMutation(LowValueMutationProbability(m, p))
+    mph(m, p) = VertexMutation(HighUtilityMutationProbability(m, p))
+    mpl(m, p) = VertexMutation(LowUtilityMutationProbability(m, p))
 
     cnout = mpn(LogMutation(v -> "Mutate output size of vertex $(name(v))", change_nout), 0.05)
     dnout = mpl(LogMutation(v -> "Reduce output size of vertex $(name(v))", decrease_nout), 0.05)

@@ -91,22 +91,22 @@ end
 (m::WeightedMutationProbability{T})(e::T; next=m.m, noop=identity) where T = apply(() -> next(e), m.pfun(e), () -> noop(e))
 
 """
-    HighValueMutationProbability(m::AbstractMutation{T}, pbase::Real, rng=rng_default; spread=0.5)
+    HighUtilityMutationProbability(m::AbstractMutation{T}, pbase::Real, rng=rng_default; spread=0.5)
 
 Return a `WeightedMutationProbability` which applies `m` to vertices with an (approximately) average probability of `pbase` and where high `neuronutility` compared to other vertices in same graph means higher probability.
 
-Parameter `spread` can be used to control how much the difference in probability is between high and low values. High spread means high difference while low spread means low difference.
+Parameter `spread` can be used to control how much the difference in probability is between high and low utlity. High spread means high difference while low spread means low difference.
 """
-HighValueMutationProbability(m::AbstractMutation{T}, pbase::Real, rng=rng_default;spread=0.5) where T <: AbstractVertex = WeightedMutationProbability(m, weighted_neuronutility_high(pbase, rng,spread=spread))
+HighUtilityMutationProbability(m::AbstractMutation{T}, pbase::Real, rng=rng_default;spread=0.5) where T <: AbstractVertex = WeightedMutationProbability(m, weighted_neuronutility_high(pbase, rng,spread=spread))
 
 """
-    LowValueMutationProbability(m::AbstractMutation{T}, pbase::Real, rng=rng_default; spread=2)
+    LowUtilityMutationProbability(m::AbstractMutation{T}, pbase::Real, rng=rng_default; spread=2)
 
 Return a `WeightedMutationProbability` which applies `m` to vertices with an (approximately) average probability of `pbase` and where low `neuronutility` compared to other vertices in same graph means higher probability.
 
-Parameter `spread` can be used to control how much the difference in probability is between high and low values. High spread means high difference while low spread means low difference.
+Parameter `spread` can be used to control how much the difference in probability is between high and low utlity. High spread means high difference while low spread means low difference.
 """
-LowValueMutationProbability(m::AbstractMutation{T}, pbase::Real, rng=rng_default;spread=2) where T <: AbstractVertex = WeightedMutationProbability(m, weighted_neuronutility_low(pbase, rng, spread=spread))
+LowUtilityMutationProbability(m::AbstractMutation{T}, pbase::Real, rng=rng_default;spread=2) where T <: AbstractVertex = WeightedMutationProbability(m, weighted_neuronutility_low(pbase, rng, spread=spread))
 
 
 weighted_neuronutility_high(pbase, rng=rng_default; spread=0.5) = function(v::AbstractVertex)
@@ -128,9 +128,11 @@ function normexp(v::AbstractVertex, s)
     meanvalues = map(mean, skipmissing(allvalues))
     meanvalue = mean(meanvalues)
     maxvalue = maximum(meanvalues)
-    value = mean(NaiveNASflux.neuronutility(v))
-    # Basic idea: maxvalue - value means the (to be) exponent is <= 0 while the division seems to normalize so that average of pbase ^ normexp across allvertices is near pbase (no proof!). The factor 2 is just to prevent probability of vertex with maxvalue to be 1.
-    return (2maxvalue^s - value^s) / (2maxvalue^s - meanvalue^s)
+    utlity = mean(NaiveNASflux.neuronutility(v))
+    # Basic idea: maxvalue - utlity means the (to be) exponent is <= 0 while the division seems to normalize so that 
+    # average of pbase ^ normexp across allvertices is near pbase (no proof!). The factor 2 is just to prevent 
+    # probability of vertex with maxvalue to be 1.
+    return (2maxvalue^s - utlity^s) / (2maxvalue^s - meanvalue^s)
 end
 
 
@@ -346,8 +348,8 @@ default_neuronselect(args...) = NaiveNASlib.defaultutility(args...)
 
 """
     AddEdgeMutation <: AbstractMutation{AbstractVertex}
-    AddEdgeMutation(p; rng=rng_default, mergefun=default_mergefun(rng=rng), filtfun=no_shapechange, valuefun=default_neuronselect)
-    AddEdgeMutation(p::Probability; rng=rng_default, mergefun=default_mergefun(rng=rng), filtfun=no_shapechange, valuefun=default_neuronselect)
+    AddEdgeMutation(p; rng=rng_default, mergefun=default_mergefun(rng=rng), filtfun=no_shapechange, utilityfun=default_neuronselect)
+    AddEdgeMutation(p::Probability; rng=rng_default, mergefun=default_mergefun(rng=rng), filtfun=no_shapechange, utilityfun=default_neuronselect)
 
 Add an edge from a vertex `vi` to another vertex `vo` randomly selected from `vs = filtfun(vi)`.
 
@@ -355,19 +357,19 @@ Higher values of `p` will give more preference to earlier vertices of `vs`.
 
 If `vo` is not capable of having multiple inputs (determined by `singleinput(v) == true`), `vm = mergefun(voi)` where `voi` is a randomly selected input to `vo` will be used instead of `vo` and `vo` will be added as the output of `vm`.
 
-When selecting neurons/outputs after any eventual size change the values `valuefun(v)` will be used to determine the value of each output in vertex `v`. Note that `length(valuefun(v)) == nout(v)` must hold.
+When selecting neurons/outputs after any eventual size change the output of `utilityfun(v)` will be used to determine the utlity of each output in vertex `v`. Note that `length(utilityfun(v)) == nout(v)` must hold.
 
 Note: High likelyhood of large accuracy degradation after applying this mutation.
 """
 struct AddEdgeMutation{F1, F2, F3, P<:Probability, RNG} <: AbstractMutation{AbstractVertex}
     mergefun::F1
     filtfun::F2
-    valuefun::F3
+    utilityfun::F3
     p::P
     rng::RNG
 end
-AddEdgeMutation(p; rng=rng_default, mergefun=default_mergefun(rng=rng), filtfun=no_shapechange, valuefun=default_neuronselect) = AddEdgeMutation(Probability(p, rng), rng=rng, mergefun=mergefun, filtfun=filtfun, valuefun=valuefun)
-AddEdgeMutation(p::Probability; rng=rng_default, mergefun=default_mergefun(rng=rng), filtfun=no_shapechange, valuefun=default_neuronselect) = AddEdgeMutation(mergefun, filtfun, valuefun, p, rng)
+AddEdgeMutation(p; rng=rng_default, mergefun=default_mergefun(rng=rng), filtfun=no_shapechange, utilityfun=default_neuronselect) = AddEdgeMutation(Probability(p, rng), rng=rng, mergefun=mergefun, filtfun=filtfun, utilityfun=utilityfun)
+AddEdgeMutation(p::Probability; rng=rng_default, mergefun=default_mergefun(rng=rng), filtfun=no_shapechange, utilityfun=default_neuronselect) = AddEdgeMutation(mergefun, filtfun, utilityfun, p, rng)
 
 default_mergefun(pconc = 0.5; rng=rng_default, traitfun = MutationShield ∘ RemoveIfSingleInput ∘ validated() ∘ default_logging(), layerfun = ActivationContribution) = function(vin)
     if rand(rng) > pconc
@@ -413,11 +415,11 @@ function (m::AddEdgeMutation)(vi::AbstractVertex)
     vo = foldl(selfun, allverts, init=nothing)
     vo = isnothing(vo) ? rand(m.rng, allverts) : vo
 
-    try_add_edge(vi, vo, m.mergefun, m.valuefun)
+    try_add_edge(vi, vo, m.mergefun, m.utilityfun)
     return vi
 end
 
-function try_add_edge(vi, vo, mergefun, valuefun=default_neuronselect)
+function try_add_edge(vi, vo, mergefun, utilityfun=default_neuronselect)
 
     # Need to add a vertex which can handle multiple inputs if vo is single input only
     # For cleaning up added vertex if the whole operation fails
@@ -444,25 +446,25 @@ function try_add_edge(vi, vo, mergefun, valuefun=default_neuronselect)
     # This is mainly because FailAlignSizeRevert does not work when the same vertex is input more than once, but it also seems kinda redundant.
     vi in inputs(vo) && return
     @debug "Create edge between $(name(vi)) and $(name(vo))"
-    create_edge!(vi, vo, strategy = create_edge_strat(vo, valuefun))
+    create_edge!(vi, vo, strategy = create_edge_strat(vo, utilityfun))
     cleanup_failed()
 end
 # Need to override this one for strange types e.g. layers which support exactly 2 inputs or something.
 singleinput(v) = isempty(inputs(v)) || length(inputs(v)) == 1
 
-create_edge_strat(v::AbstractVertex, valuefun) = create_edge_strat(trait(v), valuefun)
-create_edge_strat(d::DecoratingTrait, valuefun) = create_edge_strat(base(d), valuefun)
-function create_edge_strat(::SizeInvariant, valuefun)
+create_edge_strat(v::AbstractVertex, utilityfun) = create_edge_strat(trait(v), utilityfun)
+create_edge_strat(d::DecoratingTrait, utilityfun) = create_edge_strat(base(d), utilityfun)
+function create_edge_strat(::SizeInvariant, utilityfun)
     warnfailalign = FailAlignSizeWarn(msgfun = (vin,vout) -> "Could not align sizes of $(name(vin)) and $(name(vout))!")
-    alignstrat = AlignSizeBoth(;mapstrat=WithValueFun(valuefun), fallback = warnfailalign)
+    alignstrat = AlignSizeBoth(;mapstrat=WithUtilityFun(utilityfun), fallback = warnfailalign)
     # Tricky failure case: It is possible that CheckCreateEdgeNoSizeCycle does not detect any size cycle until after the edge has been created?
     sizecyclewarn = FailAlignSizeWarn(msgfun = (vin,vout) -> "Could not align sizes of $(name(vin)) and $(name(vout))! Size cycle detected!") 
 
     return CheckCreateEdgeNoSizeCycle(ifok=alignstrat, ifnok=sizecyclewarn)
 end
-function create_edge_strat(::SizeStack, valuefun)
+function create_edge_strat(::SizeStack, utilityfun)
     warnfailalign = FailAlignSizeWarn(msgfun = (vin,vout) -> "Could not align sizes of $(name(vin)) and $(name(vout))!")
-    alignstrat = PostAlign(TruncateInIndsToValid(WithValueFun(valuefun, AlignNinToNout(;fallback=ΔSizeFailNoOp()))), fallback=warnfailalign)
+    alignstrat = PostAlign(TruncateInIndsToValid(WithUtilityFun(utilityfun, AlignNinToNout(;fallback=ΔSizeFailNoOp()))), fallback=warnfailalign)
 
     sizecyclewarn = FailAlignSizeWarn(msgfun = (vin,vout) -> "Could not align sizes of $(name(vin)) and $(name(vout))! Size cycle detected!")
     return CheckCreateEdgeNoSizeCycle(ifok=alignstrat, ifnok=sizecyclewarn)
@@ -470,7 +472,7 @@ end
 
 """
     RemoveEdgeMutation <: AbstractMutation{AbstractVertex}
-    RemoveEdgeMutation(;valuefun=default_neuronselect, rng=rng_default)
+    RemoveEdgeMutation(;utilityfun=default_neuronselect, rng=rng_default)
 
 Remove an edge from a vertex `vi` to another vertex `vo` randomly selected from `outputs(vi)`.
 
@@ -478,15 +480,15 @@ Vertex `vi` must have more than one output and vertex `vo` must have more than o
 
 If there are multiple edges between `vi` and `vo` no change will be made due to NaiveNASlib not being able to revert a failed operation in this case..
 
-When selecting neurons/outputs after any eventual size change the values `valuefun(v)` will be used to determine the value of each output in vertex `v`. Note that `length(valuefun(v)) == nout(v)` must hold.
+When selecting neurons/outputs after any eventual size change the output of `utilityfun(v)` will be used to determine the utlity of each output in vertex `v`. Note that `length(utilityfun(v)) == nout(v)` must hold.
 
 Note: High likelyhood of large accuracy degradation after applying this mutation.
 """
 struct RemoveEdgeMutation{F, RNG<:AbstractRNG} <: AbstractMutation{AbstractVertex}
-    valuefun::F
+    utilityfun::F
     rng::RNG
 end
-RemoveEdgeMutation(;valuefun=default_neuronselect, rng=rng_default) = RemoveEdgeMutation(valuefun, rng)
+RemoveEdgeMutation(;utilityfun=default_neuronselect, rng=rng_default) = RemoveEdgeMutation(utilityfun, rng)
 
 function (m::RemoveEdgeMutation)(vi::AbstractVertex)
     length(outputs(vi)) < 2 && return vi
@@ -499,14 +501,14 @@ function (m::RemoveEdgeMutation)(vi::AbstractVertex)
     sum(inputs(vo) .== vi) > 1 && return vi# Not implemented in NaiveNASlib
 
     @debug "Remove edge between $(name(vi)) and $(name(vo))"
-    remove_edge!(vi, vo, strategy=remove_edge_strat(vo, m.valuefun))
+    remove_edge!(vi, vo, strategy=remove_edge_strat(vo, m.utilityfun))
     return vi
 end
 
-remove_edge_strat(v::AbstractVertex, valuefun) = remove_edge_strat(trait(v), valuefun)
-remove_edge_strat(d::DecoratingTrait, valuefun) = remove_edge_strat(base(d), valuefun)
-remove_edge_strat(::SizeInvariant, valuefun) = NoSizeChange()
-remove_edge_strat(t::SizeStack, valuefun) = create_edge_strat(t, valuefun)
+remove_edge_strat(v::AbstractVertex, utilityfun) = remove_edge_strat(trait(v), utilityfun)
+remove_edge_strat(d::DecoratingTrait, utilityfun) = remove_edge_strat(base(d), utilityfun)
+remove_edge_strat(::SizeInvariant, utilityfun) = NoSizeChange()
+remove_edge_strat(t::SizeStack, utilityfun) = create_edge_strat(t, utilityfun)
 
 """
     KernelSizeMutation{N} <: AbstractMutation{AbstractVertex}

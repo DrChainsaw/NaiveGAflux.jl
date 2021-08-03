@@ -46,17 +46,17 @@
         @test probe.mutated == [0.6,0.9]
     end
 
-    @testset "Neuron value weighted mutation" begin
+    @testset "Neuron utlity weighted mutation" begin
         using Statistics
         import NaiveNASflux: AbstractMutableComp, neuronutility, wrapped
         struct DummyValue{T, W<:AbstractMutableComp} <: AbstractMutableComp
-            values::T
+            utlity::T
             w::W
         end
-        NaiveNASflux.neuronutility(d::DummyValue) = d.values
+        NaiveNASflux.neuronutility(d::DummyValue) = d.utlity
         NaiveNASflux.wrapped(d::DummyValue) = d.w
 
-        l(in, outsize, value) = fluxvertex(Dense(nout(in), outsize), in, layerfun = l -> DummyValue(value, l))
+        l(in, outsize, utlity) = fluxvertex(Dense(nout(in), outsize), in, layerfun = l -> DummyValue(utlity, l))
 
         v0 = inputvertex("in", 3)
         v1 = l(v0, 4, 1:4)
@@ -71,10 +71,10 @@
             @test mean(wp) ≈ pbase rtol = 0.1
         end
 
-        @testset "HighValueMutationProbability" begin
+        @testset "HighUtilityMutationProbability" begin
 
             probe = ProbeMutation(MutationVertex)
-            m = HighValueMutationProbability(probe, 0.1, MockRng([0.15]))
+            m = HighUtilityMutationProbability(probe, 0.1, MockRng([0.15]))
 
             m(v1)
             m(v2)
@@ -90,9 +90,9 @@
             @test mean(wp) ≈ pbase rtol = 0.1
         end
 
-        @testset "LowValueMutationProbability" begin
+        @testset "LowUtilityMutationProbability" begin
             probe = ProbeMutation(MutationVertex)
-            m = LowValueMutationProbability(probe, 0.1, MockRng([0.15]))
+            m = LowUtilityMutationProbability(probe, 0.1, MockRng([0.15]))
 
             m(v1)
             m(v2)
@@ -498,7 +498,7 @@
             indata = ones(Float32,5,4,3,2)
             @test size(g(indata)) == (2,2,2,2)
 
-            m = AddEdgeMutation(1.0, mergefun = default_mergefun(pconc), valuefun = v -> 1:nout(v))
+            m = AddEdgeMutation(1.0, mergefun = default_mergefun(pconc), utilityfun = v -> 1:nout(v))
 
             # edge to v2 not possible as v1 is input to it already
             @test m(v1) == v1
@@ -532,7 +532,7 @@
             v2b1 = cl("v2b1", v2, 3)
             v3 = "v3" >> v2a1 + v2b1
   
-            m = AddEdgeMutation(1.0,  mergefun = default_mergefun(0.0), valuefun = v -> 1:nout(v))
+            m = AddEdgeMutation(1.0,  mergefun = default_mergefun(0.0), utilityfun = v -> 1:nout(v))
             
             m(v2a1)
             # Synopsis: v2b1 is selected as a suitable candidate
@@ -542,7 +542,7 @@
         end
 
         @testset "AddEdgeMutation fail" begin
-            m = AddEdgeMutation(1.0, mergefun=default_mergefun(1), valuefun=v -> 1:nout(v))
+            m = AddEdgeMutation(1.0, mergefun=default_mergefun(1), utilityfun=v -> 1:nout(v))
 
             v0 = conv2dinputvertex("in", 4)
             v1 = cl("v1", v0, 4)
@@ -574,7 +574,7 @@
         dl(name, in, outsize) = fluxvertex(name, Dense(nout(in), outsize), in)
 
         @testset "RemoveEdgeMutation SizeStack" begin
-            m = RemoveEdgeMutation(valuefun=v->1:nout(v))
+            m = RemoveEdgeMutation(utilityfun=v->1:nout(v))
 
             v0 = denseinputvertex("in", 3)
             v1 = dl("v1", v0, 4)
@@ -601,7 +601,7 @@
         end
 
         @testset "RemoveEdgeMutation SizeInvariant" begin
-            m = RemoveEdgeMutation(valuefun=v->1:nout(v))
+            m = RemoveEdgeMutation(utilityfun=v->1:nout(v))
 
             v0 = denseinputvertex("in", 3)
             v1 = dl("v1", v0, nout(v0))
