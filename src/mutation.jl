@@ -335,7 +335,7 @@ struct RemoveVertexMutation{S<:RemoveStrategy} <:AbstractMutation{AbstractVertex
     s::S
 end
 function RemoveVertexMutation() 
-    alignstrat = IncreaseSmaller(fallback=DecreaseBigger(fallback=AlignSizeBoth(fallback=FailAlignSizeWarn())))
+    alignstrat = IncreaseSmaller(fallback=DecreaseBigger(fallback=AlignSizeBoth(fallback=FailAlignSizeWarn(msgfun = (vin,vout) -> "Can not remove vertex $(name(vin))! Could not align sizes of neighbours!"))))
     return RemoveVertexMutation(RemoveStrategy(CheckAligned(CheckNoSizeCycle(alignstrat, FailAlignSizeWarn(msgfun = (vin,vout) -> "Can not remove vertex $(name(vin))! Size cycle detected!")))))
 end
 
