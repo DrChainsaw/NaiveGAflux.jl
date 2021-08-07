@@ -41,7 +41,7 @@ end
     EliteSelection <: AbstractEvolution
     EliteSelection(nselect::Integer, evo=NoOpEvolution())
 
-Selects the only the `nselect` highest fitness candidates to be passed on to `evo`.
+Selects the `nselect` highest fitness candidates to be passed on to `evo`.
 """
 struct EliteSelection{N, E} <: AbstractEvolution
     nselect::N

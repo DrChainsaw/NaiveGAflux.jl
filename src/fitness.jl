@@ -1,5 +1,3 @@
-
-
 """
     fitness(f::AbstractFitness, c::AbstractCandidate)
 

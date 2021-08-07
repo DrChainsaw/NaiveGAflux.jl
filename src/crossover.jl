@@ -5,9 +5,13 @@
 
 Applies `crossover` to each pair of selected vertices from two `CompGraph`s.
 
-Vertices to select from the first graph is determined by `selection` (default [`FilterMutationAllowed`](@ref) while `pairgen` (default [`default_pairgen`](@ref)) determines how to pair the selected vertices with vertices in the second graph.
+Vertices to select from the first graph is determined by `selection` (default `FilterMutationAllowed`) while `pairgen` 
+(default [`default_pairgen`](@ref)) determines how to pair the selected vertices with vertices in the second graph.
 
-The default pairing function will try to pair vertices which have similar relative topologial order within their graphs. For instance, if the first graph has 5 vertices and the second has 10, it will pair vertex 2 from the first graph with vertex 4 from the second (assuming they are of compatible type). The parameter `deviation` can be used to inject noise in this process so that the pairing will randomly deviate where the magnitude of `deviation` sets how much and how often.
+The default pairing function will try to pair vertices which have similar relative topologial order within their graphs. 
+For instance, if the first graph has 5 vertices and the second has 10, it will pair vertex 2 from the first graph with
+vertex 4 from the second (assuming they are of compatible type). The parameter `deviation` can be used to inject noise
+in this process so that the pairing will randomly deviate where the magnitude of `deviation` sets how much and how often.
 
 See also [`crossover`](@ref).
 """
@@ -25,16 +29,19 @@ VertexCrossover(crossover, deviation::Number; selection=FilterMutationAllowed())
 """
     CrossoverSwap{F1, F2, F3, S} <: AbstractCrossover{<:AbstractVertex}
     CrossoverSwap(pairgen, mergefun, strategy, selection)
-    CrossoverSwap(;pairgen=default_inputs_pairgen, mergefun=default_mergefun, strategy=default_crossoverswap_strategy, selection=FilterMutationAllowed()) = CrossoverSwap(pairgen, mergefun, selection)
-    CrossoverSwap(deviation::Number; mergefun=default_mergefun, strategy=default_crossoverswap_strategy, selection=FilterMutationAllowed()) = CrossoverSwap((vs1,vs2) -> default_inputs_pairgen(vs1, vs2, deviation), mergefun, strategy, selection)
+    CrossoverSwap(;pairgen=default_inputs_pairgen, mergefun=default_mergefun, strategy=default_crossoverswap_strategy, selection=FilterMutationAllowed())
+    CrossoverSwap(deviation::Number; mergefun=default_mergefun, strategy=default_crossoverswap_strategy, selection=FilterMutationAllowed()) 
 
 Swap out a part of one graph with a part of another graph, making sure that the graphs do not become connected in the process.
 
-More concretely, swaps a set of consecutive vertices `vs1` set of consecutive vertices `vs2` returning the swapped `v1` and `v2` respectively if successful or `v1` and `v2` if not.
+More concretely, swaps a set of consecutive vertices `vs1` set of consecutive vertices `vs2` returning the swapped `v1` and
+`v2` respectively if successful or `v1` and `v2` if not.
 
-The last vertex in `vs1` is `v1` and the last vertex of `vs2` is `v2`. The other members of `vs1` and `vs2` are determined by `pairgen` (default [`default_inputs_pairgen`](@ref)) and `selection` (default [`FilterMutationAllowed`](@ref)).
+The last vertex in `vs1` is `v1` and the last vertex of `vs2` is `v2`. The other members of `vs1` and `vs2` are determined 
+by `pairgen` (default [`default_inputs_pairgen`](@ref)) and `selection` (default `FilterMutationAllowed`).
 
-If a vertex `v` is not capable of having multiple inputs (determined by `singleinput(v) == true`), `vm = mergefun(vi)` where `vi` is the input to `v` will be used instead of `v` and `v` will be added as the output of `vm` if necessary.
+If a vertex `v` is not capable of having multiple inputs (determined by `singleinput(v) == true`), `vm = mergefun(vi)` where 
+`vi` is the input to `v` will be used instead of `v` and `v` will be added as the output of `vm` if necessary.
 
 See also [`crossoverswap`](@ref).
 
@@ -132,7 +139,7 @@ end
 """
     default_inputs_pairgen(vs1, vs2, args...;kwargs...)
 
-Same as [´default_pairgen`](@ref) except it also ensures that shape changes of feature maps are consistent between the pairs.
+Same as [`default_pairgen`](@ref) except it also ensures that shape changes of feature maps are consistent between the pairs.
 
 Feature map here refers to the shape of inputs to convolutional-type layers (Conv, Pooling) in dimensions other than the batch dimension or the channel dimension.
 
@@ -398,7 +405,7 @@ Apply crossover between optimizers.
 
 Type of crossover is determined by `crossover` (default `optimizerswap`) which when given a a tuple of two optimizers will return the result of the crossover operation as a tuple of optimizers.
 
-Designed to be composable with most utility `AbstractMutation`s as well as with itself. For instance, the following seemingly odd construct will swap components of a [`Flux.Optimiser`](@ref) with a probability of `0.2` per component:
+Designed to be composable with most utility `AbstractMutation`s as well as with itself. For instance, the following seemingly odd construct will swap components of a `Flux.Optimiser` with a probability of `0.2` per component:
 
 `OptimizerCrossover(MutationProbability(OptimizerCrossover(), 0.2))`
 

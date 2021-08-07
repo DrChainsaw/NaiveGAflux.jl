@@ -519,6 +519,8 @@ remove_edge_strat(t::SizeStack, utilityfun) = create_edge_strat(t, utilityfun)
 Mutate the size of filter kernels of convolutional layers.
 
 Note: High likelyhood of large accuracy degradation after applying this mutation.
+
+`KernelSizeMutation2D` is a convenience constructor for `KernelSizeMutation(absΔ, absΔ;...)`.
 """
 struct KernelSizeMutation{N,F,P} <: AbstractMutation{AbstractVertex}
     Δsizespace::AbstractParSpace{N, Int}

@@ -36,7 +36,15 @@ makedocs(   sitename="NaiveGAflux",
                     evolution,
                     iterators
                 ],
-                "API Reference" => []
+                "API Reference" => [
+                    "reference/searchspace.md",
+                    "reference/mutation.md",
+                    "reference/crossover.md",
+                    "reference/fitness.md",
+                    "reference/candidate.md",
+                    "reference/evolution.md",
+                    "reference/iterators.md"
+                ]
             ],
             modules = [NaiveGAflux],
         )

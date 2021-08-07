@@ -91,6 +91,8 @@ activation(s::BaseLayerSpace, rng=rng_default) = s.acts(rng)
     SingletonParSpace{N, T} <:AbstractParSpace{N, T}
 
 Singleton search space. Has exactly one value per dimension.
+
+`Singleton2DParSpace` is a convenience constructor for a 2D `SingletonParSpace` of `[p, p]``.
 """
 struct SingletonParSpace{N, T} <:AbstractParSpace{N, T}
     p::NTuple{N, T}
@@ -102,19 +104,25 @@ Singleton2DParSpace(p::T) where T = SingletonParSpace(p,p)
 
 """
     ParSpace{N, T} <:AbstractParSpace{N, T}
+    ParSpace(p::AbstractVector{T}...)
+    ParSpace1D(p...)
+    ParSpace2D(p::AbstractVector)
 
 Search space for parameters.
 
 Return independent uniform random values for all `N` dimensions from the search space when invoked.
+
+`ParSpace1D` is a convenience constructor for an 1D `ParSpace` of `p`.
+`ParSpace2D` is a convenience constructor for a 2D `ParSpace` of `[p, p]``.
 """
 struct ParSpace{N, T} <:AbstractParSpace{N, T}
     p::NTuple{N, AbstractVector{T}}
 end
 ParSpace(p::AbstractVector{T}...) where T = ParSpace(p)
 ParSpace1D(p...) = ParSpace(collect(p))
-ParSpace2D(p::AbstractVector{T}) where T = ParSpace(p,p)
+ParSpace2D(p::AbstractVector) = ParSpace(p,p)
 (s::ParSpace)(rng=rng_default) = rand.((rng,), s.p)
-(s::ParSpace{1, T})(rng=rng_default) where T = rand(rng, s.p[1])
+(s::ParSpace{1})(rng=rng_default) = rand(rng, s.p[1])
 
 """
     CoupledParSpace{N, T} <:AbstractParSpace{N, T}
