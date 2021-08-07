@@ -352,7 +352,7 @@
         end
 
         @testset "Partial success" begin
-            idv(in, outsize, name) = fluxvertex(name, Dense(nout(in), outsize), in; traitfun=t -> NamedTrait(Immutable(), name))
+            idv(in, outsize, name) = fluxvertex(name, Dense(nout(in), outsize), in; traitfun=t -> NamedTrait(name, Immutable()))
 
             function g(np, mergesize, mergeop)
                 vi = iv(np)

@@ -187,7 +187,7 @@ end
     v1 = inputvertex("in", 3)
     v2 = fluxvertex("v2", Dense(nout(v1), 5), v1)
     v3 = fluxvertex("V3", Dense(nout(v1), 5), v1)
-    v4 = traitconf(t -> RemoveIfSingleInput(NamedTrait(t, "v4"))) >>  v2 + v3
+    v4 = traitconf(t -> RemoveIfSingleInput(NamedTrait("v4", t))) >>  v2 + v3
     v5 = fluxvertex("v5", BatchNorm(nout(v4)), v4)
     v6 = concat("v6", v3, v5, traitfun = t -> RemoveIfSingleInput(t))
     v7 = fluxvertex("v7", Dense(nout(v6), 2), v6)
