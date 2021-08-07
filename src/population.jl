@@ -17,6 +17,8 @@ Base.eltype(p::AbstractPopulation) = eltype(wrappedpop(p))
 Base.size(p::AbstractPopulation) = size(wrappedpop(p))
 Base.IteratorSize(p::AbstractPopulation) = Base.IteratorSize(wrappedpop(p))
 Base.IteratorEltype(p::AbstractPopulation) = Base.IteratorEltype(wrappedpop(p))
+Base.keys(p::AbstractPopulation) = keys(wrappedpop(p))
+Base.getindex(p::AbstractPopulation, args...) = getindex(wrappedpop(p), args...)
 
 generation_filename(dir) = joinpath(dir, "generation.txt")
 
