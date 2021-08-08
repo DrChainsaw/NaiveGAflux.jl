@@ -380,7 +380,7 @@
                     @test size(g(ones(4,2))) == (5,2)
 
                     to_remove = vert(to_rm, g)
-                    Δsize!(NaiveNASlib.NeuronIndices(), NaiveNASlib.OnlyFor(), to_remove, [missing],  Int[])
+                    Δsize!(NaiveNASlib.NeuronIndices(), to_remove, [missing],  Int[])
 
                     RemoveZeroNout()(g)
                     Δsize!(AlignNinToNout(), vertices(g))
