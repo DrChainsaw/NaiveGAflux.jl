@@ -1,5 +1,6 @@
 module NaiveGAflux
 
+using Base: release
 using Reexport
 @reexport using NaiveNASflux
 using NaiveNASflux: FluxDense, FluxConv, FluxConvolutional, FluxNoParLayer, FluxParNorm, FluxRnn, FluxBatchNorm
@@ -31,7 +32,7 @@ const modeldir = "models"
 export fitness, AbstractFitness, LogFitness, GpuFitness, AccuracyFitness, TrainThenFitness, TrainAccuracyFitness, MapFitness, EwmaFitness, TimeFitness, SizeFitness, AggFitness
 
 # Candidate
-export evolvemodel, AbstractCandidate, CandidateModel, CandidateOptModel
+export evolvemodel, AbstractCandidate, CandidateModel, CandidateOptModel, model, opt
 
 # Evolution
 export evolve, AbstractEvolution, NoOpEvolution, AfterEvolution, EliteSelection, SusSelection, TournamentSelection, CombinedEvolution, EvolutionChain, PairCandidates, ShuffleCandidates, EvolveCandidates
@@ -57,9 +58,6 @@ export AbstractMutation, MutationProbability, WeightedMutationProbability, HighU
 # Crossover types
 export AbstractCrossover, VertexCrossover, CrossoverSwap, OptimizerCrossover, LearningRateCrossover
 
-# mutation auxillaries
-export neuronselect, RemoveZeroNout
-
 # architecture spaces
 export AbstractArchSpace, LoggingArchSpace, VertexSpace, NoOpArchSpace, ArchSpace, ConditionalArchSpace, RepeatArchSpace, ArchSpaceChain, ForkArchSpace, ResidualArchSpace, FunctionSpace, GlobalPoolSpace
 
@@ -70,7 +68,7 @@ export BaseLayerSpace, AbstractParSpace, SingletonParSpace, Singleton2DParSpace,
 export AbstractWeightInit, DefaultWeightInit, IdentityWeightInit, PartialIdentityWeightInit, ZeroWeightInit
 
 # functions
-export allow_mutation, select, check_apply, nparams
+export nparams
 
 # Pre-built programs for fitting data
 export AutoFlux

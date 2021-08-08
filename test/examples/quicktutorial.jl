@@ -21,8 +21,8 @@ outlayer = VertexSpace(Shielded(), DenseSpace(nlabels, identity))
 initial_searchspace = ArchSpaceChain(initial_hidden, outlayer)
 
 # Sample 5 models from the initial search space and make an initial population.
-model(invertex) = CompGraph(invertex, initial_searchspace(invertex))
-models = [model(denseinputvertex("input", ninputs)) for _ in 1:5]
+samplemodel(invertex) = CompGraph(invertex, initial_searchspace(invertex))
+models = [samplemodel(denseinputvertex("input", ninputs)) for _ in 1:5]
 @test nvertices.(models) == [4, 3, 4, 5, 3]
 
 population = Population(CandidateModel.(models))
@@ -71,6 +71,6 @@ newnewpopulation = evolve(selection, fitnessfunction, newpopulation)
 @test newnewpopulation != newpopulation
 @test generation(newnewpopulation) == 3
 bestfitness, bestcandnr = findmax(fitness, newnewpopulation)
-@test newnewpopulation[bestcandnr] isa AbstractCandidate
+@test model(newnewpopulation[bestcandnr]) isa CompGraph
 # Maybe in a loop :)
 end #src

@@ -17,11 +17,12 @@ Base.Broadcast.broadcastable(c::AbstractCandidate) = Ref(c)
 
 release!(::AbstractCandidate) = nothing
 hold!(::AbstractCandidate) = nothing
-graph(c::AbstractCandidate, f=identity; default=nothing) = f(default)
-opt(c::AbstractCandidate; default=nothing) = default
-lossfun(c::AbstractCandidate; default=nothing) = default
-fitness(c::AbstractCandidate; default=nothing) = default
-generation(c::AbstractCandidate; default=nothing) = default
+model(f, c::AbstractCandidate; kwargs...) = f(model(c; kwargs...))
+model(::AbstractCandidate; default=nothing) = default
+opt(::AbstractCandidate; default=nothing) = default
+lossfun(::AbstractCandidate; default=nothing) = default
+fitness(::AbstractCandidate; default=nothing) = default
+generation(::AbstractCandidate; default=nothing) = default
 
 
 wrappedcand(::T) where T <: AbstractCandidate = error("$T does not wrap any candidate! Check your base case!")
@@ -40,9 +41,9 @@ wrappedcand(c::AbstractWrappingCandidate) = c.c
 release!(c::AbstractWrappingCandidate) = release!(wrappedcand(c))
 hold!(c::AbstractWrappingCandidate) = hold!(wrappedcand(c))
 
-graph(c::AbstractWrappingCandidate) = graph(wrappedcand(c))
+model(c::AbstractWrappingCandidate) = model(wrappedcand(c))
 # This is mainly for FileCandidate to allow for writing the graph back to disk after f is done
-graph(c::AbstractWrappingCandidate, f; kwargs...) = graph(wrappedcand(c), f; kwargs...)
+model(f, c::AbstractWrappingCandidate; kwargs...) = model(f, wrappedcand(c); kwargs...)
 opt(c::AbstractWrappingCandidate; kwargs...) = opt(wrappedcand(c); kwargs...)
 lossfun(c::AbstractWrappingCandidate; kwargs...) = lossfun(wrappedcand(c); kwargs...)
 fitness(c::AbstractWrappingCandidate; kwargs...) = fitness(wrappedcand(c); kwargs...)
@@ -56,12 +57,12 @@ generation(c::AbstractWrappingCandidate; kwargs...) = generation(wrappedcand(c);
 A candidate model consisting of a `CompGraph`, an optimizer a lossfunction and a fitness method.
 """
 struct CandidateModel{G} <: AbstractCandidate
-    graph::G
+    model::G
 end
 
 @functor CandidateModel
 
-graph(c::CandidateModel, f=identity; kwargs...) = f(c.graph)
+model(c::CandidateModel; kwargs...) = c.model
 
 newcand(c::CandidateModel, mapfield) = CandidateModel(map(mapfield, getproperty.(c, fieldnames(CandidateModel)))...)
 
@@ -117,14 +118,14 @@ mutable struct FileCandidate{C, R<:Real, L<:Base.AbstractLock} <: AbstractWrappi
 end
 FileCandidate(c::AbstractCandidate) = FileCandidate(c, 0.5)
 
-function callcand(f, c::FileCandidate, args...)
+function callcand(f, c::FileCandidate, args...; kwargs...)
     # If timer is running we just stop and restart
     close(c.movetimer)
 
     # writelock means that the candidate is being moved to disk. We need to wait for it or risk data corruption
     islocked(c.writelock) && @warn "Try to access FileCandidate which is being moved to disk. Consider retuning of movedelay!"
     ret= lock(c.writelock) do
-        f(MemPool.poolget(c.c), args...)
+        f(MemPool.poolget(c.c), args...; kwargs...)
     end
     if !c.hold
         c.movetimer = asynctodisk(c.c, c.movedelay, c.writelock)
@@ -188,7 +189,9 @@ function wrappedcand(c::FileCandidate)
 end
 # Could also implement getproperty using wrappedcand/callcand, but there is no need for it so not gonna bother now
 
-graph(c::FileCandidate, f) = callcand(graph, c, f)
+model(f, c::FileCandidate; kwargs...) = callcand(c) do cand
+    model(f, cand; kwargs...)
+end
 
 newcand(c::FileCandidate, mapfield) = FileCandidate(callcand(newcand, c, mapfield), c.movedelay)
 
@@ -222,7 +225,7 @@ generation(c::FittedCandidate; default=nothing) = c.gen
 # if they are not passed a FittedCandidate. Perhaps having some kind of fitness state container in each candidate?
 newcand(c::FittedCandidate, mapfield) = FittedCandidate(c.gen, c.fitness, newcand(wrappedcand(c), mapfield))
 
-nparams(c::AbstractCandidate) = graph(c, nparams)
+nparams(c::AbstractCandidate) = model(nparams, c)
 nparams(x) = mapreduce(prod ∘ size, +, params(x).order; init=0)
 
 """
@@ -258,8 +261,11 @@ Intended use is together with [`PairCandidates`](@ref) and [`EvolveCandidates`](
 evolvemodel(m::AbstractCrossover{CompGraph}, mapothers1=deepcopy, mapothers2=deepcopy) = (c1, c2)::Tuple -> begin
     # This allows FileCandidate to write the graph back to disk as we don't want to mutate the orignal candidate.
     # Perhaps align single individual mutation to this pattern for consistency?
-    g1 = graph(c1, identity)
-    g2 = graph(c2, identity)
+    g1 = model(c1)
+    g2 = model(c2)
+
+    release!(c1)
+    release!(c2)
 
     g1, g2 = m((deepcopy(g1), deepcopy(g2)))
 

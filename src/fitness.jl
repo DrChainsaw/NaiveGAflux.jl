@@ -40,7 +40,7 @@ function _fitness(lf::LogFitness, c::AbstractCandidate)
 end
 
 function default_fitnessmsgfun(i, c, f; level::Logging.LogLevel = Logging.Info)
-    nvs, nps = graph(c, g -> (nvertices(g), nparams(g)))
+    nvs, nps = model(g -> (nvertices(g), nparams(g)), c)
     if nps > 1e8
         nps = @sprintf "%5.2fG" (nps / 1e9)
     elseif nps > 1e5
@@ -98,9 +98,9 @@ struct AccuracyFitness{D} <: AbstractFitness
 end
 function _fitness(s::AccuracyFitness, c::AbstractCandidate)
     acc,cnt = 0, 0
-    model = graph(c)
+    m = model(c)
     for (x,y) in s.dataset
-        correct = Flux.onecold(cpu(model(x))) .== Flux.onecold(cpu(y))
+        correct = Flux.onecold(cpu(m(x))) .== Flux.onecold(cpu(y))
         acc += sum(correct)
         cnt += length(correct)
     end
@@ -137,15 +137,15 @@ TrainThenFitness(;dataiter, defaultloss, defaultopt, fitstrat, invalidfitness=0.
 
 function _fitness(s::TrainThenFitness, c::AbstractCandidate)
     loss = lossfun(c; default=s.defaultloss)
-    model = graph(c)
+    m = model(c)
     o = opt(c; default=s.defaultopt)
-    ninput = ninputs(model)
+    ninput = ninputs(m)
     gen = generation(c; default=0)
 
     valid = let valid = true
         nanguard = function(data...)
             inputs = data[1:ninput]
-            ŷ = model(inputs...)
+            ŷ = m(inputs...)
 
             y = data[ninput+1:end]
             l = loss(ŷ, y...)   
@@ -161,7 +161,7 @@ function _fitness(s::TrainThenFitness, c::AbstractCandidate)
             return l
         end
         iter = itergeneration(s.dataiter, gen)
-        Flux.train!(nanguard, params(model), iter, o)
+        Flux.train!(nanguard, params(m), iter, o)
         cleanopt!(o)
         valid
     end

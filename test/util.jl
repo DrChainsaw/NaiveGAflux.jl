@@ -31,7 +31,7 @@
 end
 
 @testset "MutationShield" begin
-    import NaiveNASflux: validated
+    using NaiveGAflux: allow_mutation
     v1 = inputvertex("v1", 3)
     v2 = fluxvertex("v2", Dense(nout(v1), 5), v1)
     v3 = fluxvertex("v3", Dense(nout(v2), 4), v2, traitfun = MutationShield)
@@ -55,6 +55,7 @@ end
 end
 
 @testset "VertexSelection" begin
+    using NaiveGAflux: select
 
     v1 = inputvertex("v1", 3)
     v2 = fluxvertex("v2", Dense(nout(v1), 5), v1)
@@ -73,7 +74,7 @@ end
 
 @testset "MutationShield allowed list" begin
 
-    import NaiveGAflux: DecoratingMutation
+    using NaiveGAflux: DecoratingMutation, allow_mutation
 
     struct MutationShieldTestMutation1 <: AbstractMutation{AbstractVertex} end
     struct MutationShieldTestMutation2 <: AbstractMutation{AbstractVertex} end
@@ -134,6 +135,8 @@ end
 end
 
 @testset "MutationShield abstract allowed list" begin
+
+    using NaiveGAflux: allow_mutation
     # This is not a java habit I promise! I have just been burnt by having to rename mock structs across tests when names clash too many times
     abstract type MutationShieldAbstractTestAbstractMutation <: AbstractMutation{AbstractVertex} end
     struct MutationShieldAbstractTestMutation1 <: MutationShieldAbstractTestAbstractMutation end
@@ -160,7 +163,7 @@ end
 end
 
 @testset "SelectWithMutation" begin
-    import NaiveGAflux: SelectWithMutation
+    using NaiveGAflux: SelectWithMutation, select
 
     struct SelectWithMutationMutation1 <: AbstractMutation{AbstractVertex} end
     struct SelectWithMutationMutation2 <: AbstractMutation{AbstractVertex} end
@@ -184,6 +187,7 @@ end
 end
 
 @testset "remove_redundant_vertices" begin
+    using NaiveGAflux: check_apply
     v1 = inputvertex("in", 3)
     v2 = fluxvertex("v2", Dense(nout(v1), 5), v1)
     v3 = fluxvertex("V3", Dense(nout(v1), 5), v1)

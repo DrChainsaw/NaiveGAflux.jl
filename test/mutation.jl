@@ -340,6 +340,7 @@
     end
 
     @testset "RemoveZeroNout" begin
+        using NaiveGAflux: RemoveZeroNout
         inpt = denseinputvertex("in", 4)
         v0 = fluxvertex("v0", Dense(nout(inpt), 5), inpt)
         v1 = fluxvertex("v1", Dense(nout(v0), 5), v0)

@@ -3,7 +3,7 @@ module ImageClassification
 using ...NaiveGAflux
 using ..AutoFlux: fit
 using NaiveGAflux: GlobalPool
-using NaiveGAflux: shapetrace, squashshapes, fshape, ndimsout
+using NaiveGAflux: shapetrace, squashshapes, fshape, ndimsout, check_apply
 using NaiveGAflux: StatefulGenerationIter
 using NaiveNASlib.Advanced, NaiveNASlib.Extend
 import Flux
@@ -22,7 +22,7 @@ using Serialization
 
 export ImageClassifier, fit
 
-modelname(c::AbstractCandidate) = NaiveGAflux.graph(c, modelname)
+modelname(c::AbstractCandidate) = NaiveGAflux.model(modelname, c)
 modelname(g::CompGraph) = split(name(g.inputs[]),'.')[1]
 
 include("strategy.jl")

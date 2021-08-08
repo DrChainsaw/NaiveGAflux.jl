@@ -2,7 +2,7 @@
 
     struct DummyFitness <: AbstractFitness end
     NaiveGAflux._fitness(::DummyFitness, f::AbstractCandidate) = 17
-    using NaiveGAflux: FileCandidate, AbstractWrappingCandidate, opt, FittedCandidate
+    using NaiveGAflux: FileCandidate, AbstractWrappingCandidate, FittedCandidate
     using Functors: fmap
     import MemPool
     @testset "$ctype" for (ctype, candfun) in (
@@ -35,8 +35,8 @@
                 evofun = evolvemodel(graphmutation, optmutation)
                 newcand = evofun(cand)
 
-                @test NaiveGAflux.graph(newcand, nvertices) == 4
-                @test NaiveGAflux.graph(cand, nvertices) == 3
+                @test NaiveGAflux.model(nvertices, newcand) == 4
+                @test NaiveGAflux.model(nvertices, cand) == 3
 
                 optimizer(c) = typeof(opt(c)) 
 
@@ -59,8 +59,8 @@
                 @test optimizer(newcand1) === optimizer(newcand)
                 @test optimizer(newcand2) === optimizer(cand)
 
-                @test NaiveGAflux.graph(newcand1, nvertices) == 4
-                @test NaiveGAflux.graph(newcand2, nvertices) == 3
+                @test NaiveGAflux.model(nvertices, newcand1) == 4
+                @test NaiveGAflux.model(nvertices, newcand2) == 3
             finally
                 MemPool.cleanup()
             end
@@ -68,7 +68,6 @@
     end
 
     @testset "FileCandidate" begin
-        import NaiveGAflux: graph
         try
            @testset "FileCandidate cleanup" begin
                 fc = FileCandidate([1,2,3], 1.0)
@@ -96,7 +95,7 @@
                 @test cand1.hold == cand2.hold == false
 
                 indata = collect(Float32, reshape(1:6,3,2))
-                @test graph(cand2)(indata) == 2 .* indata
+                @test model(cand2)(indata) == 2 .* indata
                 @test cand2.hold == true
 
                 # We accessed wrappedcand when calling graph, so now we hold the model in memory until release!:d 
@@ -120,11 +119,11 @@
                 MemPool.cleanup()
 
                 # Make sure the data is gone
-                @test_throws KeyError NaiveGAflux.graph(secand)
+                @test_throws KeyError NaiveGAflux.model(secand)
 
                 decand = deserialize(io)
 
-                @test graph(decand)(indata) == expected
+                @test model(decand)(indata) == expected
             end
 
             @testset "Hold in mem" begin
@@ -149,7 +148,7 @@
                 @test time() - t0 < 5 # Or else we timed out
                 x[] = false
 
-                @test false == x[] != testref(fc)[] # Note graph(fc) should not start movetimer
+                @test false == x[] != testref(fc)[] # Note model(fc) should not start movetimer
                 @test !isopen(fc.movetimer)
                 
                 x = testref(fc, identity) # And neither should this now

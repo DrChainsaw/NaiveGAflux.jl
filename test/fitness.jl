@@ -7,7 +7,7 @@
         f::F
     end
     IdCand() = MockCandidate(identity)
-    NaiveGAflux.graph(c::MockCandidate, f=identity) = f(c.f)
+    NaiveGAflux.model(c::MockCandidate) = c.f
 
     @testset "LogFitness" begin
         import NaiveGAflux: FittedCandidate
@@ -64,7 +64,7 @@
 
         struct NaNCandidateModel <: AbstractCandidate end
         NaiveGAflux.ninputs(::NaNCandidateModel) = 1
-        NaiveGAflux.graph(f::NaNCandidateModel) = f 
+        NaiveGAflux.model(f::NaNCandidateModel) = f 
         (::NaNCandidateModel)(x) = x
         NaiveGAflux.lossfun(::NaNCandidateModel; default) = (args...) -> NaN32
 
