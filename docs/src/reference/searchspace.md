@@ -6,7 +6,7 @@ SingletonParSpace
 ParSpace
 CoupledParSpace
 ```
-## Layer Search Spaces
+## Layer Search Spaces(@id LAyerSearchSpaceAPI)
 ```@docs
 BaseLayerSpace 
 NamedLayerSpace

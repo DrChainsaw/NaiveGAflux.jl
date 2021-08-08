@@ -27,7 +27,7 @@ layer1 = fluxvertex(Dense(nout(invertex), 4), invertex)
 layer2 = fluxvertex(Dense(nout(layer1), 5), layer1)
 graph = CompGraph(invertex, layer2)
 
-# Create an `NoutMutation` to mutate it.
+# Create an [`NoutMutation`](@ref) to mutate it.
 mutation = NoutMutation(-0.5, 0.5)
 
 @test nout(layer2) == 5
@@ -36,7 +36,7 @@ mutation(layer2)
 
 @test nout(layer2) == 4
 
-# `VertexMutation` applies the wrapped mutation to all vertices in a `CompGraph`
+# [`VertexMutation`](@ref) applies the wrapped mutation to all vertices in a `CompGraph`
 mutation = VertexMutation(mutation)
 
 @test nout.(vertices(graph)) == [3,4,4]
@@ -46,7 +46,7 @@ mutation(graph)
 @test nout.(vertices(graph)) == [3,3,3]
 
 # Input vertex is never mutated, but the other two changed.
-# Use the `MutationShield` trait to protect otherwise mutable vertices from mutation.
+# Use the [`MutationShield`](@ref) trait to protect otherwise mutable vertices from mutation.
 outlayer = fluxvertex(Dense(nout(layer2), 10), layer2, traitfun = MutationShield)
 graph = CompGraph(invertex, outlayer)
 

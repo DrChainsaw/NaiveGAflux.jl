@@ -11,9 +11,9 @@ Crossover operations might not seem to make much sense when using parameter inhe
 Whether these effects actually make crossover a genuinely useful operation when evolving neural networks is not yet proven though. For now it is perhaps best to view the crossover operations as being provided mostly for the sake of completeness.
 
 The following basic crossover operations are currently supported:
-1. Swap segments between two models using `CrossoverSwap`.
-2. Swap optimizers between two candidates using `OptimizerCrossover`.
-3. Swap learning rate between two candidates using `LearningRateCrossover`.
+1. Swap segments between two models using [`CrossoverSwap`](@ref).
+2. Swap optimizers between two candidates using [`OptimizerCrossover`](@ref).
+3. Swap learning rate between two candidates using [`LearningRateCrossover`](@ref).
 
 Most of the mutation utilities also work with crossover operations. Here are a few examples:
 """
@@ -40,7 +40,7 @@ indata = reshape(collect(Float32, 1:3*2), 3,2)
 @test name.(vertices(modelA)) == ["A.in", "A.l1", "A.l2", "A.l3", "A.l4"]
 @test name.(vertices(modelB)) == ["B.in", "B.l1", "B.l2", "B.l3", "B.l4"]
 
-# `CrossoverSwap` takes ones vertex from each graph as input and swaps a random segment from each graph.
+# [`CrossoverSwap`](@ref) takes ones vertex from each graph as input and swaps a random segment from each graph.
 # By default it tries to make segments as similar as possible
 swapsame = CrossoverSwap()
 
@@ -69,7 +69,7 @@ modelAnew2, modelBnew2 = NaiveGAflux.regraph.(swapdeviation((swapA, swapB)))
 @test name.(vertices(modelAnew2)) == ["A.in", "A.l1", "A.l2", "B.l1", "B.l2", "B.l3", "A.l4"] 
 @test name.(vertices(modelBnew2)) == ["B.in", "A.l3", "B.l4"]
 
-# `VertexCrossover` applies the wrapped crossover operation to all vertices in a `CompGraph` and is the main API for doing crossover.
+# [`VertexCrossover`](@ref) applies the wrapped crossover operation to all vertices in a `CompGraph` and is the main API for doing crossover.
 # It in addtion, it selects compatible pairs for us (i.e `swapA` and `swapB` above).
 # It also takes an optional deviation parameter which is used when pairing.
 crossoverall = VertexCrossover(swapdeviation, 0.5)

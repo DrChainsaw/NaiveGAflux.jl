@@ -3,6 +3,7 @@
 ```@docs
 CandidateModel 
 CandidateOptModel
+FittedCandidate
 evolvemodel
 Population
 ```

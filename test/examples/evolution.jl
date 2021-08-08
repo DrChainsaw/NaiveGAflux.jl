@@ -26,20 +26,20 @@ struct Cand <: AbstractCandidate
 end
 NaiveGAflux.fitness(d::Cand) = d.fitness
 
-# `EliteSelection` selects the n best candidates.
+# [`EliteSelection`](@ref) selects the n best candidates.
 elitesel = EliteSelection(2)
 @test evolve(elitesel, Cand.(1:10)) == Cand.([10, 9])
 
-# `EvolveCandidates` maps candidates to new candidates (e.g. through mutation).
+# [`EvolveCandidates`](@ref) maps candidates to new candidates (e.g. through mutation).
 evocands = EvolveCandidates(c -> Cand(fitness(c) + 0.1))
 @test evolve(evocands, Cand.(1:10)) == Cand.(1.1:10.1)
 
-# `SusSelection` selects candidates randomly using stochastic uniform sampling.
+# [`SusSelection`](@ref) selects candidates randomly using stochastic uniform sampling.
 # Selected candidates will be forwarded to the wrapped evolution strategy before returned.
 sussel = SusSelection(5, evocands, FakeRng())
 @test evolve(sussel, Cand.(1:10)) == Cand.([4.1, 6.1, 8.1, 9.1, 10.1])
 
-# `CombinedEvolution` combines the populations from several evolution strategies.
+# [`CombinedEvolution`](@ref) combines the populations from several evolution strategies.
 comb = CombinedEvolution(elitesel, sussel)
 @test evolve(comb, Cand.(1:10)) == Cand.(Any[10, 9, 4.1, 6.1, 8.1, 9.1, 10.1])
 end #src

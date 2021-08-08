@@ -9,14 +9,14 @@ an `AbstractCandidate` needs to
 Capability 1. is generally performed through functions of the format `someproperty(candidate; default)` where in general 
 `someproperty(::AbstractCandidate; default=nothing) = default`. The following such functions are currently implemented by NaiveGAflux:
 
-* `model(c; default)`  : Return a model
-* `opt(c; default)`    : Return an optimizer
-* `lossfun(c; default)` : Return a lossfunction
+* [`model(c; default)`](@ref model)  : Return a model
+* [`opt(c; default)`](@ref opt)    : Return an optimizer
+* [`lossfun(c; default)`](@ref lossfun) : Return a lossfunction
 
 All such functions are obviously not used by all fitness strategies and some are used more often than others. Whether an 
 `AbstractCandidate` returns something other than `default` generally depends on whether it is a hyperparameter which is 
-being searched for or not. For example, the very simple `CandidateModel` has only a `model` while `CandidateOptModel` 
-has both a model and an own optimizer which may be mutated/crossedover when evolving.
+being searched for or not. For example, the very simple [`CandidateModel`](@ref) has only a `model` while 
+[`CandidateOptModel`](@ref) has both a model and an own optimizer which may be mutated/crossedover when evolving.
 
 Capability 2. is what is used then evolving a candidate into a new version of itself. The function to implement for new
 `AbstractCandidate` types is `newcand(c::MyCandidate, mapfields)` which in most cases has the implementation 
