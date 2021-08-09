@@ -107,7 +107,7 @@ output = ArchSpaceChain(drep, dout)
 archspace = ArchSpaceChain(featureextract, GlobalPoolSpace(), output)
 
 # Input is 3 channel image.
-samplemodel(invertex=conv2dinputvertex("input", 3)) = CompGraph(invertex, archspace(invertex));
+samplemodel(invertex=conv2dinputvertex("input", 3)) = CompGraph(invertex, archspace(invertex))
 
 # Sample one architecture from the search space.
 graph1 = samplemodel()
