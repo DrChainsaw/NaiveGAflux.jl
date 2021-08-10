@@ -184,43 +184,59 @@
     end
 
     @testset "NoutMutation" begin
-        inpt = denseinputvertex("in", 3)
+        @testset "Forced to 10" begin
+            v = dense(denseinputvertex("in", 1), 100)
 
-        # Can't mutate, don't do anything
-        @test NoutMutation(0.4)(inpt) == inpt
-        @test nout(inpt) == 3
+            @test NoutMutation(0.1,0.1)(v) === v
+            @test nout(v) == 110
+        end
 
-        # Can't mutate due to too small size
-        v = dense(inpt, 1)
-        @test NoutMutation(-0.8, -1.0)(v) == v
-        @test nout(v) == 1
+        @testset "Forced to -10" begin
+            v = dense(denseinputvertex("in", 1), 100)
 
-        rng = MockRng([0.5])
-        v = dense(inpt, 11)
+            @test NoutMutation(-0.1,-0.1)(v) === v
+            @test nout(v) == 90
+        end
 
-        @test NoutMutation(0.4, rng)(v) == v
-        @test nout(v) == 12
+        @testset "Random" begin
+            inpt = denseinputvertex("in", 3)
 
-        @test NoutMutation(-0.4, rng)(v) == v
-        @test nout(v) == 11
+            # Can't mutate, don't do anything
+            @test NoutMutation(0.4)(inpt) == inpt
+            @test nout(inpt) == 3
 
-        NoutMutation(-0.001, rng)(v)
-        @test nout(v) == 10
+            # Can't mutate due to too small size
+            v = dense(inpt, 1)
+            @test NoutMutation(-0.8, -1.0)(v) == v
+            @test nout(v) == 1
 
-        NoutMutation(0.001, rng)(v)
-        @test nout(v) == 11
+            rng = MockRng([0.5])
+            v = dense(inpt, 11)
 
-        NoutMutation(-0.1, 0.3, rng)(v)
-        @test nout(v) == 12
+            @test NoutMutation(0.4, rng)(v) == v
+            @test nout(v) == 14
 
-        # "Hidden" size 1 vertex
-        v0 = dense(inpt,1, name="v0")
-        v1 = dense(inpt,1, name="v1")
-        v2 = concat(v0, v1, traitfun=named("v2"))
+            @test NoutMutation(-0.4, rng)(v) == v
+            @test nout(v) == 11
 
-        NoutMutation(-1, rng)(v2)
-        @test nout(v2) == 2
-        @test nin(v2) == [nout(v0), nout(v1)] == [1, 1]
+            NoutMutation(-0.001, rng)(v)
+            @test nout(v) == 10
+
+            NoutMutation(0.001, rng)(v)
+            @test nout(v) == 11
+
+            NoutMutation(-0.1, 0.3, rng)(v)
+            @test nout(v) == 13
+
+            # "Hidden" size 1 vertex
+            v0 = dense(inpt,1, name="v0")
+            v1 = dense(inpt,1, name="v1")
+            v2 = concat(v0, v1, traitfun=named("v2"))
+
+            NoutMutation(-1, rng)(v2)
+            @test nout(v2) == 2
+            @test nin(v2) == [nout(v0), nout(v1)] == [1, 1]
+        end
     end
 
     @testset "NoutMutation vector" begin
@@ -234,8 +250,8 @@
         @test NoutMutation(0.8, rng)([inpt,v2,v3]) == [inpt,v2,v3]
 
         @test nout(v1) == 4
-        @test nout(v2) == 6
-        @test nout(v3) == 7
+        @test nout(v2) == 7
+        @test nout(v3) == 9
         @test nout(v4) == 7
     end
 

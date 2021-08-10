@@ -273,7 +273,7 @@ function (m::NoutMutation)(vs::AbstractVector{<:AbstractVertex})
         
         Δfloat = rand(m.rng) * scale + shift
 
-        Δ = ceil(Int, abs(Δfloat)) *  sign(Δfloat)
+        Δ = ceil(Int, abs(Δfloat) * nout(v)) *  sign(Δfloat)
         minsize = minimum(nout.(terminputs))
         # Or else we might increase the size despite Δ being negative which would be surprising to a user who has specified 
         # strictly negative size changes
