@@ -6,4 +6,7 @@ CandidateOptModel
 FittedCandidate
 evolvemodel
 Population
+model
+opt
+lossfun
 ```

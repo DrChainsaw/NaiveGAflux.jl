@@ -52,7 +52,7 @@ for modeli in 1:3
 end
 
 # [`StatefulGenerationIter`](@ref) is typically used in conjunction with [`TrainThenFitness`](@ref) to map a generation.
-# number to an iterator from a [`RepeatStatefulIterator`](@ref).
+# number to an iterator from a [`RepeatPartitionIterator`](@ref).
 sgiter = StatefulGenerationIter(rpiter)
 for (generationnr, topiter) in enumerate(rpiter)
     gendata = collect(NaiveGAflux.itergeneration(sgiter, generationnr))

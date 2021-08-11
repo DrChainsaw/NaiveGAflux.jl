@@ -8,7 +8,8 @@ Iteratates over iterators of a subset of size `nrep` elements in `base`.
 
 Generally useful for training all models in a population with the same data in each evolution epoch.
 
-Tailored for situations where iterating over models is more expensive than iterating over data, for example if candidates are stored in host RAM or on disk and needs to be transferred to the GPU for training.
+Tailored for situations where iterating over models is more expensive than iterating over data, for 
+example if candidates are stored in host RAM or on disk and needs to be transferred to the GPU for training.
 
 Example training loop:
 ```julia
@@ -74,7 +75,7 @@ Base.IteratorEltype(itr::RepeatStatefulIterator) = Base.IteratorEltype(itr.base.
 """
     StatefulGenerationIter{T, VS}
 
-Uses a `RepeatPartitionIterator` to ensure that the same `RepeatStatefulIterator` is returned for the same generation number.
+Uses a `RepeatPartitionIterator` to ensure that the same iterator is returned for the same generation number.
 """
 struct StatefulGenerationIter{I, T, VS}
     currgen::Ref{Int}

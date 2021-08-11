@@ -52,9 +52,9 @@ fitnessfunction = TrainThenFitness(;
 mp(m, p) = VertexMutation(MutationProbability(m, p))
 # Change size (60% chance) and/or add a layer (40% chance) and/or remove a layer (40% chance).
 # You might want to use lower probabilities than this.
+changesize = mp(NoutMutation(-0.2, 0.2), 0.6)
 addlayer = mp(AddVertexMutation(layerspace), 0.4)
 remlayer = mp(RemoveVertexMutation(), 0.4)
-changesize = mp(NoutMutation(-0.2, 0.2), 0.6)
 mutation = MutationChain(changesize, remlayer, addlayer)
 
 # Selection: The two best models are not changed, the other three are mutated using mutation defined above.

@@ -10,13 +10,13 @@ function literate_example(sourcefile; rootdir=nndir, sourcedir = "test/examples"
 end
 
 quicktutorial = literate_example("quicktutorial.jl")
-searchspace = literate_example("searchspace.jl")
-mutation = literate_example("mutation.jl")
-crossover = literate_example("crossover.jl")
-fitness = literate_example("fitness.jl")
-candidate = literate_example("candidate.jl")
-evolution = literate_example("evolution.jl")
-iterators = literate_example("iterators.jl")
+searchspace_ex = literate_example("searchspace.jl")
+mutation_ex = literate_example("mutation.jl")
+crossover_ex = literate_example("crossover.jl")
+fitness_ex = literate_example("fitness.jl")
+candidate_ex = literate_example("candidate.jl")
+evolution_ex = literate_example("evolution.jl")
+iterators_ex = literate_example("iterators.jl")
 
 makedocs(   sitename="NaiveGAflux",
             root = joinpath(nndir, "docs"), 
@@ -28,13 +28,13 @@ makedocs(   sitename="NaiveGAflux",
                 quicktutorial,
                 "autoflux/index.md",
                 "Components" => [
-                    searchspace,
-                    mutation,
-                    crossover,
-                    fitness,
-                    candidate,
-                    evolution,
-                    iterators
+                    searchspace_ex,
+                    mutation_ex,
+                    crossover_ex,
+                    fitness_ex,
+                    candidate_ex,
+                    evolution_ex,
+                    iterators_ex
                 ],
                 "API Reference" => [
                     "reference/searchspace.md",
