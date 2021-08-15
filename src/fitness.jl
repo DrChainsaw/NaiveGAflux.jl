@@ -241,9 +241,9 @@ _fitness(s::TrainAccuracyFitness, c::AbstractCandidate) = _fitness(s.train, Trai
 
 Maps fitness `x` from `base` to `mapping(x)`.
 """
-struct MapFitness <: AbstractFitness
-    mapping::Function
-    base::AbstractFitness
+struct MapFitness{F, T} <: AbstractFitness
+    mapping::F
+    base::T
 end
 _fitness(s::MapFitness, c::AbstractCandidate) = _fitness(s.base, c) |> s.mapping
 

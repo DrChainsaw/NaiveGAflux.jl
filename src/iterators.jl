@@ -39,7 +39,7 @@ function Base.iterate(itr::RepeatPartitionIterator, reset=true)
     return Iterators.take(RepeatStatefulIterator(itr.base), itr.ntake), false
 end
 
-Base.length(itr::RepeatPartitionIterator) = ceil(Int, length(itr.base) / itr.ntake)
+Base.length(itr::RepeatPartitionIterator) = cld(length(itr.base), itr.ntake)
 Base.eltype(itr::RepeatPartitionIterator) = eltype(itr.base)
 Base.size(itr::RepeatPartitionIterator) = size(itr.base.itr)
 
@@ -68,8 +68,8 @@ Base.length(itr::RepeatStatefulIterator) = length(itr.base.itr) - itr.taken
 Base.eltype(itr::RepeatStatefulIterator) = eltype(itr.base)
 Base.size(itr::RepeatStatefulIterator) = size(itr.base.itr)
 
-Base.IteratorSize(itr::RepeatStatefulIterator) = Base.IteratorSize(itr.base.itr)
-Base.IteratorEltype(itr::RepeatStatefulIterator) = Base.IteratorEltype(itr.base.itr)
+Base.IteratorSize(::Type{RepeatStatefulIterator{T,VS}}) where {T, VS} = Base.IteratorSize(Iterators.Stateful{T,VS})
+Base.IteratorEltype(::Type{RepeatStatefulIterator{T,VS}}) where {T, VS} = Base.IteratorEltype(Iterators.Stateful{T,VS})
 
 """
     StatefulGenerationIter{T, VS}
@@ -131,130 +131,69 @@ Base.length(itr::SeedIterator) = length(itr.base)
 Base.eltype(itr::SeedIterator) = eltype(itr.base)
 Base.size(itr::SeedIterator) = size(itr.base)
 
-Base.IteratorSize(itr::SeedIterator) = Base.IteratorSize(itr.base)
-Base.IteratorEltype(itr::SeedIterator) = Base.IteratorEltype(itr.base)
-
-"""
-    MapIterator{F, T}
-    MapIterator(f::F, base::T)
-
-Return an iterator over `f` of the values from `base`.
-"""
-struct MapIterator{F, T}
-    f::F
-    base::T
-end
+Base.IteratorSize(::Type{SeedIterator{R, T}}) where {R,T}= Base.IteratorSize(T)
+Base.IteratorEltype(::Type{SeedIterator{R, T}}) where {R,T} = Base.IteratorEltype(T)
 
 """
     GpuIterator(itr)
 
 Return an iterator which sends values from `itr` to the GPU.
 """
-GpuIterator(itr) = MapIterator(gpuitr, itr)
+GpuIterator(itr) = Iterators.map(gpuitr, itr)
 gpuitr(a) = Flux.gpu(a)
 gpuitr(a::SubArray) = gpuitr(collect(a))
 gpuitr(a::Tuple) = gpuitr.(a)
 
-
-function Base.iterate(itr::MapIterator)
-    val, state = IterTools.@ifsomething iterate(itr.base)
-    return itr.f(val), state
-end
-
-function Base.iterate(itr::MapIterator, state)
-    val, state = IterTools.@ifsomething iterate(itr.base, state)
-    return itr.f(val), state
-end
-
-Base.length(itr::MapIterator) = length(itr.base)
-Base.size(itr::MapIterator) = size(Base.IteratorSize(itr.base), itr.base)
-Base.size(::Base.IteratorSize, itr) = sizeof(first(itr))
-Base.size(::Base.HasShape, itr) = size(itr)
-sizeof(a::AbstractArray) = size(a)
-sizeof(t::Tuple) = size.(t)
-
-
-Base.IteratorSize(itr::MapIterator) = Base.IteratorSize(itr.base)
-Base.IteratorEltype(itr::MapIterator) = Base.EltypeUnknown() # Don't know what f does...
-
+struct NoShuffle end
+Random.shuffle(::NoShuffle, x) = x
 
 """
-    BatchIterator{T}
-    BatchIterator(base, batchsize)
+    BatchIterator{R, D}
+    BatchIterator(data, batchsize; shuffle)
 
-Return an iterator which iterates `batchsize` samples along the last dimension of `base`.
+Return an iterator which iterates `batchsize` samples along the last dimension of `data` 
+or all elements of `data` if `data` is a `Tuple` (e.g `(features, labels)`).
+
+Will shuffle examples if `shuffle` is `true` or an `AbstractRNG`. Shuffling will be 
+different each time iteration starts (subject to implementation of shuffle(rng,...)).  
 """
-struct BatchIterator{T}
-    base::T
-    batchsize::Int
-end
-
-Base.length(itr::BatchIterator) = ceil(Int, size(itr.base)[end] / itr.batchsize)
-Base.size(itr::BatchIterator) = tuple(length(itr))
-
-Base.IteratorSize(itr::BatchIterator) = Base.IteratorSize(itr.base)
-Base.IteratorEltype(itr::BatchIterator) = Base.IteratorEltype(itr.base)
-
-function Base.iterate(itr::BatchIterator, start=1)
-    start > size(itr.base)[end] && return nothing
-    stop = min(size(itr.base)[end], start + itr.batchsize-1)
-    return batch(itr.base, start:stop), start+itr.batchsize
-end
-
-# I *think* speed matters here, so...
-batch(s::Singleton, inds) = batch(val(s), inds)
-batch(a::AbstractArray{T,1}, inds) where T = view(a, inds)
-batch(a::AbstractArray{T,2}, inds) where T = view(a, :,inds)
-batch(a::AbstractArray{T,3}, inds) where T = view(a, :,:,inds)
-batch(a::AbstractArray{T,4}, inds) where T = view(a, :,:,:,inds)
-batch(a::AbstractArray{T,5}, inds) where T = view(a, :,:,:,:,inds)
-batch(a::AbstractArray{T,N}, inds) where {T,N} = view(a, ntuple(i -> Colon(), N - 1)..., inds)
-
-Base.show(io::IO, itr::BatchIterator) = print(io, "BatchIterator(size=$(size(itr.base)), batchsize=$(itr.batchsize))")
-
-"""
-    Flux.onehotbatch(itr::BatchIterator, labels)
-    Flux.onehotbatch(itr::ShuffleIterator, labels)
-
-Return an iterator over [`Flux.onehotbatch`](@ref) of the values from `itr`.
-"""
-Flux.onehotbatch(itr::BatchIterator, labels) = MapIterator(x -> Flux.onehotbatch(x, labels), itr)
-
-"""
-    ShuffleIterator{T<:AbstractArray, R<:AbstractRNG}
-    ShuffleIterator(data, batchsize, rng=rng_default)
-
-Same as `BatchIterator` but also shuffles `data`. Order is reshuffled each time iteration begins.
-"""
-struct ShuffleIterator{T, R<:AbstractRNG}
-    base::T
+struct BatchIterator{R, D}
+    nobs::Int
     batchsize::Int
     rng::R
+    data::D
 end
-ShuffleIterator(data::T, bs, rng::R=rng_default) where {T,R} = ShuffleIterator{T,R}(data, bs, rng)
+BatchIterator(data::Union{AbstractArray, Singleton}, bs::Int; kwargs...) = BatchIterator(size(data)[end], bs, data; kwargs...)
+function BatchIterator(data::Tuple, bs; kwargs...) 
+    @assert all(x -> size(x)[end] === size(data[1])[end], data) "Mistmatched batch dimensions! Got sizes $(size.(data))"
+    BatchIterator(size(data[1])[end], bs, data; kwargs...)
+end
+function BatchIterator(nobs::Integer, batchsize::Integer, data; shuffle=false)
+    return BatchIterator(nobs, batchsize, shufflerng(shuffle), data)
+end
+shufflerng(b::Bool) = b ? rng_default : NoShuffle()
+shufflerng(rng) = rng
 
-Base.length(itr::ShuffleIterator) = length(BatchIterator(itr.base, itr.batchsize))
-Base.size(itr::ShuffleIterator) = tuple(length(itr))
+ndata(itr::BatchIterator) = ndata(itr.data)
+ndata(data::Tuple) = length(data)
+ndata(data::AbstractArray) = 1 
 
-Base.IteratorSize(itr::ShuffleIterator) = Base.IteratorSize(itr.base)
-Base.IteratorEltype(itr::ShuffleIterator) = Base.IteratorEltype(itr.base)
-
-function Base.iterate(itr::ShuffleIterator)
-    # Borrow batchhandling from BatchIterator
-    inditr = BatchIterator(randperm(itr.rng, size(itr.base)[end]), itr.batchsize)
-    inds, istate = IterTools.@ifsomething iterate(inditr)
-    return batch(itr.base, inds), (inditr, istate)
+function Base.iterate(itr::BatchIterator, inds = shuffle(itr.rng, 1:itr.nobs))
+    isempty(inds) && return nothing
+    return batch(itr.data, @view(inds[1:min(end, itr.batchsize)])), @view(inds[itr.batchsize+1:end])
 end
 
-function Base.iterate(itr::ShuffleIterator, state)
-    inditr, istate = state
-    inds, istate = IterTools.@ifsomething iterate(inditr, istate)
-    return batch(itr.base, inds), (inditr, istate)
-end
+Base.length(itr::BatchIterator) = cld(itr.nobs, itr.batchsize)
+Base.size(itr::BatchIterator) = tuple(length(itr))
 
-Base.show(io::IO, itr::ShuffleIterator) = print(io, "ShuffleIterator(size=$(size(itr.base)), batchsize=$(itr.batchsize))")
+Base.IteratorEltype(::Type{BatchIterator{R,D}}) where {R, D} = Base.IteratorEltype(D)
 
-Flux.onehotbatch(itr::ShuffleIterator, labels) = MapIterator(x -> Flux.onehotbatch(x, labels), itr)
+batch(s::Singleton, inds) = batch(val(s), inds)
+batch(b::Tuple, inds) = batch.(b, Ref(inds))
+batch(a::AbstractArray{T,N}, inds) where {T,N} = selectdim(a, N, inds)
+
+Base.show(io::IO, itr::BatchIterator{R}) where R = print(io, "BatchIterator(size=$(size(itr.data)), batchsize=$(itr.batchsize), shuffle=$(R !== NoShuffle))")
+Base.show(io::IO, itr::BatchIterator{R, <:Tuple}) where R = print(io, "BatchIterator(size=$(size.(itr.data)), batchsize=$(itr.batchsize), shuffle=$(R !== NoShuffle))")
 
 """
     TimedIterator{F,A,I}
@@ -289,8 +228,8 @@ end
 Base.length(itr::TimedIterator) = length(itr.base)
 Base.size(itr::TimedIterator) = size(itr.base)
 
-Base.IteratorSize(itr::TimedIterator) = Base.IteratorSize(itr.base)
-Base.IteratorEltype(itr::TimedIterator) = Base.IteratorEltype(itr.base)
+Base.IteratorSize(::Type{TimedIterator{F,A,I}}) where {F,A,I} = Base.IteratorSize(I)
+Base.IteratorEltype(::Type{TimedIterator{F,A,I}}) where {F,A,I}  = Base.IteratorEltype(I)
 
 function Base.iterate(itr::TimedIterator)
     val, bstate = IterTools.@ifsomething iterate(itr.base)

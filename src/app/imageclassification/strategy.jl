@@ -150,7 +150,7 @@ Configuration for creating shuffled batch iterators from array data. Data will b
 
 The function `dataiter(s::ShuffleIterConfig, x, y)` creates an iterator which returns a tuple of batches from `x` and `y` respectively.
 
-More specifically, the result of `s.iterwrap(zip(s.dataaug(bx), by))` will be returned where `bx` and `by` are `ShuffleIterator`s.
+More specifically, the result of `s.iterwrap(Iterators.map(((x,y),) -> (s.dataaug(x), y), iter))` will be returned where `iter` is a `BatchIterator` over `x` and `y` with `shuffle=true`.
 
 Note there there is no upper bound on how many generations are supported as the returned iterator cycles the data indefinitely. Use e.g. `Iterators.take(itr, cld(nepochs * nbatches_per_epoch, nbatches_per_gen))` to limit to `nepochs`
 epochs. 
@@ -183,28 +183,33 @@ function dataiter(s::TrainIterConfig, x, y)
     return RepeatPartitionIterator(baseiter, s.nbatches_per_gen)
 end
 
-dataiter(x::AbstractArray,y::AbstractArray{T, 1}, args...) where T = _dataiter(x,y, args...,yi -> Flux.onehotbatch(yi, sort(unique(y))))
+function dataiter(x::AbstractArray,y::AbstractArray{T, 1}, args...) where T 
+    _dataiter(x, Flux.onehotbatch(y, sort(unique(y))), args...)
+end
 dataiter(x::AbstractArray,y::AbstractArray{T, 2}, args...) where T = _dataiter(x,y, args...)
 
 function _dataiter(x::AbstractArray,y::AbstractArray, bs::Integer, seed::Integer, xwrap, ywrap = identity)
-    xiter = shuffleiter(x, bs, seed)
-    yiter = shuffleiter(y, bs, seed)
+    biter = shuffleiter((x,y), bs, seed)
+
     # iterates feature/label pairs
     # Cycle is pretty important here. It is what makes it so that each generation sees a new shuffle
     # This is also what makes SeedIterators useful with random data augmentation: 
     #   - Even if SeedIterator makes the augmentation itself the same, it will be applied to different images 
     # Something ought to be done about the inconsistency vs BatchedIterConfig through...
-    biter = Iterators.cycle(zip(xwrap(xiter), ywrap(yiter)))
+    citer = Iterators.map(biter) do (x, y)
+        xwrap(x), ywrap(y)
+    end |> Iterators.cycle
     # Ensures all models see the exact same examples, even when a RepeatStatefulIterator restarts iteration.
-    return SeedIterator(SeedIterator(biter;rng=xiter.rng); rng=yiter.rng)
+    return SeedIterator(citer;rng=biter.rng)
 end
-shuffleiter(x, batchsize, seed) = ShuffleIterator(x, batchsize, MersenneTwister(seed))
+shuffleiter(data, batchsize, seed) = BatchIterator(data, batchsize; shuffle=MersenneTwister(seed))
 
 function _dataiter(x::AbstractArray, y::AbstractArray, bs::Integer, xwrap, ywrap = identity)
-    xiter = BatchIterator(x, bs)
-    yiter = BatchIterator(y, bs)
+    biter = BatchIterator((x,y), bs)
     # iterates feature/label pairs
-    return zip(xwrap(xiter), ywrap(yiter))
+    return Iterators.map(biter) do (x, y)
+        xwrap(x), ywrap(y)
+    end
 end
 
 """
