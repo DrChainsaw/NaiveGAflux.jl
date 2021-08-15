@@ -17,9 +17,33 @@ Base.Broadcast.broadcastable(c::AbstractCandidate) = Ref(c)
 
 release!(::AbstractCandidate) = nothing
 hold!(::AbstractCandidate) = nothing
-model(f, c::AbstractCandidate; kwargs...) = f(model(c; kwargs...))
+
+"""
+    model(c::AbstractCandidate; [default])
+
+Return the model of candidate `c` if `c` has a model, `default` (which defaults to `nothing`) otherwise.
+"""
 model(::AbstractCandidate; default=nothing) = default
+
+"""
+    model(f, c::AbstractCandidate; [default])
+
+Return the result of `f(`[`model(c; default)`]`)`. 
+"""
+model(f, c::AbstractCandidate; kwargs...) = f(model(c; kwargs...))
+
+"""
+    opt(c::AbstractCandidate; [default])
+
+Return the optimizer of candidate `c` if `c` has an optimizer, `default` (which defaults to `nothing`) otherwise.
+"""
 opt(::AbstractCandidate; default=nothing) = default
+
+"""
+    lossfun(c::AbstractCandidate; [default])
+
+Return the loss function of candidate `c` if `c` has a lossfunction, `default` (which defaults to `nothing`) otherwise.
+"""
 lossfun(::AbstractCandidate; default=nothing) = default
 fitness(::AbstractCandidate; default=nothing) = default
 generation(::AbstractCandidate; default=nothing) = default
@@ -54,7 +78,7 @@ generation(c::AbstractWrappingCandidate; kwargs...) = generation(wrappedcand(c);
     CandidateModel <: Candidate
     CandidateModel(model)
 
-A candidate model consisting of a `CompGraph`, an optimizer a lossfunction and a fitness method.
+A candidate model which can be accessed by [`model(c)`](@ref) for `CandidateModel c`.
 """
 struct CandidateModel{G} <: AbstractCandidate
     model::G
@@ -68,9 +92,9 @@ newcand(c::CandidateModel, mapfield) = CandidateModel(map(mapfield, getproperty.
 
 """
     CandidateOptModel <: AbstractCandidate
-    CandidateOptModel(candidate, optimizer)
+    CandidateOptModel(candidate::AbstractCandidate, optimizer)
 
-A candidate adding an optimizer to another candidate.
+A candidate adding an optimizer to another candidate. The optimizer is accessed by [`opt(c)`] for `CandidateOptModel c`.
 """
 struct CandidateOptModel{O, C <: AbstractCandidate} <: AbstractWrappingCandidate
     opt::O
@@ -96,6 +120,7 @@ newcand(c::CandidateOptModel, mapfield) = CandidateOptModel(mapfield(c.opt), new
 
 """
     FileCandidate <: AbstractWrappingCandidate
+    FileCandidate(c::AbstractCandidate) 
 
 Keeps `c` on disk when not in use and just maintains its [`DRef`](@ref).
 
@@ -196,9 +221,11 @@ end
 newcand(c::FileCandidate, mapfield) = FileCandidate(callcand(newcand, c, mapfield), c.movedelay)
 
 """
-    struct FittedCandidate{F, C} <: AbstractWrappingCandidate
+    FittedCandidate{F, C} <: AbstractWrappingCandidate
+    FittedCandidate(c::AbstractCandidate, fitnessvalue, generation)
+    FittedCandidate(c::AbstractCandidate, fitnessfun::AbstractFitness, generation)
 
-An `AbstractCandidate` with a computed fitness value. 
+An `AbstractCandidate` with a computed fitness value. Will compute the fitness value if provided an `AbstractFitness`.
 
 Basically a container for results so that fitness does not need to be recomputed to e.g. check stopping conditions. 
 
