@@ -43,7 +43,8 @@ makedocs(   sitename="NaiveGAflux",
                     "reference/fitness.md",
                     "reference/candidate.md",
                     "reference/evolution.md",
-                    "reference/iterators.md"
+                    "reference/iterators.md",
+                    "reference/utils.md",
                 ]
             ],
             modules = [NaiveGAflux],

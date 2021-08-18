@@ -132,7 +132,7 @@ function check_apply(t, v) end
     PersistentArray(savedir::String, nr::Integer, generator;suffix=".jls")
     PersistentArray(savedir::String, suffix::String, data::Array)
 
-Simple persistent array. Can be created from serialized data and can be asked to persist its elements.
+Simple persistent array. Can be created from serialized data and can be asked to persist its elements using [`persist`](@ref).
 
 Note that once initialized, the array is not backed by the serialized data. Adding/deleting files is not reflected in data and vice versa.
 """
@@ -149,6 +149,11 @@ function PersistentArray(savedir::String, nr::Integer, generator;suffix=".jls")
     end
     return PersistentArray(savedir, suffix, data)
 end
+"""
+    persist(a::PersistentArray) 
+
+Serializes the elements of `a`, one file per element.
+"""
 function persist(a::PersistentArray)
     mkpath(a.savedir)
     for (i, v) in enumerate(a)

@@ -106,7 +106,7 @@ Iterator which has the random seed of an `AbstractRNG` as state.
 
 Calls `Random.seed!(rng, seed)` every iteration so that wrapped iterators which depend on `rng` will produce the same sequence.
 
-Useful in conjunction with [`RepeatPartitionIterator`](@ref) and [`ShuffleIterator`](@ref) and/or random data augmentation so that all candidates in a generation are trained with identical data.
+Useful in conjunction with [`RepeatPartitionIterator`](@ref) and [`BatchIterator`](@ref) and/or random data augmentation so that all candidates in a generation are trained with identical data.
 """
 struct SeedIterator{R <: AbstractRNG,T}
     rng::R
