@@ -20,7 +20,7 @@ import IterTools: ncycle
 # To store program state for pause/resume
 using Serialization
 
-export ImageClassifier, fit
+export ImageClassifier, fit, TrainSplitAccuracy, TrainAccuracyVsSize, AccuracyVsSize, TrainIterConfig, BatchedIterConfig, ShuffleIterConfig, GlobalOptimizerMutation, EliteAndSusSelection, EliteAndTournamentSelection
 
 modelname(c::AbstractCandidate) = NaiveGAflux.model(modelname, c)
 modelname(g::CompGraph) = split(name(g.inputs[]),'.')[1]
@@ -63,9 +63,9 @@ Return a population of image classifiers fitted to the given data.
 
 - `cb=identity`: Callback function. After training and evaluating each generation but before evolution `cb(population)` will be called where `population` is the array of candidates. Useful for persistence and plotting.
 
-- `fitnesstrategy::AbstractFitnessStrategy=TrainSplitAccuracy()`: Strategy for fitness from data. See: [`ImageClassification.AbstractFitnessStrategy`](@ref).
+- `fitnesstrategy::AbstractFitnessStrategy=`[`TrainSplitAccuracy()`](@ref): Strategy for fitness from data.
 
-- `evolutionstrategy::AbstractEvolutionStrategy=EliteAndTournamentSelection(popsize=c.popsize)`: Strategy for evolution. See [`ImageClassification.AbstractEvolutionStrategy`](@ref)
+- `evolutionstrategy::AbstractEvolutionStrategy=`[`EliteAndTournamentSelection(popsize=c.popsize)`](@ref): Strategy for evolution.
 
 - `stopcriterion`: Takes the current population and returns true if fitting shall stop. Candidate fitness is available by calling `fitness(c)` where `c` is a member of the population.
 

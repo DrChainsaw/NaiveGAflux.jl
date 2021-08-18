@@ -1,4 +1,4 @@
-using Documenter, Literate, NaiveGAflux
+using Documenter, Literate, NaiveGAflux, NaiveGAflux.AutoFlux, NaiveGAflux.AutoFlux.ImageClassification
 
 const nndir = joinpath(dirname(pathof(NaiveGAflux)), "..")
 
@@ -26,7 +26,10 @@ makedocs(   sitename="NaiveGAflux",
             pages = [
                 "index.md",
                 quicktutorial,
-                "autoflux/index.md",
+                "AutoFlux" => [
+                    "autoflux/index.md",
+                    "autoflux/reference/reference.md"
+                ],
                 "Components" => [
                     searchspace_ex,
                     mutation_ex,

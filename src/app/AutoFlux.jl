@@ -15,7 +15,7 @@ Return a population of models fitted to the given data.
 The type of model will depend on the shape of `x`.
 
 The following model types are currently supported
-- 4D data -> ImageClassifier
+- 4D data -> [`ImageClassifier`](@ref)
 
 Keyword `cb` can be used to supply a callback function which will be called each generation with the current population as input.
 

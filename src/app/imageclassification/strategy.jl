@@ -45,7 +45,7 @@ Size of subset for accuracy fitness is `ceil(Int, split * nobs)` where `nobs` is
 Parameters `accuracyconfig` (default `BatchedIterConfig()`) and `accuracyfitness` (default AccuracyVsSize) determine 
 how to iterate over the accuracy subset and how to measure fitness based on this iterator respectively.
 
-Parameters `trainconfig` (default `TrainIterConfig()`) and `trainfitness` (default GpuFitness(TrainThenFitness(StatefulGenerationIter(iter), Flux.Losses.logitcrossentropy, ADAM(), accfitness, 0.0)) where accfitness is the fitness strategy produced by `accuracyfitness`) are the equivalents for training data.
+Parameters `trainconfig` (default `TrainIterConfig()`) and `trainfitness` (default [`GpuFitness`](@ref)`(`[`TrainThenFitness`](@ref)`(`[`StatefulGenerationIter(iter)`](@ref)`, Flux.Losses.logitcrossentropy, ADAM(), accfitness, 0.0)`) where accfitness is the fitness strategy produced by `accuracyfitness`) are the equivalents for training data.
 """
 struct TrainSplitAccuracy{S, VC, VF, TC, TF} <: AbstractFitnessStrategy
     split::S
@@ -84,7 +84,7 @@ Produces an `AbstractFitness` which measures fitness accuracy on `data` and base
 
 The two are combined so that a candidate `a` which achieves higher accuracy rounded to the first `accdigits` digits compared to a candidate `b` will always have a better fitness.
 
-Only if the first `accdigits` of accuracy is the same will the number of parameters determine who has higher fitness.
+If the first `accdigits` of accuracy is the same the candidate with fewer parameters will get higher fitness.
 
 Accuracy part of the fitness is calculated by `accwrap(AccuracyFitness(data))`.
 """
@@ -104,7 +104,7 @@ end
 
 Produces an `AbstractFitness` which measures fitness accuracy on training data and based on number of parameters combined in the same way as is done for `AccuracyVsSize`.
 
-Parameters `trainconfig` (default `TrainIterConfig()`) and `trainfitness` (default sizevs(GpuFitness(TrainAccuracyFitness(dataiter=StatefulGenerationIter(dataiter), defaultloss=Flux.Losses.logitcrossentropy, defaultopt = ADAM()))) where `dataiter` is the iterator produced by `trainconfig`).
+Parameters `trainconfig` (default `TrainIterConfig()`) and `trainfitness` (default `sizevs(`[`GpuFitness`](@ref)`(`[`TrainAccuracyFitness`](@ref)`(dataiter=`[`StatefulGenerationIter(dataiter)`](@ref)`, defaultloss=Flux.Losses.logitcrossentropy, defaultopt = ADAM()))`) where `dataiter` is the iterator produced by `trainconfig`).
 
 Beware that fitness as accuracy on training data will make evolution favour overfitted candidates.
 """
@@ -219,7 +219,7 @@ end
 
 Maps the optimizer of each candidate in a population through `optfun` (default `randomlrscale()`).
 
-Basically a thin wrapper for [`NaiveGAflux.global_optimizer_mutation`](@ref).
+Basically a thin wrapper for `global_optimizer_mutation`.
 
 Useful for applying the same mutation to every candidate, e.g. global learning rate schedules which all models follow.
 """
