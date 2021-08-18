@@ -222,7 +222,7 @@ const FluxOptimizer = Flux.Optimise.AbstractOptimiser
 
 
 """
-    struct ShieldedOpt{O}
+    ShieldedOpt{O} <: Flux.Optimise.AbstractOptimiser 
     ShieldedOpt(o)
 
 Shields `o` from mutation by `OptimizerMutation`.
@@ -272,7 +272,7 @@ cleanopt!(o::Flux.Optimiser) = (foreach(cleanopt!, o.os); return o)
 
 
 """
-    struct Singleton{T}
+    Singleton{T}
     Singleton(val::T)
 
 Wrapper for `val` which prevents it from being copied if the wrapping singleton is copied using `copy` and `deepcopy`.

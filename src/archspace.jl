@@ -75,8 +75,12 @@ struct ZeroWeightInit <: AbstractWeightInit end
 
 """
     BaseLayerSpace
+    BaseLayerSpace(outsizes, activationfunctions) 
 
 Search space for basic attributes common to all layers.
+
+`outsizes` is the output sizes (number of neurons).
+`activationfunctions` is the activation functions.
 """
 struct BaseLayerSpace{T}
     nouts::AbstractParSpace{1, <:Integer}
@@ -89,10 +93,12 @@ activation(s::BaseLayerSpace, rng=rng_default) = s.acts(rng)
 
 """
     SingletonParSpace{N, T} <:AbstractParSpace{N, T}
+    SingletonParSpace(p::T...)
+    Singleton2DParSpace(p::T)
 
 Singleton search space. Has exactly one value per dimension.
 
-`Singleton2DParSpace` is a convenience constructor for a 2D `SingletonParSpace` of `[p, p]``.
+`Singleton2DParSpace` is a convenience constructor for a 2D `SingletonParSpace` of `[p, p]`.
 """
 struct SingletonParSpace{N, T} <:AbstractParSpace{N, T}
     p::NTuple{N, T}
@@ -126,6 +132,8 @@ ParSpace2D(p::AbstractVector) = ParSpace(p,p)
 
 """
     CoupledParSpace{N, T} <:AbstractParSpace{N, T}
+    CoupledParSpace(p::AbstractParSpace{1, T}, N) 
+    CoupledParSpace(p::AbstractVector{T}, N)
 
 Search space for parameters.
 
@@ -153,8 +161,9 @@ parspaceof(::Val{N}, x::NTuple{N, AbstractVector}) where N = ParSpace(x...)
 
 """
     NamedLayerSpace <:AbstractLayerSpace
+    NamedLayerSpace(name::String, s::AbstractLayerSpace)
 
-Adds a `name` to an `AbstractLayerSpace`
+Adds a `name` to an `AbstractLayerSpace`.
 """
 struct NamedLayerSpace <:AbstractLayerSpace
     name::String
@@ -221,8 +230,6 @@ denseinitW(::ZeroWeightInit) = (init = zeros,)
     ConvSpace{N}(;outsizes, kernelsizes, activations=identity, strides=1, dilations=1, paddings=SamePad(), convfuns=Conv)
     ConvSpace(convfun::AbstractParSpace, base::BaseLayerSpace, ks::AbstractParSpace, stride::AbstractParSpace, dilation::AbstractParSpace, pad)
 
-
-
 Search space of `N`D convolutional layers.
 
 Constructor with keyword arguments takes scalars, vectors or `AbstractParSpace`s as inputs.
@@ -262,6 +269,8 @@ convinitW(::ZeroWeightInit) = (init=(args...) -> zeros(Float32,args...),)
 
 """
     BatchNormSpace <:AbstractLayerSpace
+    BatchNormSpace(activationfunctions...)
+    BatchNormSpace(activationfunctions::AbstractVector) 
 
 Search space of BatchNorm layers.
 """
@@ -305,8 +314,11 @@ end
 default_logging() = logged(level=Logging.Debug)
 """
     LayerVertexConf
+    LayerVertexConf(layerfun, traitfun)
 
-Generic configuration template for computation graph vertices.
+Generic configuration template for computation graph vertices with `Flux` layers as their computation.
+
+Both `layerfun` and `traitfun` are forwarded to `NaiveNASflux.fluxvertex`.    
 
 Intention is to make it easy to add logging, validation and pruning metrics in an uniform way.
 """
@@ -335,8 +347,11 @@ Base.Broadcast.broadcastable(c::LayerVertexConf) = Ref(c)
 
 """
     ConcConf
+    ConcConf(layerfun, traitfun)
 
 Generic configuration template for concatenation of vertex outputs.
+
+Both `layerfun` and `traitfun` are forwarded to `NaiveNASflux.concat`.  
 """
 struct ConcConf{F, T}
     layerfun::F
@@ -389,8 +404,11 @@ end
 
 """
     VertexSpace <:AbstractArchSpace
+    VertexSpace([conf::LayerVertexConf], lspace::AbstractLayerSpace)
 
-Search space of one `AbstractVertex` from one `AbstractLayerSpace`.
+Search space of one `AbstractVertex` with compuation drawn from `lspace`.
+
+`conf` is used to attach other metadata to the vertex. See [`LayerVertexConf`](@ref).
 """
 struct VertexSpace <:AbstractArchSpace
     conf::LayerVertexConf
@@ -414,8 +432,12 @@ struct NoOpArchSpace <: AbstractArchSpace end
 
 """
     ArchSpace <:AbstractArchSpace
+    ArchSpace(ss::AbstractLayerSpace...; conf=LayerVertexConf()) 
+    ArchSpace(ss::AbstractArchSpace...) 
 
 Search space of `AbstractArchSpace`s.
+
+Draws one vertex from one of `ss` (uniformly selected) when invoked.
 """
 struct ArchSpace <:AbstractArchSpace
     s::AbstractParSpace{1, <:AbstractArchSpace}
@@ -449,12 +471,12 @@ end
 
 """
     RepeatArchSpace <:AbstractArchSpace
+    RepeatArchSpace(s::AbstractArchSpace, r::Integer) 
+    RepeatArchSpace(s::AbstractArchSpace, r::AbstractVector{<:Integer}) 
 
-Search space of repetitions of another `AbstractArchSpace`.
+Search space of repetitions of another `AbstractArchSpace` where number of repetitions is uniformly drawn from `r`.
 
-Output of each generated candidate is input to next and the last is returned.
-
-Number of repetitions comes from an `AbstractParSpace`.
+Output of each generated candidate is input to next and the last output is returned.
 """
 struct RepeatArchSpace <:AbstractArchSpace
     s::AbstractArchSpace
@@ -472,6 +494,7 @@ repeatinitW(wi::PartialIdentityWeightInit, invertex, ::Missing) = wi
 
 """
     ArchSpaceChain <:AbstractArchSpace
+    ArchSpaceChain(s::AbstractArchSpace...) 
 
 Chains multiple `AbstractArchSpace`s after each other.
 
@@ -487,8 +510,10 @@ ArchSpaceChain(s::AbstractArchSpace...) = ArchSpaceChain(collect(s))
 
 """
     ForkArchSpace <:AbstractArchSpace
+    ForkArchSpace(s::AbstractArchSpace, r::Integer; conf=ConcConf())
+    ForkArchSpace(s::AbstractArchSpace, r::AbstractVector{<:Integer}; conf=ConcConf()) 
 
-Search space of parallel paths from another `AbstractArchSpace`.
+Search space of parallel paths from another `AbstractArchSpace` where number of paths is uniformly drawn from `r`.
 
 Input vertex is input to a number of paths drawn from an `AbstractParSpace`. Concatenation of paths is output.
 """
@@ -532,10 +557,13 @@ forkinitW(wi::IdentityWeightInit, outsizes, i) = PartialIdentityWeightInit(mapre
 
 """
     ResidualArchSpace <:AbstractArchSpace
+    ResidualArchSpace(s::AbstractArchSpace, [conf::VertexConf])
 
 Turns the wrapped `AbstractArchSpace` into a residual.
 
 Return `x = y + in` where `y` is drawn from the wrapped `AbstractArchSpace` when invoked with `in` as input vertex.
+
+`conf` is used to decorate trait and wrap the computation (e.g in an `ActivationContribution`). 
 """
 struct ResidualArchSpace <:AbstractArchSpace
     s::AbstractArchSpace
