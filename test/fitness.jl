@@ -30,9 +30,8 @@
         end
         
         wascpumapped = false
-        function Flux.loadparams!(x::MockCandidate{Val{:GpuTest}}, ps) 
+        function NaiveGAflux.transferstate!(::MockCandidate{Val{:GpuTest}}, ::MockCandidate{Val{:GpuTest}}) 
             wascpumapped = true
-            return x
         end
 
         @test fitness(GpuFitness(MockFitness(4)), MockCandidate(label)) == 4

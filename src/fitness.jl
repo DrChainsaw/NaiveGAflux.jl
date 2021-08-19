@@ -4,7 +4,7 @@
 Compute the fitness metric `f` for candidate `c`.
 """
 function fitness(f::AbstractFitness, c::AbstractCandidate)
-    hold!(c)
+    hold!(c) # Note: This transfer over to any potential fmapped candidates, e.g. in GpuFitness
     val = _fitness(f, c)
     release!(c)
     return val
@@ -71,12 +71,30 @@ function _fitness(s::GpuFitness, c::AbstractCandidate)
     cgpu = gpu(c)
     fitval = _fitness(s.f, cgpu)
     # In case parameters changed. Would like to do this some other way, perhaps return the candidate too, or move training to evolve...
-    Flux.loadparams!(c, cpu(collect(params(cgpu)))) # Can't load CuArray into a normal array
+    transferstate!(c, cpu(cgpu)) # Can't load CuArray into a normal array
     cgpu = nothing # So we can reclaim the memory
     # Should not be needed according to CUDA docs, but programs seems to hang every now and then if not done.
+    # Should revisit every now and then to see if things have changed...
     gpu_gc()
     return fitval
 end
+
+function transferstate!(to, from)
+    tocs, _ = functor(to)
+    fromcs, _ = functor(from)
+    @assert length(tocs) == length(fromcs) "Mismatched number of children for $to vs $from"
+    for (toc, fromc) in zip(tocs, fromcs)
+        transferstate!(toc, fromc)
+    end
+end
+
+function transferstate!(to::T, from::T) where T <: NaiveNASflux.AbstractMutableComp
+    for fn in fieldnames(T)
+        setfield!(to, fn, getfield(from, fn))
+    end
+end
+transferstate!(to::AbstractArray, from::AbstractArray) = copyto!(to, from)
+
 
 const gpu_gc = if CUDA.functional()
     function()
