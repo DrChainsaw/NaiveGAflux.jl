@@ -65,6 +65,7 @@ end
 
 if get(ENV, "CI", nothing) == "true"
     deploydocs(
-        repo = "github.com/DrChainsaw/NaiveGAflux.jl.git"
+        repo = "github.com/DrChainsaw/NaiveGAflux.jl.git",
+        push_preview=true
     )
 end
