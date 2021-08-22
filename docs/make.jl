@@ -1,6 +1,3 @@
-import Pkg
-Pkg.update()
-
 using Documenter, Literate, NaiveGAflux, NaiveGAflux.AutoFlux, NaiveGAflux.AutoFlux.ImageClassification
 
 const nndir = joinpath(dirname(pathof(NaiveGAflux)), "..")
