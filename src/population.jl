@@ -51,6 +51,16 @@ fitness(p::Population, f::AbstractFitness) = Population(p.gen, map(wrappedpop(p)
     FittedCandidate(cand, f, p.gen)
 end)
 evolve(e::AbstractEvolution, p::Population) = Population(p.gen + 1, evolve(e, wrappedpop(p)))
+
+"""
+    evolve(e::AbstractEvolution, f::AbstractFitness, p::Population)
+
+Return a new population fitted by `f` and evolved by `e`.
+
+This is done by first replacing each member of `p` with a [`FittedCandidate`](@ref) with fitness computed by `f`.
+
+Then evolve `population` into a new population using `e`. New population may or may not contain same individuals as before.
+"""
 evolve(e::AbstractEvolution, f::AbstractFitness, p::Population) = evolve(e, fitness(p, f))
 
 

@@ -81,7 +81,7 @@ modelAnew3, modelBnew3 = crossoverall((modelA, modelB))
 @test name.(vertices(modelBnew3)) ==  ["B.in", "B.l3", "B.l1", "B.l2", "A.l1", "A.l3", "B.l4"] 
 
 # As advertised above, crossovers interop with most mutation utilities, just remember that input is a tuple for things which require a callback.
-# Perform the swapping operation with a 30% probability for each valid vertex pair.
+# Perform the swapping operation with a 30% probability for each valid vertex pair and log which vertices are being swapped.
 crossoversome = VertexCrossover(
                     MutationProbability(
                         LogMutation(

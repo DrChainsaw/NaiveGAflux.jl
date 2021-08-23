@@ -16,7 +16,7 @@ ps1d = ParSpace([2,4,6,10])
 @test ps1d() == 6
 @test ps1d() == 10
 
-# Possible to supply another rng than the default one.
+# Possible to supply a random number generator.
 @test ps1d(MersenneTwister(0)) == 4
 
 # ParSpaces can be of any dimension and type.

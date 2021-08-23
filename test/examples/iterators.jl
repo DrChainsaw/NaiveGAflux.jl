@@ -3,7 +3,7 @@ md"""
 
 While not part of the scope of this package, some simple utilities for iterating over data sets is provided.
 
-The only iterator which is in some sense special for this package is `RepeatPartitionIterator` which produces
+The only iterator which is in some sense special for this package is [`RepeatPartitionIterator`](@ref) which produces
 iterators over a subset of its wrapped iterator. This is useful when one wants to ensure that all models see 
 the same (possibly randomly augmented) data in the same order. Note that this is not certain to be the best 
 strategy for finding good models for a given data set and this package does (intentionally) blur the lines a 

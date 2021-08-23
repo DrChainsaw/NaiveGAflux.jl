@@ -29,7 +29,7 @@ population = Population(CandidateModel.(models))
 @test generation(population) == 1
 
 # #### Step 2: Set up fitness function:
-# Train model for one epoch using datasettrain, then measure accuracy on datasetvalidate.
+# Train model for one epoch using `datasettrain`, then measure accuracy on `datasetvalidate`.
 # We use dummy data here just to make stuff run.
 onehot(y) = Flux.onehotbatch(y, 1:nlabels)
 batchsize = 4
@@ -57,7 +57,9 @@ addlayer = mp(AddVertexMutation(layerspace), 0.4)
 remlayer = mp(RemoveVertexMutation(), 0.4)
 mutation = MutationChain(changesize, remlayer, addlayer)
 
-# Selection: The two best models are not changed, the other three are mutated using mutation defined above.
+# Selection: The two best models are not changed, then create three new models by 
+# applying the mutations above to three of the five models with higher fitness 
+# giving higher probability of being selected. 
 elites = EliteSelection(2)
 mutate = SusSelection(3, EvolveCandidates(evolvemodel(mutation)))
 selection = CombinedEvolution(elites, mutate)
@@ -66,7 +68,7 @@ selection = CombinedEvolution(elites, mutate)
 newpopulation = evolve(selection, fitnessfunction, population)
 @test newpopulation != population
 @test generation(newpopulation) == 2
-# Repeat step 4 until a model with the desired fitness is found.
+# Repeat until a model with the desired fitness is found.
 newnewpopulation = evolve(selection, fitnessfunction, newpopulation)
 @test newnewpopulation != newpopulation
 @test generation(newnewpopulation) == 3
