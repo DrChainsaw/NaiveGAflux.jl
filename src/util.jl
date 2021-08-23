@@ -4,12 +4,12 @@ Represents a probability that something (typically mutation) will happen.
 
 Possible to specify RNG implementation. If not specified, `rng_default` will be used.
 """
-struct Probability
-    p::Real
-    rng::AbstractRNG
-    function Probability(p::Real, rng)
+struct Probability{P<:Real, R<:AbstractRNG}
+    p::P
+    rng::R
+    function Probability(p::P, rng::R) where {P, R}
          @assert 0 <= p <= 1
-         return new(p, rng)
+         return new{P, R}(p, rng)
     end
 end
 Probability(p::Real) = Probability(p, rng_default)
@@ -47,8 +47,9 @@ Note that vertex might still be modified if an adjacent vertex is mutated in a w
 struct MutationShield{T<:MutationTrait, S} <:DecoratingTrait
     t::T
     allowed::S
-    MutationShield(t::T, allowed...) where T = new{T, typeof(allowed)}(t, allowed)
+    MutationShield(t::T, allowed::Tuple) where T = new{T, typeof(allowed)}(t, allowed)
 end
+MutationShield(t, allowed...) = MutationShield(t, allowed)
 
 NaiveNASlib.base(t::MutationShield) = t.t
 allow_mutation(v::AbstractVertex, ms...) = allow_mutation(trait(v), ms...)
@@ -56,7 +57,8 @@ allow_mutation(t::DecoratingTrait, ms...) = allow_mutation(base(t), ms...)
 allow_mutation(::MutationTrait, ms...) = true
 allow_mutation(::Immutable, ms...) = false
 allow_mutation(t::MutationShield, ms...) = !isempty(ms) && all(mt -> any(amt -> mt <: amt, t.allowed), typeof.(mutationleaves(ms)))
-NaiveNASlib.clone(t::MutationShield;cf=clone) = MutationShield(cf(base(t); cf=cf), t.allowed...)
+
+@functor MutationShield
 
 """
     AbstractVertexSelection
@@ -109,10 +111,10 @@ Enables calling `apply(v)` for an `AbstractVertex v` which has this trait if 'pr
 
 Motivating use case is to have a way to remove vertices which have ended up as noops, e.g. element wise and concatenation vertices with a single input or identity activation functions.
 """
-struct ApplyIf <: DecoratingTrait
-    predicate::Function
-    apply::Function
-    base::MutationTrait
+struct ApplyIf{P, A, M<:MutationTrait} <: DecoratingTrait
+    predicate::P
+    apply::A
+    base::M
 end
 RemoveIfSingleInput(t) = ApplyIf(v -> length(inputs(v)) == 1, remove!, t)
 NaiveNASlib.base(t::ApplyIf) = t.base
@@ -123,15 +125,14 @@ check_apply(t::DecoratingTrait, v) = check_apply(base(t), v)
 check_apply(t::ApplyIf, v) = t.predicate(v) && t.apply(v)
 function check_apply(t, v) end
 
-NaiveNASlib.clone(t::ApplyIf;cf=clone) = ApplyIf(cf(t.predicate, cf=cf), cf(t.apply, cf=cf), cf(base(t), cf=cf))
-
+@functor ApplyIf
 
 """
     PersistentArray{T, N} <: AbstractArray{T, N}
     PersistentArray(savedir::String, nr::Integer, generator;suffix=".jls")
     PersistentArray(savedir::String, suffix::String, data::Array)
 
-Simple persistent array. Can be created from serialized data and can be asked to persist its elements.
+Simple persistent array. Can be created from serialized data and can be asked to persist its elements using [`persist`](@ref).
 
 Note that once initialized, the array is not backed by the serialized data. Adding/deleting files is not reflected in data and vice versa.
 """
@@ -148,6 +149,11 @@ function PersistentArray(savedir::String, nr::Integer, generator;suffix=".jls")
     end
     return PersistentArray(savedir, suffix, data)
 end
+"""
+    persist(a::PersistentArray) 
+
+Serializes the elements of `a`, one file per element.
+"""
 function persist(a::PersistentArray)
     mkpath(a.savedir)
     for (i, v) in enumerate(a)
@@ -207,18 +213,24 @@ function(r::BoundedRandomWalk)(x...)
     return y
  end
 
+ """
+    FluxOptimizer
+
+Alias for Flux.Optimise.AbstractOptimiser
+"""
+const FluxOptimizer = Flux.Optimise.AbstractOptimiser 
+
 
 """
-    struct ShieldedOpt{O}
+    ShieldedOpt{O} <: Flux.Optimise.AbstractOptimiser 
     ShieldedOpt(o)
 
 Shields `o` from mutation by `OptimizerMutation`.
 """
-struct ShieldedOpt{O}
+struct ShieldedOpt{O<:FluxOptimizer} <: FluxOptimizer
     opt::O
 end
 Flux.Optimise.apply!(o::ShieldedOpt, args...) = Flux.Optimise.apply!(o.opt, args...)
-
 
 """
     mergeopts(t::Type{T}, os...) where T
@@ -238,19 +250,6 @@ mergeopts(os...) = first(@set os[1].eta = (prod(learningrate.(os))))
 mergeopts(os::ShieldedOpt{T}...) where T = ShieldedOpt(mergeopts(map(o -> o.opt, os)...))
 mergeopts(os::WeightDecay...) = WeightDecay(mapreduce(o -> o.wd, *, os))
 
-"""
-    struct FluxOptimizer
-
-Trait to indicate something is a Flux optimizer.
-"""
-struct FluxOptimizer end
-
-"""
-    opttype(o::T)
-
-Return `FluxOptimizer()` if `T` is a Flux optimizer, nothing otherwise.
-"""
-opttype(o::T) where T = hasmethod(Flux.Optimise.apply!, (T, Any, Any)) ? FluxOptimizer() : nothing
 
 """
     optmap(fopt, x, felse=identity)
@@ -261,13 +260,19 @@ Return `fopt(x)` if `x` is an optimizer, else return `felse(x)`.
 Call without x to return `x -> optmap(fopt, x, felse)`
 """
 optmap(fopt, felse=identity) = x -> optmap(fopt, x, felse)
-optmap(fopt, x, felse) = optmap(opttype(x), fopt, x, felse)
-optmap(n, fopt, x, felse) = felse(x)
-optmap(::FluxOptimizer, fopt, o, felse) = fopt(o)
+optmap(fopt, x, felse) = felse(x)
+optmap(fopt, o::FluxOptimizer, felse) = fopt(o)
+
+function clearstate!(s) end
+clearstate!(s::AbstractDict) = empty!(s)
+
+cleanopt!(o::T) where T = (foreach(fn -> clearstate!(getfield(o, fn)), fieldnames(T)); return o)
+cleanopt!(o::ShieldedOpt) = (cleanopt!(o.opt); return o)
+cleanopt!(o::Flux.Optimiser) = (foreach(cleanopt!, o.os); return o)
 
 
 """
-    struct Singleton{T}
+    Singleton{T}
     Singleton(val::T)
 
 Wrapper for `val` which prevents it from being copied if the wrapping singleton is copied using `copy` and `deepcopy`.
@@ -334,11 +339,6 @@ GlobalPool(PT) = GlobalPool{PT}()
 
 NaiveNASflux.layertype(gp::GlobalPool) = gp
 NaiveNASflux.layer(gp::GlobalPool) = gp
-NaiveNASlib.minΔninfactor(::GlobalPool) = 1
-NaiveNASlib.minΔnoutfactor(::GlobalPool) = 1
-function NaiveNASlib.mutate_inputs(::GlobalPool, args...) end
-function NaiveNASlib.mutate_outputs(::GlobalPool, args...) end
-
 
 """
     ninputs(model)

@@ -163,8 +163,16 @@
         @test nout(v) == 3
     end
 
+    @testset "NoOpArchSpace" begin
+        inpt = inputvertex("in", 4)
+        @test NoOpArchSpace()(inpt) === inpt  
+    end
+
     @testset "ArchSpace" begin
         inpt = inputvertex("in", 2)
+
+        @test ArchSpace(NoOpArchSpace())(inpt) === inpt  
+
         @testset "Singleton Dense" begin
             bs = BaseLayerSpace(3, elu)
             space = ArchSpace(DenseSpace(bs))
@@ -188,36 +196,51 @@
             space = ArchSpace(ConvSpace{2}(outsizes=3, kernelsizes=2:5), BatchNormSpace(relu), PoolSpace{2}(windowsizes=2))
 
             v = space("conv", inpt, rng)
-            @test layertype(v) == FluxConv{2}()
+            @test layer(v) isa Flux.Conv
             @test nin(v) == [2]
             @test nout(v) == 3
             @test name(v) == "conv"
 
             rng.ind = 1
             v = space("bn", inpt, rng)
-            @test layertype(v) == FluxBatchNorm()
+            @test layer(v) isa BatchNorm
             @test nin(v) == [2]
             @test nout(v) == 2
             @test name(v) == "bn"
         end
     end
 
+    @testset "ConditionalArchSpace" begin
+        s1 = ArchSpace(DenseSpace(1, identity))
+        pred = v -> nout(v) > 2
+
+        v1 = inputvertex("in", 3)
+        @test layer(ConditionalArchSpace(pred, s1)(v1)) isa Dense
+
+        v2 = inputvertex("in", 1)
+        @test ConditionalArchSpace(pred, s1)(v2) === v2
+
+        s2 = ArchSpace(ConvSpace{2}(outsizes=1, kernelsizes=1))
+        @test layer(ConditionalArchSpace(pred, s1,s2)(v1)) isa Dense
+        @test layer(ConditionalArchSpace(pred, s1,s2)(v2)) isa Conv
+    end
+
     @testset "RepeatArchSpace" begin
         space = RepeatArchSpace(VertexSpace(BatchNormSpace(relu)), 3)
         inpt = inputvertex("in", 3)
         v = space(inpt)
-        @test nv(CompGraph(inpt, v)) == 4
+        @test nvertices(CompGraph(inpt, v)) == 4
 
         v = space("test", inpt)
-        @test name.(NaiveNASlib.flatten(v)) == ["in", "test.1", "test.2", "test.3"]
+        @test name.(ancestors(v)) == ["in", "test.1", "test.2", "test.3"]
 
         space = RepeatArchSpace(VertexSpace(BatchNormSpace(relu)), [2,5])
         rng = SeqRng()
         v = space(inpt, rng)
-        @test nv(CompGraph(inpt, v)) == 3
+        @test nvertices(CompGraph(inpt, v)) == 3
 
         v = space(inpt, rng)
-        @test nv(CompGraph(inpt, v)) == 6
+        @test nvertices(CompGraph(inpt, v)) == 6
 
         space = RepeatArchSpace(VertexSpace(DenseSpace(3, relu)), 2)
         v = space(inpt, outsize=4)
@@ -225,7 +248,7 @@
         @test nin(v) == [4]
 
         v = space("test", inpt, outsize=4)
-        @test name.(NaiveNASlib.flatten(v)) == ["in", "test.1", "test.2"]
+        @test name.(ancestors(v)) == ["in", "test.1", "test.2"]
         @test nout(v) == 4
         @test nin(v) == [4]
 
@@ -238,24 +261,24 @@
         inpt = inputvertex("in", 3)
 
         v = space(inpt)
-        @test nv(CompGraph(inpt, v)) == 3
+        @test nvertices(CompGraph(inpt, v)) == 3
         @test nout(v) == 3
         @test nin(v) == [2]
 
         v = space("v", inpt)
-        @test name.(NaiveNASlib.flatten(v)) == ["in", "v.1", "v.2"]
-        @test nv(CompGraph(inpt, v)) == 3
+        @test name.(ancestors(v)) == ["in", "v.1", "v.2"]
+        @test nvertices(CompGraph(inpt, v)) == 3
         @test nout(v) == 3
         @test nin(v) == [2]
 
         v = space(inpt, outsize=4)
-        @test nv(CompGraph(inpt, v)) == 3
+        @test nvertices(CompGraph(inpt, v)) == 3
         @test nout(v) == 4
         @test nin(v) == [4]
 
         v = space("v", inpt, outsize=4)
-        @test name.(NaiveNASlib.flatten(v)) == ["in", "v.1", "v.2"]
-        @test nv(CompGraph(inpt, v)) == 3
+        @test name.(ancestors(v)) == ["in", "v.1", "v.2"]
+        @test nvertices(CompGraph(inpt, v)) == 3
         @test nout(v) == 4
         @test nin(v) == [4]
     end
@@ -263,7 +286,7 @@
     @testset "ForkArchSpace" begin
         # No concatenation when only one path is rolled
         space = ForkArchSpace(VertexSpace(BatchNormSpace(relu)), 1)
-        inpt = inputvertex("in", 3, FluxDense())
+        inpt = denseinputvertex("in", 3)
         v = space(inpt)
         @test inputs(v) == [inpt]
 
@@ -272,7 +295,7 @@
         @test length(inputs(v)) == 3
 
         v = space("test", inpt)
-        @test name.(NaiveNASlib.flatten(v)) == ["in", "test.path1", "test.path2", "test.path3", "test.cat"]
+        @test name.(ancestors(v)) == ["in", "test.path1", "test.path2", "test.path3", "test.cat"]
 
         space = ForkArchSpace(VertexSpace(BatchNormSpace(relu)), [2,5])
         rng = SeqRng()
@@ -313,13 +336,13 @@
         v = space(inpt)
         @test nin(v) == [4, 4]
         @test nout(v) == 4
-        @test layertype(inputs(v)[2]) == FluxDense()
+        @test layer(inputs(v)[2]) isa Dense
 
         v = space("v", inpt)
-        @test name.(NaiveNASlib.flatten(v)) == ["in", "v.res", "v.add"]
+        @test name.(ancestors(v)) == ["in", "v.res", "v.add"]
         @test nin(v) == [4, 4]
         @test nout(v) == 4
-        @test layertype(inputs(v)[2]) == FluxDense()
+        @test layer(inputs(v)[2]) isa Dense
     end
 
     @testset "FunctionSpace" begin

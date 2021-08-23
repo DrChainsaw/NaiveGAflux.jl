@@ -5,9 +5,13 @@
 
 Applies `crossover` to each pair of selected vertices from two `CompGraph`s.
 
-Vertices to select from the first graph is determined by `selection` (default [`FilterMutationAllowed`](@ref) while `pairgen` (default [`default_pairgen`](@ref)) determines how to pair the selected vertices with vertices in the second graph.
+Vertices to select from the first graph is determined by `selection` (default `FilterMutationAllowed`) while `pairgen` 
+(default [`default_pairgen`](@ref)) determines how to pair the selected vertices with vertices in the second graph.
 
-The default pairing function will try to pair vertices which have similar relative topologial order within their graphs. For instance, if the first graph has 5 vertices and the second has 10, it will pair vertex 2 from the first graph with vertex 4 from the second (assuming they are of compatible type). The parameter `deviation` can be used to inject noise in this process so that the pairing will randomly deviate where the magnitude of `deviation` sets how much and how often.
+The default pairing function will try to pair vertices which have similar relative topologial order within their graphs. 
+For instance, if the first graph has 5 vertices and the second has 10, it will pair vertex 2 from the first graph with
+vertex 4 from the second (assuming they are of compatible type). The parameter `deviation` can be used to inject noise
+in this process so that the pairing will randomly deviate where the magnitude of `deviation` sets how much and how often.
 
 See also [`crossover`](@ref).
 """
@@ -25,16 +29,19 @@ VertexCrossover(crossover, deviation::Number; selection=FilterMutationAllowed())
 """
     CrossoverSwap{F1, F2, F3, S} <: AbstractCrossover{<:AbstractVertex}
     CrossoverSwap(pairgen, mergefun, strategy, selection)
-    CrossoverSwap(;pairgen=default_inputs_pairgen, mergefun=default_mergefun, strategy=default_crossoverswap_strategy, selection=FilterMutationAllowed()) = CrossoverSwap(pairgen, mergefun, selection)
-    CrossoverSwap(deviation::Number; mergefun=default_mergefun, strategy=default_crossoverswap_strategy, selection=FilterMutationAllowed()) = CrossoverSwap((vs1,vs2) -> default_inputs_pairgen(vs1, vs2, deviation), mergefun, strategy, selection)
+    CrossoverSwap(;pairgen=default_inputs_pairgen, mergefun=default_mergefun, strategy=default_crossoverswap_strategy, selection=FilterMutationAllowed())
+    CrossoverSwap(deviation::Number; mergefun=default_mergefun, strategy=default_crossoverswap_strategy, selection=FilterMutationAllowed()) 
 
 Swap out a part of one graph with a part of another graph, making sure that the graphs do not become connected in the process.
 
-More concretely, swaps a set of consecutive vertices `vs1` set of consecutive vertices `vs2` returning the swapped `v1` and `v2` respectively if successful or `v1` and `v2` if not.
+More concretely, swaps a set of consecutive vertices `vs1` set of consecutive vertices `vs2` returning the swapped `v1` and
+`v2` respectively if successful or `v1` and `v2` if not.
 
-The last vertex in `vs1` is `v1` and the last vertex of `vs2` is `v2`. The other members of `vs1` and `vs2` are determined by `pairgen` (default [`default_inputs_pairgen`](@ref)) and `selection` (default [`FilterMutationAllowed`](@ref)).
+The last vertex in `vs1` is `v1` and the last vertex of `vs2` is `v2`. The other members of `vs1` and `vs2` are determined 
+by `pairgen` (default [`default_inputs_pairgen`](@ref)) and `selection` (default `FilterMutationAllowed`).
 
-If a vertex `v` is not capable of having multiple inputs (determined by `singleinput(v) == true`), `vm = mergefun(vi)` where `vi` is the input to `v` will be used instead of `v` and `v` will be added as the output of `vm` if necessary.
+If a vertex `v` is not capable of having multiple inputs (determined by `singleinput(v) == true`), `vm = mergefun(vi)` where 
+`vi` is the input to `v` will be used instead of `v` and `v` will be added as the output of `vm` if necessary.
 
 See also [`crossoverswap`](@ref).
 
@@ -132,7 +139,7 @@ end
 """
     default_inputs_pairgen(vs1, vs2, args...;kwargs...)
 
-Same as [´default_pairgen`](@ref) except it also ensures that shape changes of feature maps are consistent between the pairs.
+Same as [`default_pairgen`](@ref) except it also ensures that shape changes of feature maps are consistent between the pairs.
 
 Feature map here refers to the shape of inputs to convolutional-type layers (Conv, Pooling) in dimensions other than the batch dimension or the channel dimension.
 
@@ -183,8 +190,7 @@ function crossoverswap(v1, v2; pairgen=default_inputs_pairgen, selection=FilterM
     # To mitigate this a backup copy is used. It is however not easy to backup a single vertex as it is connected to all other vertices in the graph, meaning that the whole graph must be copied. Sigh...
     function copyvertex(v)
         g = regraph(v)
-        # Would like to just shallow-copy the graph (i.e copy mutation metadata, but not actual weights), but crossoverswap! needs to apply the mutation after each step in order to increase chances of success, meaning that we risk corrupting the input vertices if operation fails.
-        vs = vertices(copy(g))
+        vs = vertices(deepcopy(g))
         return vs[indexin([v], vertices(g))][], filter(vv -> isempty(inputs(vv)), vs)
     end
     v1c, ivs1 = copyvertex(v1)
@@ -222,7 +228,7 @@ Vertices must come from different graphs.
 
 This operation can fail, leaving one or both graphs in a corrupted state where evaluating them results in an error (typically a `DimensionMismatch` error).
 
-Return a tuple `(success1, success2)` where `success1` is true if `vin2` and `vou2` was successfully swapped in to the graph which previously contained `vin1` and `vout1` and vice versa for `success2`.
+Return a tuple `(success1, success2)` where `success1` is true if `vin2` and `vout2` was successfully swapped in to the graph which previously contained `vin1` and `vout1` and vice versa for `success2`.
 """
 crossoverswap!(v1::AbstractVertex, v2::AbstractVertex; kwargs...) = crossoverswap!(v1,v1,v2,v2; kwargs...)
 
@@ -235,9 +241,11 @@ function crossoverswap!(vin1::AbstractVertex, vout1::AbstractVertex, vin2::Abstr
     i1, o1 = stripedges!(vin1, vout1)
     i2, o2 = stripedges!(vin2, vout2)
 
-    # success1 mapped to vin2 and vout2 looks backwards, but remember that vin2 and vout2 are the new guys being inserted in everything connected to i1 and o1
-    # Returning success status instead of acting as a noop at failure is not very nice, but I could not come up with a way which was 100% to revert a botched attempt and making a backup of vertices before doing any changes is not easy to deal with for the receiver either
-
+    # success1 mapped to vin2 and vout2 looks backwards, but remember that vin2 and vout2 are the new guys being inserted 
+    # in everything connected to i1 and o1
+    # Returning success status instead of acting as a noop at failure is not very nice, but I could not come up with a way 
+    # which was 100% to revert a botched attempt and making a backup of vertices before doing any changes is not easy to deal 
+    # with for the receiver either
     success1 = addinedges!(vin2, i1, strategy)
     success1 &= success1 && addoutedges!(vout2, o1, strategy)
 
@@ -263,23 +271,45 @@ function check_singleinput!(v1, v2, mergefun)
     return v1, v2
 end
 
-function default_crossoverswap_strategy(valuefun = default_neuronselect)
-    alignstrat = PostAlignJuMP(DefaultJuMPΔSizeStrategy(), fallback=FailAlignSizeWarn(FailAlignSizeNoOp(), (vin,vout) -> "Failed to align sizes for vertices $(name(vin)) and $(name(vout)) for crossover. Reverting..."))
-
-    # Must have exact solution as OutSelect{Relaxed} is allowed to change the nout/nin and this leads to size mismatches when vertices whose outputs are not part of all_in_Δsize_graph are changed.
-
-    # This could perhaps be considered a bug in NaiveNASlib, maybe even the same as https://github.com/DrChainsaw/NaiveNASlib.jl/issues/39 as it also here is unclear why nout is changed when there is no constraint in place (or?) and neuron value is guaranteed to be positive.
-    selectstrat = OutSelect{Exact}(LogSelectionFallback("Reverting...", NoutRevert())) |> TruncateInIndsToValid
-
-    return PostSelectOutputs(selectstrat, alignstrat, valuefun, FailAlignSizeNoOp()) |> PostApplyMutation
+function default_crossoverswap_strategy(utilityfun = NaiveNASlib.defaultutility)
+    warnfailalign = FailAlignSizeWarn(msgfun = (vin,vout) -> "Failed to align sizes for vertices $(name(vin)) and $(name(vout)) for crossover. Attempt aborted!")
+    alignstrat = TruncateInIndsToValid(WithUtilityFun(utilityfun, AlignNinToNout(;fallback=ΔSizeFailNoOp())))
+    return PostAlign(alignstrat, fallback=warnfailalign)
 end
+
+"""
+    CrossoverSizeDummy(startsize::Int)
+
+Struct whose only purpose is to follow and apply size changes from NaiveNASlib during the crossover operation.
+
+Acts a SizeInvariant operation except for when there are no inputs in which case the latest size seen is given.
+
+This is a bit of a hack as when we do crossover we will end up with size transparent vertices with zero inputs.
+NaiveNASlib thinks such things are invalid and does not attempt to handle them in any way.
+It turns out that in the context of what we are doing in crossover, the only issue is that we end up with a vertex of 
+zero size and this means that NaiveNASlib creates zero variables to determine the new size which in turn means that any
+size change is impossible. Just one single variable is enough though to create as many new neurons as needed, but we also
+need to reflect any size changes made by NaiveNASlib to satisfy its (optional) size validation check.
+"""
+mutable struct CrossoverSizeDummy
+    s::Int
+end
+NaiveNASlib.nin(s::CrossoverSizeDummy, t::NaiveNASlib.SizeInvariant, v::AbstractVertex) = isempty(inputs(v)) ? [s.s] : nin(identity, t, v)
+NaiveNASlib.nout(s::CrossoverSizeDummy, t::NaiveNASlib.SizeInvariant, v::AbstractVertex) = isempty(outputs(v)) ? s.s : nout(identity, t, v)
+NaiveNASlib.Δsize!(s::CrossoverSizeDummy, ins::AbstractVector, outs::AbstractVector) = s.s = length(outs)
+NaiveNASlib.defaultutility(s::CrossoverSizeDummy) = 0
+
+# Invariant vertex so that removal is trivial.
+# Using size absorbing dummies leads to selection of input neurons which dont exist (e.g. take input nr 243 from a layer with 16 inputs).
+# Using size stacking dummies leads to neurons being whiped out (e.g. when connecting a 16 neuron output to a 8 neuron input then all 8 are replaced with new neurons).
+# We must ensure size is non-zero though, or else NaiveNASlib will not generate any variables for setting the size
+dummyvertex(v) = invariantvertex(CrossoverSizeDummy(nout(v)), v; traitdecoration = named("$(name(v)).dummy"))
 
 stripedges!(vin, vout) = stripinedges!(vin) ,stripoutedges!(vout)
 
 function stripinedges!(v)
-    # Unfortunately remove_edge! also removes metadata, causing subsequent create_edge! to create new neurons instead of keeping old ones.
-
-    # Instead we create a dummyvertex between v and each of its inputs to act as a buffer and remove the edges from v's inputs to the dummyvertex. The dummyvertex will be removed by addinedges!
+    # We would like to just remove all input edges using remove_edge!, but this messes up the order of inputs to the outputs of v if v is not the only input
+    # Instead we add a  dummyvertex after each input to v and disconnect it (which preserves order as we know it has only one input)
     i = copy(inputs(v))
 
     for (ind, vi) in enumerate(i)
@@ -292,15 +322,10 @@ function stripinedges!(v)
         push!(outputs(dummy), v)
         deleteat!(outputs(vi), findall(vx -> vx == v, outputs(vi)))
 
-        remove_edge!(vi, dummy, strategy = NoSizeChange())
+        remove_edge!(vi, dummy, strategy = NoSizeChange())     
     end
     return i
 end
-
-# Invariant vertex so that removal is trivial.
-# Using size absorbing dummies leads to selection of input neurons which dont exist (e.g. take input nr 243 from a layer with 16 inputs).
-# Using size stacking dummies leads to neurons being whiped out (e.g. when connecting a 16 neuron output to a 8 neuron input then all 8 are replaced with new neurons).
-dummyvertex(v) = invariantvertex(ActivationContribution(identity), v; traitdecoration = named("$(name(v)).dummy"))
 
 function addinedges!(v, ins, strat = default_crossoverswap_strategy)
     dummies = copy(inputs(v))
@@ -318,7 +343,6 @@ function addinedges!(v, ins, strat = default_crossoverswap_strategy)
         vrm = pop!(dummies)
         remove!(vrm, RemoveStrategy(ConnectNone(), NoSizeChange()))
     end
-
     create_edge_strat = (i == length(ins) ? strat() : NoSizeChange() for i in eachindex(ins))
     success = map((iv, ov, s) -> create_edge!(iv, ov; strategy = s), ins, outs, create_edge_strat) |> all
     remove_dummy_strat = (i == length(dummies) ? strat() : NoSizeChange() for i in eachindex(dummies))
@@ -326,10 +350,8 @@ function addinedges!(v, ins, strat = default_crossoverswap_strategy)
 end
 
 function stripoutedges!(v)
-    # Similar story as stripinedges to avoid destroying the mutation metadata in the outputs, eventually
-    # causing neurons to be unnecessary recreated. Instead, we insert a new dummy neuron which acts as a buffer for
-    # which we don't care that it is corrupted as we will anyways remove it.
-    insert!(v, dummyvertex, reverse)
+    # Similar story as stripinedges to avoid messing with the input order for outputs to v.
+    insert!(v, dummyvertex, reverse) 
     dummy = outputs(v)[]
     remove_edge!(v, dummy; strategy = NoSizeChange())
     return dummy
@@ -383,7 +405,7 @@ Apply crossover between optimizers.
 
 Type of crossover is determined by `crossover` (default `optimizerswap`) which when given a a tuple of two optimizers will return the result of the crossover operation as a tuple of optimizers.
 
-Designed to be composable with most utility `AbstractMutation`s as well as with itself. For instance, the following seemingly odd construct will swap components of a [`Flux.Optimiser`](@ref) with a probability of `0.2` per component:
+Designed to be composable with most utility `AbstractMutation`s as well as with itself. For instance, the following seemingly odd construct will swap components of a `Flux.Optimiser` with a probability of `0.2` per component:
 
 `OptimizerCrossover(MutationProbability(OptimizerCrossover(), 0.2))`
 

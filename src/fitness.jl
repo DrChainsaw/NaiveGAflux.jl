@@ -1,11 +1,10 @@
-
-
 """
     fitness(f::AbstractFitness, c::AbstractCandidate)
 
 Compute the fitness metric `f` for candidate `c`.
 """
 function fitness(f::AbstractFitness, c::AbstractCandidate)
+    hold!(c) # Note: This transfer over to any potential fmapped candidates, e.g. in GpuFitness
     val = _fitness(f, c)
     release!(c)
     return val
@@ -41,7 +40,7 @@ function _fitness(lf::LogFitness, c::AbstractCandidate)
 end
 
 function default_fitnessmsgfun(i, c, f; level::Logging.LogLevel = Logging.Info)
-    nvs, nps = graph(c, g -> (nv(g), nparams(g)))
+    nvs, nps = model(g -> (nvertices(g), nparams(g)), c)
     if nps > 1e8
         nps = @sprintf "%5.2fG" (nps / 1e9)
     elseif nps > 1e5
@@ -60,22 +59,42 @@ end
 
 Move candidates to `gpu` before calculating their fitness according to `fitnesstrategy`.
 
-After fitness has been calculated the candidate is moved back to `cpu`.
+Copies parameters back to the given candidate after fitness have been computed to ensure that updated parameters from training are used. 
+Assumes canidates have parameters on `cpu` for that step.
 
 Note that if no `gpu` is available this should be a noop.
-
-Note: Only works for mutable models, such as `CompGraph` since it can't change the candidate itself. Consider using a `MutableCandidate` if dealing with immutable models.
 """
 struct GpuFitness{F} <: AbstractFitness
     f::F
 end
 function _fitness(s::GpuFitness, c::AbstractCandidate)
-    NaiveNASflux.forcemutation(graph(c)) # Optimization: If there is a LazyMutable somewhere, we want it to do its thing now so we don't end up copying the model to the GPU only to then trigger another copy when the mutations are applied.
-    fitval = _fitness(s.f, c |> gpu)
-    c |> cpu # As some parts, namely CompGraph change internal state when mapping to GPU
+    cgpu = gpu(c)
+    fitval = _fitness(s.f, cgpu)
+    # In case parameters changed. Would like to do this some other way, perhaps return the candidate too, or move training to evolve...
+    transferstate!(c, cpu(cgpu)) # Can't load CuArray into a normal array
+    cgpu = nothing # So we can reclaim the memory
+    # Should not be needed according to CUDA docs, but programs seems to hang every now and then if not done.
+    # Should revisit every now and then to see if things have changed...
     gpu_gc()
     return fitval
 end
+
+function transferstate!(to, from)
+    tocs, _ = functor(to)
+    fromcs, _ = functor(from)
+    @assert length(tocs) == length(fromcs) "Mismatched number of children for $to vs $from"
+    for (toc, fromc) in zip(tocs, fromcs)
+        transferstate!(toc, fromc)
+    end
+end
+
+function transferstate!(to::T, from::T) where T <: NaiveNASflux.AbstractMutableComp
+    for fn in fieldnames(T)
+        setfield!(to, fn, getfield(from, fn))
+    end
+end
+transferstate!(to::AbstractArray, from::AbstractArray) = copyto!(to, from)
+
 
 const gpu_gc = if CUDA.functional()
     function()
@@ -97,9 +116,9 @@ struct AccuracyFitness{D} <: AbstractFitness
 end
 function _fitness(s::AccuracyFitness, c::AbstractCandidate)
     acc,cnt = 0, 0
-    model = graph(c)
+    m = model(c)
     for (x,y) in s.dataset
-        correct = Flux.onecold(cpu(model(x))) .== Flux.onecold(cpu(y))
+        correct = Flux.onecold(cpu(m(x))) .== Flux.onecold(cpu(y))
         acc += sum(correct)
         cnt += length(correct)
     end
@@ -118,7 +137,7 @@ be used.
 
 The data used for training is the result of `itergeneration(dataiter, gen)` where `gen`
 is the generation number. This defaults to returning `dataiter` but allows for more 
-complex iterators such as [`StatefulGenerationIter`](@gen).
+complex iterators such as [`StatefulGenerationIter`](@ref).
 
 If the model loss is ever `NaN` or `Inf` the training will be stopped and `invalidfitness`
 will be returned without calculating the fitness using `fitstrat`. 
@@ -136,15 +155,15 @@ TrainThenFitness(;dataiter, defaultloss, defaultopt, fitstrat, invalidfitness=0.
 
 function _fitness(s::TrainThenFitness, c::AbstractCandidate)
     loss = lossfun(c; default=s.defaultloss)
-    model = graph(c)
+    m = model(c)
     o = opt(c; default=s.defaultopt)
-    ninput = ninputs(model)
+    ninput = ninputs(m)
     gen = generation(c; default=0)
 
     valid = let valid = true
         nanguard = function(data...)
             inputs = data[1:ninput]
-            ŷ = model(inputs...)
+            ŷ = m(inputs...)
 
             y = data[ninput+1:end]
             l = loss(ŷ, y...)   
@@ -160,8 +179,8 @@ function _fitness(s::TrainThenFitness, c::AbstractCandidate)
             return l
         end
         iter = itergeneration(s.dataiter, gen)
-        Flux.train!(nanguard, params(model), iter, o)
-        cleanopt(o)
+        Flux.train!(nanguard, params(m), iter, o)
+        cleanopt!(o)
         valid
     end
     return valid ? _fitness(s.fitstrat, c) : s.invalidfitness
@@ -240,9 +259,9 @@ _fitness(s::TrainAccuracyFitness, c::AbstractCandidate) = _fitness(s.train, Trai
 
 Maps fitness `x` from `base` to `mapping(x)`.
 """
-struct MapFitness <: AbstractFitness
-    mapping::Function
-    base::AbstractFitness
+struct MapFitness{F, T} <: AbstractFitness
+    mapping::F
+    base::T
 end
 _fitness(s::MapFitness, c::AbstractCandidate) = _fitness(s.base, c) |> s.mapping
 
@@ -280,8 +299,6 @@ ewma(curr, ::Nothing, α) = curr
 Measure fitness as time to evaluate a function.
 
 Time for first `nskip` evaluations will be discarded.
-
-Function needs to be instrumented using [`instrument`](@ref).
 """
 struct TimeFitness{T} <: AbstractFitness
     fitstrat::T
@@ -297,10 +314,6 @@ end
     SizeFitness()
 
 Measure fitness as the total number of parameters in the function to be evaluated.
-
-Note: relies on Flux.params which does not work for functions which have been instrumented through [`instrument`](@ref).
-
-To handle intrumentation, an attempt to extract the size is also made when instrumenting for `Validation`. Whether this works or not depends on the order in which fitness functions are combined.
 """
 struct SizeFitness <: AbstractFitness end
 _fitness(s::SizeFitness, c::AbstractCandidate) = nparams(c)

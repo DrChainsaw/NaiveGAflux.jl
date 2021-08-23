@@ -8,7 +8,9 @@ abstract type AbstractEvolution end
 """
     evolve(e::AbstractEvolution, population)
 
-Evolve `population` into a new population. New population may or may not contain same individuals as before.
+Return a new population evolved by `e`.
+
+New population may or may not contain same individuals as before.
 """
 evolve(e::AbstractEvolution, population) = _evolve(e, population)
 
@@ -41,7 +43,7 @@ end
     EliteSelection <: AbstractEvolution
     EliteSelection(nselect::Integer, evo=NoOpEvolution())
 
-Selects the only the `nselect` highest fitness candidates to be passed on to `evo`.
+Selects the `nselect` highest fitness candidates to be passed on to `evo`.
 """
 struct EliteSelection{N, E} <: AbstractEvolution
     nselect::N

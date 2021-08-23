@@ -42,10 +42,13 @@ Strategy to train model on a subset of the training data and measure fitness as 
 
 Size of subset for accuracy fitness is `ceil(Int, split * nobs)` where `nobs` is the size of along the last dimension of the input.
 
-Parameters `accuracyconfig` (default `BatchedIterConfig()`) and `accuracyfitness` (default AccuracyVsSize) determine 
-how to iterate over the accuracy subset and how to measure fitness based on this iterator respectively.
-
-Parameters `trainconfig` (default `TrainIterConfig()`) and `trainfitness` (default GpuFitness(TrainThenFitness(StatefulGenerationIter(iter), Flux.Losses.logitcrossentropy, ADAM(), accfitness, 0.0)) where accfitness is the fitness strategy produced by `accuracyfitness`) are the equivalents for training data.
+# Arguments 
+- `accuracyconfig` (default [`BatchedIterConfig()`](@ref)) determine how to iterate over the accuracy subset.
+- `accuracyfitness` (default [`AccuracyVsSize`](@ref)) determine how to measure fitness based on `accuracyconfig`.
+- `trainconfig` (default [`TrainIterConfig()`](@ref)) determines how to iterate over the training subset. 
+- `trainfitness` is a function accepting the iterator produced by `trainconfig` and the fitness strategy produced
+   by `accuracyfitness` and returns the `AbstractFitness` to be used (default [`TrainThenFitness`](@ref) wrapped in
+   [`GpuFitness`](@ref)).
 """
 struct TrainSplitAccuracy{S, VC, VF, TC, TF} <: AbstractFitnessStrategy
     split::S
@@ -84,9 +87,9 @@ Produces an `AbstractFitness` which measures fitness accuracy on `data` and base
 
 The two are combined so that a candidate `a` which achieves higher accuracy rounded to the first `accdigits` digits compared to a candidate `b` will always have a better fitness.
 
-Only if the first `accdigits` of accuracy is the same will the number of parameters determine who has higher fitness.
+If the first `accdigits` of accuracy is the same the candidate with fewer parameters will get higher fitness.
 
-Accuracy part of the fitness is calculated by `accwrap(AccuracyFitness(data))`.
+Accuracy part of the fitness is calculated by `accwrap(`[`AccuracyFitness(data)`](@ref)`)`.
 """
 AccuracyVsSize(data, accdigits=2; accwrap=identity) = sizevs(accwrap(AccuracyFitness(data)), accdigits)
 function sizevs(f::AbstractFitness, accdigits=2)
@@ -102,9 +105,13 @@ end
     struct TrainAccuracyVsSize <: AbstractFitnessStrategy
     TrainAccuracyVsSize(;trainconfig, trainfitness)
 
-Produces an `AbstractFitness` which measures fitness accuracy on training data and based on number of parameters combined in the same way as is done for `AccuracyVsSize`.
+Produces an `AbstractFitness` which measures fitness accuracy on training data and based on number of parameters combined in the same way as is done for [`AccuracyVsSize`](@ref).
 
-Parameters `trainconfig` (default `TrainIterConfig()`) and `trainfitness` (default sizevs(GpuFitness(TrainAccuracyFitness(dataiter=StatefulGenerationIter(dataiter), defaultloss=Flux.Losses.logitcrossentropy, defaultopt = ADAM()))) where `dataiter` is the iterator produced by `trainconfig`).
+# Arguments 
+- `trainconfig` (default [`TrainIterConfig()`](@ref)) determines how to iterate over the training subset. 
+- `trainfitness` is a function accepting the iterator produced by `trainconfig` and the fitness strategy produced 
+   by `accuracyfitness` and returns the `AbstractFitness` to be used (default [`TrainAccuracyFitness`](@ref) wrapped in 
+   [`GpuFitness`](@ref)).
 
 Beware that fitness as accuracy on training data will make evolution favour overfitted candidates.
 """
@@ -150,7 +157,7 @@ Configuration for creating shuffled batch iterators from array data. Data will b
 
 The function `dataiter(s::ShuffleIterConfig, x, y)` creates an iterator which returns a tuple of batches from `x` and `y` respectively.
 
-More specifically, the result of `s.iterwrap(zip(s.dataaug(bx), by))` will be returned where `bx` and `by` are `ShuffleIterator`s.
+More specifically, the result of `s.iterwrap(Iterators.map(((x,y),) -> (s.dataaug(x), y), iter))` will be returned where `iter` is a `BatchIterator` over `x` and `y` with `shuffle=true`.
 
 Note there there is no upper bound on how many generations are supported as the returned iterator cycles the data indefinitely. Use e.g. `Iterators.take(itr, cld(nepochs * nbatches_per_epoch, nbatches_per_gen))` to limit to `nepochs`
 epochs. 
@@ -183,28 +190,33 @@ function dataiter(s::TrainIterConfig, x, y)
     return RepeatPartitionIterator(baseiter, s.nbatches_per_gen)
 end
 
-dataiter(x::AbstractArray,y::AbstractArray{T, 1}, args...) where T = _dataiter(x,y, args...,yi -> Flux.onehotbatch(yi, sort(unique(y))))
+function dataiter(x::AbstractArray,y::AbstractArray{T, 1}, args...) where T 
+    _dataiter(x, Flux.onehotbatch(y, sort(unique(y))), args...)
+end
 dataiter(x::AbstractArray,y::AbstractArray{T, 2}, args...) where T = _dataiter(x,y, args...)
 
 function _dataiter(x::AbstractArray,y::AbstractArray, bs::Integer, seed::Integer, xwrap, ywrap = identity)
-    xiter = shuffleiter(x, bs, seed)
-    yiter = shuffleiter(y, bs, seed)
+    biter = shuffleiter((x,y), bs, seed)
+
     # iterates feature/label pairs
     # Cycle is pretty important here. It is what makes it so that each generation sees a new shuffle
     # This is also what makes SeedIterators useful with random data augmentation: 
     #   - Even if SeedIterator makes the augmentation itself the same, it will be applied to different images 
     # Something ought to be done about the inconsistency vs BatchedIterConfig through...
-    biter = Iterators.cycle(zip(xwrap(xiter), ywrap(yiter)))
+    citer = Iterators.map(biter) do (x, y)
+        xwrap(x), ywrap(y)
+    end |> Iterators.cycle
     # Ensures all models see the exact same examples, even when a RepeatStatefulIterator restarts iteration.
-    return SeedIterator(SeedIterator(biter;rng=xiter.rng); rng=yiter.rng)
+    return SeedIterator(citer;rng=biter.rng)
 end
-shuffleiter(x, batchsize, seed) = ShuffleIterator(x, batchsize, MersenneTwister(seed))
+shuffleiter(data, batchsize, seed) = BatchIterator(data, batchsize; shuffle=MersenneTwister(seed))
 
 function _dataiter(x::AbstractArray, y::AbstractArray, bs::Integer, xwrap, ywrap = identity)
-    xiter = BatchIterator(x, bs)
-    yiter = BatchIterator(y, bs)
+    biter = BatchIterator((x,y), bs)
     # iterates feature/label pairs
-    return zip(xwrap(xiter), ywrap(yiter))
+    return Iterators.map(biter) do (x, y)
+        xwrap(x), ywrap(y)
+    end
 end
 
 """
@@ -214,7 +226,7 @@ end
 
 Maps the optimizer of each candidate in a population through `optfun` (default `randomlrscale()`).
 
-Basically a thin wrapper for [`NaiveGAflux.global_optimizer_mutation`](@ref).
+Basically a thin wrapper for `global_optimizer_mutation`.
 
 Useful for applying the same mutation to every candidate, e.g. global learning rate schedules which all models follow.
 """
@@ -319,7 +331,7 @@ candidatemutation(p, inshape) = evolvemodel(MutationProbability(graphmutation(in
 candidatecrossover(p) = evolvemodel(MutationProbability(graphcrossover(), p), optcrossover())
 
 function clear_redundant_vertices(pop)
-    foreach(cand -> NaiveGAflux.graph(cand, check_apply), pop)
+    foreach(cand -> NaiveGAflux.model(check_apply, cand), pop)
     return pop
 end
 
@@ -341,10 +353,10 @@ function rename_models(pop)
  end
 
 function rename_model(i, cand)
-    rename_model(str::String; cf) = replace(str, r"^model\d+\.*" => "model$i.")
-    rename_model(x...;cf) = clone(x...; cf=cf)
-    rename_model(m::AbstractMutableComp; cf) = m # No need to copy below this level
-    return NaiveGAflux.mapcandidate(g -> copy(g, rename_model))(cand)
+    # No need to copy layers now
+    return fmap(cand; walk=(f, x) -> x isa NaiveNASflux.AbstractMutableComp ? x : Functors._default_walk(f, x)) do x
+        x isa String ? replace(x, r"^model\d+\.*" => "model$i.") : x
+    end
 end
 
 function optcrossover(poptswap=0.3, plrswap=0.4)
@@ -368,10 +380,10 @@ end
 function graphmutation(inshape)
     acts = default_actfuns()
 
-    change_nout = NeuronSelectMutation(NoutMutation(-0.2, 0.2)) # Max 20% change in output size
-    decrease_nout = NeuronSelectMutation(NoutMutation(-0.2, 0))
+    change_nout = NoutMutation(-0.2, 0.2) # Max 20% change in output size
+    decrease_nout = NoutMutation(-0.2, 0)
     add_vertex = add_vertex_mutation(acts)
-    add_downsampling = AddVertexMutation(downsamplingspace(default_layerconf(); outsizes = 2 .^(4:9), activations=acts))
+    add_downsampling = AddVertexMutation(ConditionalArchSpace(candownsample(inshape), downsamplingspace(default_layerconf(); outsizes = 2 .^(4:9), activations=acts)))
     rem_vertex = RemoveVertexMutation()
     # [-2, 2] keeps kernel size odd due to CuArrays issue# 356 (odd kernel size => symmetric padding)
     change_kernel = KernelSizeMutation(ParSpace2D([-2, 2]), maxsize=maxkernelsize(inshape))
@@ -383,13 +395,13 @@ function graphmutation(inshape)
 
     # Create a shorthand alias for MutationProbability
     mpn(m, p) = VertexMutation(MutationProbability(m, p))
-    mph(m, p) = VertexMutation(HighValueMutationProbability(m, p))
-    mpl(m, p) = VertexMutation(LowValueMutationProbability(m, p))
+    mph(m, p) = VertexMutation(HighUtilityMutationProbability(m, p))
+    mpl(m, p) = VertexMutation(LowUtilityMutationProbability(m, p))
 
     cnout = mpn(LogMutation(v -> "Mutate output size of vertex $(name(v))", change_nout), 0.05)
     dnout = mpl(LogMutation(v -> "Reduce output size of vertex $(name(v))", decrease_nout), 0.05)
     maddv = mph(LogMutation(v -> "Add vertex after $(name(v))", add_vertex), 0.005)
-    maddd = mpn(MutationFilter(candownsample(inshape), LogMutation(v -> "Add downsampling after $(name(v))", add_downsampling)), 0.01)
+    maddd = mpn(LogMutation(v -> "Add downsampling after $(name(v))", add_downsampling), 0.01)
     mremv = mpl(LogMutation(v -> "Remove vertex $(name(v))", rem_vertex), 0.01)
     ckern = mpn(MutationFilter(allowkernelmutation, LogMutation(v -> "Mutate kernel size of $(name(v))", change_kernel)), 0.02)
     dkern = mpn(MutationFilter(allowkernelmutation, LogMutation(v -> "Decrease kernel size of $(name(v))", decrease_kernel)), 0.02)
@@ -397,13 +409,13 @@ function graphmutation(inshape)
     madde = mph(LogMutation(v -> "Add edge from $(name(v))", add_edge), 0.02)
     mreme = mpn(MutationFilter(v -> length(outputs(v)) > 1, LogMutation(v -> "Remove edge from $(name(v))", rem_edge)), 0.02)
 
-    mremv = MutationFilter(g -> nv(g) > 5, mremv)
+    mremv = MutationFilter(g -> nvertices(g) > 5, mremv)
 
     # Create two possible mutations: One which is guaranteed to not increase the size:
-    dsize = MutationChain(mremv, PostMutation(dnout, neuronselect), dkern, mreme, maddd)
+    dsize = MutationChain(mremv, dnout, dkern, mreme, maddd)
     # ...and another which is not guaranteed to decrease the size
-    csize = MutationChain(mremv, PostMutation(cnout, neuronselect), ckern, mreme, madde, maddd, maddv)
-    # Add mutation last as new vertices with neuron_value == 0 screws up outputs selection as per https://github.com/DrChainsaw/NaiveNASlib.jl/issues/39
+    csize = MutationChain(mremv, cnout, ckern, mreme, madde, maddd, maddv)
+    # Add mutation last as new vertices with neuronutility == 0 screws up outputs selection as per https://github.com/DrChainsaw/NaiveNASlib.jl/issues/39
 
     mgp = VertexMutation(MutationProbability(LogMutation(v -> "Mutate global pool type for $(name(v))", MutateGlobalPool()), 0.1), SelectGlobalPool())
 
@@ -451,9 +463,9 @@ function maxkernelsize(v::AbstractVertex, inshape)
     return @. ks - !isodd(ks)
 end
 
-allowkernelmutation(v) = allowkernelmutation(layertype(v), v)
+allowkernelmutation(v) = allowkernelmutation(NaiveNASflux.layertype(v), v)
 allowkernelmutation(l, v) = false
-allowkernelmutation(::FluxConvolutional{N}, v) where N = all(isodd, size(NaiveNASflux.weights(layer(v)))[1:N])
+allowkernelmutation(::NaiveNASflux.FluxConvolutional{N}, v) where N = all(isodd, size(NaiveNASflux.weights(layer(v)))[1:N])
     
 function add_vertex_mutation(acts)
 
@@ -471,10 +483,7 @@ function add_vertex_mutation(acts)
 end
 
 is_convtype(v::AbstractVertex) = any(is_globpool.(outputs(v))) || any(is_convtype.(outputs(v)))
-is_globpool(v::AbstractVertex) = is_globpool(base(v))
-is_globpool(v::InputVertex) = false
-is_globpool(v::CompVertex) = is_globpool(v.computation)
-is_globpool(l::AbstractMutableComp) = is_globpool(NaiveNASflux.wrapped(l))
+is_globpool(v::AbstractVertex) = is_globpool(layer(v))
 is_globpool(f) = f isa NaiveGAflux.GlobalPool
 
 struct SelectGlobalPool <:AbstractVertexSelection

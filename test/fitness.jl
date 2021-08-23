@@ -7,12 +7,12 @@
         f::F
     end
     IdCand() = MockCandidate(identity)
-    NaiveGAflux.graph(c::MockCandidate, f=identity) = f(c.f)
+    NaiveGAflux.model(c::MockCandidate) = c.f
 
     @testset "LogFitness" begin
         import NaiveGAflux: FittedCandidate
         iv = inputvertex("in", 2)
-        c = CompGraph(iv, mutable(Dense(2,3), iv)) |> CandidateModel
+        c = CompGraph(iv, fluxvertex(Dense(2,3), iv)) |> CandidateModel
         lf = LogFitness(MockFitness(3))
         @test @test_logs (:info, " Candidate:   1\tvertices:   2\tparams:  0.01k\tfitness: 3") fitness(lf, c) == 3
         @test @test_logs (:info, " Candidate:   2\tvertices:   2\tparams:  0.01k\tfitness: 3") fitness(lf, c) == 3
@@ -30,9 +30,8 @@
         end
         
         wascpumapped = false
-        function Flux.cpu(x::MockCandidate{Val{:GpuTest}}) 
+        function NaiveGAflux.transferstate!(::MockCandidate{Val{:GpuTest}}, ::MockCandidate{Val{:GpuTest}}) 
             wascpumapped = true
-            return x
         end
 
         @test fitness(GpuFitness(MockFitness(4)), MockCandidate(label)) == 4
@@ -50,7 +49,7 @@
 
     @testset "TrainThenFitness" begin
         iv = inputvertex("in", 2)
-        ov = mutable(Dense(2, 2), iv)
+        ov = fluxvertex(Dense(2, 2), iv)
         cand = CandidateModel(CompGraph(iv, ov))
 
         ttf = TrainThenFitness(
@@ -64,7 +63,7 @@
 
         struct NaNCandidateModel <: AbstractCandidate end
         NaiveGAflux.ninputs(::NaNCandidateModel) = 1
-        NaiveGAflux.graph(f::NaNCandidateModel) = f 
+        NaiveGAflux.model(f::NaNCandidateModel) = f 
         (::NaNCandidateModel)(x) = x
         NaiveGAflux.lossfun(::NaNCandidateModel; default) = (args...) -> NaN32
 

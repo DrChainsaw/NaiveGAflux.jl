@@ -35,8 +35,10 @@
         @test length(unique(globallearningrate.(pop))) == 1
 
         # Now try TrainAccuracyVsSize and EliteAndTournamentSelection
+        f = TrainAccuracyVsSize(;trainconfig= TrainIterConfig(nbatches_per_gen=1, baseconfig=ShuffleIterConfig(batchsize=1)))
+
         @info "\tSmoke test with TrainAccuracyVsSize and EliteAndTournamentSelection"
-        pop = @test_logs (:info, "Begin generation 1") (:info, "Begin generation 2") (:info, "Begin generation 3") (:info, r"Mutate model") match_mode=:any fit(c, x, y, fitnesstrategy=TrainAccuracyVsSize(), evolutionstrategy = GlobalOptimizerMutation(EliteAndTournamentSelection(popsize=c.popsize, nelites=1, k=2)), stopcriterion = pop -> generation(pop) == 3)
+        pop = @test_logs (:info, "Begin generation 1") (:info, "Begin generation 2") (:info, "Begin generation 3") (:info, r"Mutate model") match_mode=:any fit(c, x, y, fitnesstrategy=f, evolutionstrategy = GlobalOptimizerMutation(EliteAndTournamentSelection(popsize=c.popsize, nelites=1, k=2)), stopcriterion = pop -> generation(pop) == 3)
 
         @test length(pop) == c.popsize
         @test modelname.(pop) == ["model$i" for i in 1:length(pop)]
@@ -80,7 +82,7 @@
 
         @testset "Test $ne epochs and $nbpg batches per generation" for ne in (1, 2, 10), nbpg in (2, 10)
             bs = 3
-            s = TrainIterConfig(nbatches_per_gen=nbpg, baseconfig=ShuffleIterConfig(batchsize=bs))
+            s = TrainIterConfig(nbatches_per_gen=nbpg, baseconfig=ShuffleIterConfig(batchsize=bs, iterwrap=identity))
             itr =  Iterators.take(dataiter(s, x, y), cld(ne * nexamples, nbpg))
 
             totnrofexamples = ne * nexamples

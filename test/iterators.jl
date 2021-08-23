@@ -38,17 +38,12 @@ end
 
 @testset "SeedIterator" begin
     rng = MersenneTwister(123)
-    testitr = SeedIterator(MapIterator(x -> x * rand(rng, Int), ones(10)); rng=rng, seed=12)
+    testitr = SeedIterator(Iterators.map(x -> x * rand(rng, Int), ones(10)); rng=rng, seed=12)
     @test collect(testitr) == collect(testitr)
 
     rng = MersenneTwister(1234)
-    nesteditr = SeedIterator(MapIterator(x -> x * rand(rng, Int), testitr); rng=rng, seed=1)
+    nesteditr = SeedIterator(Iterators.map(x -> x * rand(rng, Int), testitr); rng=rng, seed=1)
     @test collect(nesteditr) == collect(nesteditr)
-end
-
-@testset "MapIterator" begin
-    itr = MapIterator(x -> 2x, [1,2,3,4,5])
-    @test collect(itr) == [2,4,6,8,10]
 end
 
 @testset "GpuIterator" begin
@@ -61,61 +56,65 @@ end
 end
 
 @testset "BatchIterator" begin
-    itr = BatchIterator(collect(reshape(1:2*3*4*5,2,3,4,5)), 2)
-    for (i, batch) in enumerate(itr)
-        @test size(batch) == (2,3,4,i==3 ? 1 : 2)
+
+    @testset "Single array" begin
+        itr = BatchIterator(collect(reshape(1:2*3*4*5,2,3,4,5)), 2)
+        for (i, batch) in enumerate(itr)
+            @test size(batch) == (2,3,4,i==3 ? 1 : 2)
+        end
+
+        @test "biter: $itr" == "biter: BatchIterator(size=(2, 3, 4, 5), batchsize=2, shuffle=false)"
     end
 
-    @test "biter: $itr" == "biter: BatchIterator(size=(2, 3, 4, 5), batchsize=2)"
-end
-
-@testset "BatchIterator singleton" begin
-    itr = BatchIterator(Singleton([1,3,5,7,9,11]), 2)
-    for (i, b) in enumerate(itr)
-        @test b == [1,3] .+ 4(i-1)
+    @testset "Tuple data shuffle=$shuffle" for shuffle in (true, false)
+        itr = BatchIterator((collect([1:10 21:30]'), 110:10:200), 3; shuffle)
+        for (i, (x, y)) in enumerate(itr)
+            expsize = i == 4 ? 1 : 3
+            @test size(x) == (2, expsize)
+            @test size(y) == (expsize,)
+        end
     end
-end
 
-@testset "ShuffleIterator basic" begin
-    @test reduce(vcat, ShuffleIterator(1:20, 3, MersenneTwister(1))) |> sort == 1:20
-
-    itr = ShuffleIterator(ones(2,3,4), 4, MersenneTwister(2))
-    @test "siter: $itr" == "siter: ShuffleIterator(size=(2, 3, 4), batchsize=4)"
-end
-
-@testset "ShuffleIterator ndims $(length(dims))" for dims in ((5), (3,4), (2,3,4), (2,3,4,5), (2,3,4,5,6), (2,3,4,5,6,7))
-    sitr = ShuffleIterator(collect(reshape(1:prod(dims),dims...)), 2, MersenneTwister(123))
-    bitr = BatchIterator(collect(reshape(1:prod(dims),dims...)), 2)
-    sall, nall = Set{Int}(), Set{Int}()
-    for (sb, nb) in zip(sitr, bitr)
-        @test sb != nb
-        @test size(sb) == size(nb)
-        push!(sall, sb...)
-        push!(nall, nb...)
+    @testset "BatchIterator singleton" begin
+        itr = BatchIterator(Singleton([1,3,5,7,9,11]), 2)
+        for (i, b) in enumerate(itr)
+            @test b == [1,3] .+ 4(i-1)
+        end
     end
-    @test sall == nall
-end
 
-@testset "ShuffleIterator singleton" begin
-    itr = ShuffleIterator(Singleton([1,3,5,7,9,11]), 2, MersenneTwister(123))
-    for b in itr
-        @test length(b) == 2
+    @testset "BatchIterator shuffle basic" begin
+        @test reduce(vcat, BatchIterator(1:20, 3; shuffle=true)) |> sort == 1:20
+
+        itr = BatchIterator(ones(2,3,4), 4; shuffle=MersenneTwister(2))
+        @test "siter: $itr" == "siter: BatchIterator(size=(2, 3, 4), batchsize=4, shuffle=true)"
     end
-    @test sort(vcat(collect(itr)...)) == [1,3,5,7,9,11]
+
+    @testset "BatchIterator shuffle ndims $(length(dims))" for dims in ((5), (3,4), (2,3,4), (2,3,4,5), (2,3,4,5,6), (2,3,4,5,6,7))
+        sitr = BatchIterator(collect(reshape(1:prod(dims),dims...)), 2;shuffle=MersenneTwister(12))
+        bitr = BatchIterator(collect(reshape(1:prod(dims),dims...)), 2)
+        sall, nall = Set{Int}(), Set{Int}()
+        for (sb, nb) in zip(sitr, bitr)
+            @test sb != nb
+            @test size(sb) == size(nb)
+            push!(sall, sb...)
+            push!(nall, nb...)
+        end
+        @test sall == nall
+    end
 end
 
 @testset "RepeatPartitionIterator and ShuffleIterator" begin
     import IterTools: ncycle
 
     @testset "Single epoch small" begin
-        ritr = RepeatPartitionIterator(ShuffleIterator(1:20, 3, MersenneTwister(123)), 4)
+        ritr = RepeatPartitionIterator(BatchIterator(1:20, 3; shuffle=MersenneTwister(123)), 4)
         for itr in ritr
             @test collect(itr) == collect(itr)
         end
     end
 
     @testset "Multi epoch small" begin
-        sitr = ShuffleIterator(1:20, 3, MersenneTwister(123))
+        sitr = BatchIterator(1:20, 3;shuffle=MersenneTwister(123))
         citr = ncycle(sitr, 2)
         ritr = RepeatPartitionIterator(SeedIterator(citr; rng=sitr.rng), 4)
         for itr in ritr
@@ -124,7 +123,7 @@ end
     end
 
     @testset "Multi epoch big" begin
-        sitr = ShuffleIterator(1:20, 3, MersenneTwister(123))
+        sitr = BatchIterator(1:20, 3;shuffle= MersenneTwister(123))
         citr = ncycle(sitr, 4)
         ritr = RepeatPartitionIterator(SeedIterator(citr; rng=sitr.rng), 10)
         for (i, itr) in enumerate(ritr)

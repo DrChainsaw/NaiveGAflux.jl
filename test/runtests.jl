@@ -1,7 +1,5 @@
-using NaiveGAflux
-using Random
-using Logging
-using Test
+using NaiveGAflux, Random, Logging, Flux, Test
+using NaiveNASlib.Advanced, NaiveNASlib.Extend
 
 @testset "NaiveGAflux.jl" begin
 
@@ -59,11 +57,11 @@ using Test
     @info "Testing visualization"
     include("visualization/callbacks.jl")
 
-    if VERSION === v"1.6.1"
+    if VERSION === v"1.6.2"
         @info "Testing README examples"
         include("examples.jl")
     else
-        @warn "README examples will only be tested in julia version 1.6.1 due to rng dependency. Skipping..."
+        @warn "README examples will only be tested in julia version 1.6.2 due to rng dependency. Skipping..."
     end
 
     @info "Testing AutoFlux"

@@ -210,10 +210,11 @@
 
     @testset "ShapeTrace" begin
         import NaiveGAflux: GlobalPool
-        iv(N=2) = inputvertex("in", 1, FluxConv{N}())
-        bv(in, name) = mutable(name, BatchNorm(nout(in)), in)
-        pv(in, name; ks=(3,3), stride=ntuple(i->1, length(ks)), kwargs...) = mutable(name, MaxPool(ks; stride=stride, kwargs...), in)
-        cv(in, name; ks=(3,3), kwargs...) = mutable(name, Conv(ks, nout(in) => nout(in); kwargs...), in)
+        import NaiveNASflux: named
+        iv(N=2) = convinputvertex("in", 1, N)
+        bv(in, name) = fluxvertex(name, BatchNorm(nout(in)), in)
+        pv(in, name; ks=(3,3), stride=ntuple(i->1, length(ks)), kwargs...) = fluxvertex(name, MaxPool(ks; stride=stride, kwargs...), in)
+        cv(in, name; ks=(3,3), kwargs...) = fluxvertex(name, Conv(ks, nout(in) => nout(in); kwargs...), in)
         gp(in, name) = invariantvertex(GlobalPool{MaxPool}(), in, traitdecoration=named(name))
 
         @testset "Trace $vf" for vf in (cv,pv)

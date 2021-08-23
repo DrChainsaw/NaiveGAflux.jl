@@ -2,9 +2,16 @@ module ImageClassification
 
 using ...NaiveGAflux
 using ..AutoFlux: fit
-import NaiveGAflux: GlobalPool
-import NaiveGAflux: shapetrace, squashshapes, fshape, ndimsout
-import NaiveGAflux: StatefulGenerationIter
+using NaiveGAflux: GlobalPool
+using NaiveGAflux: shapetrace, squashshapes, fshape, ndimsout, check_apply
+using NaiveGAflux: StatefulGenerationIter
+using NaiveNASlib.Advanced, NaiveNASlib.Extend
+import Flux
+using Flux: Dense, Conv, ConvTranspose, DepthwiseConv, CrossCor, LayerNorm, BatchNorm, InstanceNorm, GroupNorm, 
+            MaxPool, MeanPool, Dropout, AlphaDropout, GlobalMaxPool, GlobalMeanPool, cpu, gpu
+using Flux: Descent, Momentum, Nesterov, ADAM, NADAM, ADAGrad, WeightDecay
+import Functors
+using Functors: fmap
 using Random
 import Logging
 using Statistics
@@ -13,9 +20,9 @@ import IterTools: ncycle
 # To store program state for pause/resume
 using Serialization
 
-export ImageClassifier, fit
+export ImageClassifier, fit, TrainSplitAccuracy, TrainAccuracyVsSize, AccuracyVsSize, TrainIterConfig, BatchedIterConfig, ShuffleIterConfig, GlobalOptimizerMutation, EliteAndSusSelection, EliteAndTournamentSelection
 
-modelname(c::AbstractCandidate) = NaiveGAflux.graph(c, modelname)
+modelname(c::AbstractCandidate) = NaiveGAflux.model(modelname, c)
 modelname(g::CompGraph) = split(name(g.inputs[]),'.')[1]
 
 include("strategy.jl")
@@ -56,9 +63,9 @@ Return a population of image classifiers fitted to the given data.
 
 - `cb=identity`: Callback function. After training and evaluating each generation but before evolution `cb(population)` will be called where `population` is the array of candidates. Useful for persistence and plotting.
 
-- `fitnesstrategy::AbstractFitnessStrategy=TrainSplitAccuracy()`: Strategy for fitness from data. See: [`ImageClassification.AbstractFitnessStrategy`](@ref).
+- `fitnesstrategy::AbstractFitnessStrategy=`[`TrainSplitAccuracy()`](@ref): Strategy for fitness from data.
 
-- `evolutionstrategy::AbstractEvolutionStrategy=EliteAndTournamentSelection(popsize=c.popsize)`: Strategy for evolution. See [`ImageClassification.AbstractEvolutionStrategy`](@ref)
+- `evolutionstrategy::AbstractEvolutionStrategy=`[`EliteAndTournamentSelection(popsize=c.popsize)`](@ref): Strategy for evolution.
 
 - `stopcriterion`: Takes the current population and returns true if fitting shall stop. Candidate fitness is available by calling `fitness(c)` where `c` is a member of the population.
 
@@ -123,7 +130,7 @@ function generate_persistent(nr, newpop, mdir, insize, outsize, cwrap=identity, 
         rm(mdir, force=true, recursive=true)
     end
 
-    iv(i) = inputvertex(join(["model", i, ".input"]), insize[3], FluxConv{2}())
+    iv(i) = conv2dinputvertex(join(["model", i, ".input"]), insize[3])
     return Population(PersistentArray(mdir, nr, i -> create_model(join(["model", i]), archspace, iv(i), cwrap)))
 end
 function create_model(name, as, in, cwrap)

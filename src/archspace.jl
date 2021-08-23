@@ -1,7 +1,7 @@
 """
     AbstractArchSpace
 
-Abstract functor representing an architecture search space.
+Abstract callable struct representing an architecture search space.
 
 Architecture spaces define a range of possible hyperparameters for a model architecture. Used to create new models or parts of models.
 
@@ -12,7 +12,7 @@ abstract type AbstractArchSpace end
 """
     AbstractLayerSpace
 
-Abstract functor representing a search space of layers.
+Abstract callable struct representing a search space of layers.
 
 Return a layer in the search space given an input size and (optionally) a random number generator.
 """
@@ -21,7 +21,7 @@ abstract type AbstractLayerSpace end
 """
     AbstractParSpace{N, T}
 
-Abstract functor representing a seach space of `N`D parameters of type `T`.
+Abstract callable struct representing a seach space of `N`D parameters of type `T`.
 
 Return a tuple of parameters from the search space when invoked. Random number generator may be supplied.
 """
@@ -75,8 +75,12 @@ struct ZeroWeightInit <: AbstractWeightInit end
 
 """
     BaseLayerSpace
+    BaseLayerSpace(outsizes, activationfunctions) 
 
 Search space for basic attributes common to all layers.
+
+`outsizes` is the output sizes (number of neurons).
+`activationfunctions` is the activation functions.
 """
 struct BaseLayerSpace{T}
     nouts::AbstractParSpace{1, <:Integer}
@@ -89,8 +93,12 @@ activation(s::BaseLayerSpace, rng=rng_default) = s.acts(rng)
 
 """
     SingletonParSpace{N, T} <:AbstractParSpace{N, T}
+    SingletonParSpace(p::T...)
+    Singleton2DParSpace(p::T)
 
 Singleton search space. Has exactly one value per dimension.
+
+`Singleton2DParSpace` is a convenience constructor for a 2D `SingletonParSpace` of `[p, p]`.
 """
 struct SingletonParSpace{N, T} <:AbstractParSpace{N, T}
     p::NTuple{N, T}
@@ -102,22 +110,30 @@ Singleton2DParSpace(p::T) where T = SingletonParSpace(p,p)
 
 """
     ParSpace{N, T} <:AbstractParSpace{N, T}
+    ParSpace(p::AbstractVector{T}...)
+    ParSpace1D(p...)
+    ParSpace2D(p::AbstractVector)
 
 Search space for parameters.
 
 Return independent uniform random values for all `N` dimensions from the search space when invoked.
+
+`ParSpace1D` is a convenience constructor for an 1D `ParSpace` of `p`.
+`ParSpace2D` is a convenience constructor for a 2D `ParSpace` of `[p, p]``.
 """
 struct ParSpace{N, T} <:AbstractParSpace{N, T}
     p::NTuple{N, AbstractVector{T}}
 end
 ParSpace(p::AbstractVector{T}...) where T = ParSpace(p)
 ParSpace1D(p...) = ParSpace(collect(p))
-ParSpace2D(p::AbstractVector{T}) where T = ParSpace(p,p)
+ParSpace2D(p::AbstractVector) = ParSpace(p,p)
 (s::ParSpace)(rng=rng_default) = rand.((rng,), s.p)
-(s::ParSpace{1, T})(rng=rng_default) where T = rand(rng, s.p[1])
+(s::ParSpace{1})(rng=rng_default) = rand(rng, s.p[1])
 
 """
     CoupledParSpace{N, T} <:AbstractParSpace{N, T}
+    CoupledParSpace(p::AbstractParSpace{1, T}, N) 
+    CoupledParSpace(p::AbstractVector{T}, N)
 
 Search space for parameters.
 
@@ -145,8 +161,9 @@ parspaceof(::Val{N}, x::NTuple{N, AbstractVector}) where N = ParSpace(x...)
 
 """
     NamedLayerSpace <:AbstractLayerSpace
+    NamedLayerSpace(name::String, s::AbstractLayerSpace)
 
-Adds a `name` to an `AbstractLayerSpace`
+Adds a `name` to an `AbstractLayerSpace`.
 """
 struct NamedLayerSpace <:AbstractLayerSpace
     name::String
@@ -203,8 +220,8 @@ DenseSpace(outsizes, activations) = DenseSpace(BaseLayerSpace(outsizes, activati
 (s::DenseSpace)(in::Integer,rng=rng_default; outsize=outsize(s.base,rng), wi=DefaultWeightInit(), densefun=Dense) = densefun(in, outsize, activation(s.base,rng); denseinitW(wi)...)
 
 denseinitW(::DefaultWeightInit) = ()
-denseinitW(::IdentityWeightInit) = (init = idmapping,)
-denseinitW(wi::PartialIdentityWeightInit) = (init = (args...) -> circshift(idmapping_nowarn(args...),(wi.outoffset, wi.inoffset)),)
+denseinitW(::IdentityWeightInit) = (init = Flux.identity_init,)
+denseinitW(wi::PartialIdentityWeightInit) = (init = (args...) -> Flux.identity_init(args...;shift=(wi.outoffset, wi.inoffset)),)
 denseinitW(::ZeroWeightInit) = (init = zeros,)
 
 """
@@ -212,8 +229,6 @@ denseinitW(::ZeroWeightInit) = (init = zeros,)
 
     ConvSpace{N}(;outsizes, kernelsizes, activations=identity, strides=1, dilations=1, paddings=SamePad(), convfuns=Conv)
     ConvSpace(convfun::AbstractParSpace, base::BaseLayerSpace, ks::AbstractParSpace, stride::AbstractParSpace, dilation::AbstractParSpace, pad)
-
-
 
 Search space of `N`D convolutional layers.
 
@@ -248,12 +263,14 @@ function (s::ConvSpace)(insize::Integer, rng=rng_default; outsize = outsize(s.ba
 end
 
 convinitW(::DefaultWeightInit) = ()
-convinitW(::IdentityWeightInit) = (init=idmapping,)
-convinitW(wi::PartialIdentityWeightInit) = (init = (args...) -> circshift(idmapping_nowarn(args...), (0,0,wi.inoffset, wi.outoffset)),)
+convinitW(::IdentityWeightInit) = (init=Flux.identity_init,)
+convinitW(wi::PartialIdentityWeightInit) = (init = (args...) -> Flux.identity_init(args...;shift=(0,0,wi.inoffset, wi.outoffset)),)
 convinitW(::ZeroWeightInit) = (init=(args...) -> zeros(Float32,args...),)
 
 """
     BatchNormSpace <:AbstractLayerSpace
+    BatchNormSpace(activationfunctions...)
+    BatchNormSpace(activationfunctions::AbstractVector) 
 
 Search space of BatchNorm layers.
 """
@@ -294,17 +311,20 @@ function (s::PoolSpace)(in::Integer, rng=rng_default;outsize=nothing, wi=nothing
     poolfun(ws, stride=stride, pad=pad)
 end
 
-default_logging() = logged(level=Logging.Debug, info=NameAndIOInfoStr())
+default_logging() = logged(level=Logging.Debug)
 """
     LayerVertexConf
+    LayerVertexConf(layerfun, traitfun)
 
-Generic configuration template for computation graph vertices.
+Generic configuration template for computation graph vertices with `Flux` layers as their computation.
+
+Both `layerfun` and `traitfun` are forwarded to `NaiveNASflux.fluxvertex`.    
 
 Intention is to make it easy to add logging, validation and pruning metrics in an uniform way.
 """
-struct LayerVertexConf
-    layerfun
-    traitfun
+struct LayerVertexConf{F, T}
+    layerfun::F
+    traitfun::T
 end
 LayerVertexConf() = LayerVertexConf(ActivationContribution ∘ LazyMutable, validated() ∘ default_logging())
 
@@ -320,28 +340,31 @@ Shielded(base=LayerVertexConf(); allowed = tuple()) = let Shield(t) = MutationSh
 end
 
 
-(c::LayerVertexConf)(in::AbstractVertex, l) = mutable(l,in,layerfun=c.layerfun, mutation=IoChange, traitfun=c.traitfun)
-(c::LayerVertexConf)(name::String, in::AbstractVertex, l) = mutable(name, l,in,layerfun=c.layerfun, mutation=IoChange, traitfun=c.traitfun)
+(c::LayerVertexConf)(in::AbstractVertex, l) = fluxvertex(l,in,layerfun=c.layerfun, traitfun=c.traitfun)
+(c::LayerVertexConf)(name::String, in::AbstractVertex, l) = fluxvertex(name, l,in,layerfun=c.layerfun, traitfun=c.traitfun)
 
 Base.Broadcast.broadcastable(c::LayerVertexConf) = Ref(c)
 
 """
     ConcConf
+    ConcConf(layerfun, traitfun)
 
 Generic configuration template for concatenation of vertex outputs.
+
+Both `layerfun` and `traitfun` are forwarded to `NaiveNASflux.concat`.  
 """
-struct ConcConf
-    layerfun
-    traitfun
+struct ConcConf{F, T}
+    layerfun::F
+    traitfun::T
 end
 ConcConf() = ConcConf(ActivationContribution, validated() ∘ default_logging())
 
 (c::ConcConf)(in::AbstractVector{<:AbstractVertex}) = c(in...)
 (c::ConcConf)(in::AbstractVertex) = in
-(c::ConcConf)(ins::AbstractVertex...) = concat(ins...,mutation=IoChange, traitfun = c.traitfun, layerfun=c.layerfun)
+(c::ConcConf)(ins::AbstractVertex...) = concat(ins..., traitfun = c.traitfun, layerfun=c.layerfun)
 (c::ConcConf)(name::String, in::AbstractVector{<:AbstractVertex}) = c(name, in...)
 (c::ConcConf)(name::String, in::AbstractVertex) = in
-(c::ConcConf)(name::String, ins::AbstractVertex...) = concat(ins...,mutation=IoChange, traitfun = c.traitfun ∘ named(name), layerfun=c.layerfun)
+(c::ConcConf)(name::String, ins::AbstractVertex...) = concat(ins..., traitfun = c.traitfun ∘ named(name), layerfun=c.layerfun)
 
 
 """
@@ -381,8 +404,11 @@ end
 
 """
     VertexSpace <:AbstractArchSpace
+    VertexSpace([conf::LayerVertexConf], lspace::AbstractLayerSpace)
 
-Search space of one `AbstractVertex` from one `AbstractLayerSpace`.
+Search space of one `AbstractVertex` with compuation drawn from `lspace`.
+
+`conf` is used to attach other metadata to the vertex. See [`LayerVertexConf`](@ref).
 """
 struct VertexSpace <:AbstractArchSpace
     conf::LayerVertexConf
@@ -396,9 +422,22 @@ create_layer(::Missing, insize::Integer, ls::AbstractLayerSpace, wi, rng) = ls(i
 create_layer(outsize::Integer, insize::Integer, ls::AbstractLayerSpace, wi, rng) = ls(insize, rng, outsize=outsize, wi=wi)
 
 """
+    NoOpArchSpace <: AbstractArchSpace
+
+Returns input vertex without any modification.
+"""
+struct NoOpArchSpace <: AbstractArchSpace end
+(::NoOpArchSpace)(v::AbstractVertex, args...; kwargs...) = v
+(::NoOpArchSpace)(name::String, v::AbstractVertex, args...; kwargs...) = v
+
+"""
     ArchSpace <:AbstractArchSpace
+    ArchSpace(ss::AbstractLayerSpace...; conf=LayerVertexConf()) 
+    ArchSpace(ss::AbstractArchSpace...) 
 
 Search space of `AbstractArchSpace`s.
+
+Draws one vertex from one of `ss` (uniformly selected) when invoked.
 """
 struct ArchSpace <:AbstractArchSpace
     s::AbstractParSpace{1, <:AbstractArchSpace}
@@ -412,13 +451,32 @@ ArchSpace(s::AbstractArchSpace, ss::AbstractArchSpace...) = ArchSpace(ParSpace([
 (s::ArchSpace)(name::String, in::AbstractVertex, rng=rng_default; outsize=missing, wi=DefaultWeightInit()) = s.s(rng)(name, in, rng, outsize=outsize, wi=wi)
 
 """
+    ConditionalArchSpace{P, S1, S2} <: AbstractArchSpace
+    ConditionalArchSpace(predicate, iftrue, iffalse=NoOpArchSpace())
+    ConditionalArchSpace(;predicate, iftrue, iffalse=NoOpArchSpace())
+
+Use `iftrue` if `predicate(invertex)` returns true, `iffalse` otherwise.
+"""
+Base.@kwdef struct ConditionalArchSpace{P, S1, S2} <: AbstractArchSpace
+    predicate::P
+    iftrue::S1
+    iffalse::S2 = NoOpArchSpace()
+    ConditionalArchSpace(predicate::P, iftrue::S1, iffalse::S2=NoOpArchSpace()) where {P, S1, S2} =new{P, S1, S2}(predicate, iftrue, iffalse)
+end
+
+(s::ConditionalArchSpace)(in::AbstractVertex, args...; kwargs...) = s.predicate(in) ? s.iftrue(in, args...; kwargs...) : s.iffalse(in, args...; kwargs...)
+(s::ConditionalArchSpace)(name::String, in::AbstractVertex, args...; kwargs...) = s.predicate(in) ? s.iftrue(name, in, args...; kwargs...) : s.iffalse(name, in, args...; kwargs...)
+
+
+
+"""
     RepeatArchSpace <:AbstractArchSpace
+    RepeatArchSpace(s::AbstractArchSpace, r::Integer) 
+    RepeatArchSpace(s::AbstractArchSpace, r::AbstractVector{<:Integer}) 
 
-Search space of repetitions of another `AbstractArchSpace`.
+Search space of repetitions of another `AbstractArchSpace` where number of repetitions is uniformly drawn from `r`.
 
-Output of each generated candidate is input to next and the last is returned.
-
-Number of repetitions comes from an `AbstractParSpace`.
+Output of each generated candidate is input to next and the last output is returned.
 """
 struct RepeatArchSpace <:AbstractArchSpace
     s::AbstractArchSpace
@@ -436,6 +494,7 @@ repeatinitW(wi::PartialIdentityWeightInit, invertex, ::Missing) = wi
 
 """
     ArchSpaceChain <:AbstractArchSpace
+    ArchSpaceChain(s::AbstractArchSpace...) 
 
 Chains multiple `AbstractArchSpace`s after each other.
 
@@ -451,8 +510,10 @@ ArchSpaceChain(s::AbstractArchSpace...) = ArchSpaceChain(collect(s))
 
 """
     ForkArchSpace <:AbstractArchSpace
+    ForkArchSpace(s::AbstractArchSpace, r::Integer; conf=ConcConf())
+    ForkArchSpace(s::AbstractArchSpace, r::AbstractVector{<:Integer}; conf=ConcConf()) 
 
-Search space of parallel paths from another `AbstractArchSpace`.
+Search space of parallel paths from another `AbstractArchSpace` where number of paths is uniformly drawn from `r`.
 
 Input vertex is input to a number of paths drawn from an `AbstractParSpace`. Concatenation of paths is output.
 """
@@ -496,10 +557,13 @@ forkinitW(wi::IdentityWeightInit, outsizes, i) = PartialIdentityWeightInit(mapre
 
 """
     ResidualArchSpace <:AbstractArchSpace
+    ResidualArchSpace(s::AbstractArchSpace, [conf::VertexConf])
 
 Turns the wrapped `AbstractArchSpace` into a residual.
 
 Return `x = y + in` where `y` is drawn from the wrapped `AbstractArchSpace` when invoked with `in` as input vertex.
+
+`conf` is used to decorate trait and wrap the computation (e.g in an `ActivationContribution`). 
 """
 struct ResidualArchSpace <:AbstractArchSpace
     s::AbstractArchSpace
@@ -524,7 +588,7 @@ function (s::ResidualArchSpace)(name::String, in::AbstractVertex, rng=rng_defaul
 resinitW(wi::AbstractWeightInit) = wi
 
 resscale(wi, conf, v) = v
-resscale(::Union{IdentityWeightInit, PartialIdentityWeightInit}, conf, v) = invariantvertex(conf.outwrap(x -> convert(eltype(x), 0.5) .* x), v; traitdecoration= conf.traitdecoration, mutation=conf.mutation)
+resscale(::Union{IdentityWeightInit, PartialIdentityWeightInit}, conf, v) = invariantvertex(conf.outwrap(x -> convert(eltype(x), 0.5) .* x), v; traitdecoration= conf.traitdecoration)
 
 """
     FunctionSpace <: AbstractArchSpace
@@ -532,9 +596,9 @@ resscale(::Union{IdentityWeightInit, PartialIdentityWeightInit}, conf, v) = inva
 
 Return a `SizeInvariant` vertex representing `fun(x)` when invoked with `in` as input vertex where `x` is output of `in` where `fun` is uniformly selected from `funs`.
 """
-struct FunctionSpace <: AbstractArchSpace
-    conf::LayerVertexConf
-    funspace::AbstractParSpace
+struct FunctionSpace{C<:LayerVertexConf, P<:AbstractParSpace} <: AbstractArchSpace
+    conf::C
+    funspace::P
     namesuff::String
 end
 funspace_default_conf() = LayerVertexConf(ActivationContribution, validated() ∘ default_logging())
@@ -544,10 +608,10 @@ FunctionSpace(funs...; namesuff::String, conf=funspace_default_conf()) = Functio
 (s::FunctionSpace)(in::AbstractVertex, rng=rng_default; outsize=nothing, wi=nothing) = funvertex(s, in, rng)
 (s::FunctionSpace)(name::String, in::AbstractVertex, rng=rng_default; outsize=nothing, wi=nothing) = funvertex(join([name,s.namesuff]), s, in, rng)
 
-funvertex(s::FunctionSpace, in::AbstractVertex, rng) = invariantvertex(s.conf.layerfun(s.funspace(rng)), in, mutation=IoChange, traitdecoration = s.conf.traitfun)
+funvertex(s::FunctionSpace, in::AbstractVertex, rng) = invariantvertex(s.conf.layerfun(s.funspace(rng)), in, traitdecoration = s.conf.traitfun)
 
 funvertex(name::String, s::FunctionSpace, in::AbstractVertex, rng) =
-invariantvertex(s.conf.layerfun(s.funspace(rng)), in, mutation=IoChange, traitdecoration = s.conf.traitfun ∘ named(name))
+invariantvertex(s.conf.layerfun(s.funspace(rng)), in, traitdecoration = s.conf.traitfun ∘ named(name))
 
 """
     GlobalPoolSpace(Ts...)

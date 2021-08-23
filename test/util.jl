@@ -31,10 +31,11 @@
 end
 
 @testset "MutationShield" begin
+    using NaiveGAflux: allow_mutation
     v1 = inputvertex("v1", 3)
-    v2 = mutable("v2", Dense(nout(v1), 5), v1)
-    v3 = mutable("v3", Dense(nout(v2), 4), v2, traitfun = MutationShield)
-    v4 = mutable("v4", Dense(nout(v3), 2), v3, traitfun = validated() ∘ MutationShield)
+    v2 = fluxvertex("v2", Dense(nout(v1), 5), v1)
+    v3 = fluxvertex("v3", Dense(nout(v2), 4), v2, traitfun = MutationShield)
+    v4 = fluxvertex("v4", Dense(nout(v3), 2), v3, traitfun = validated() ∘ MutationShield)
 
     @test !allow_mutation(v1)
     @test allow_mutation(v2)
@@ -42,22 +43,24 @@ end
     @test !allow_mutation(v4)
 
 
-    @testset "Clone" begin
+    @testset "Functor" begin
+        using Functors: fmap
         t = MutationShield(SizeAbsorb())
-        ct(::SizeAbsorb;cf) = SizeInvariant()
-        ct(x...;cf=ct) = clone(x...,cf=cf)
-        tn = ct(t)
+        toinvariant(::SizeAbsorb) = SizeInvariant()
+        toinvariant(x) = x
+        tn = fmap(toinvariant, t)
         @test base(tn) == SizeInvariant()
         @test tn.allowed == t.allowed
     end
 end
 
 @testset "VertexSelection" begin
+    using NaiveGAflux: select
 
     v1 = inputvertex("v1", 3)
-    v2 = mutable("v2", Dense(nout(v1), 5), v1)
-    v3 = mutable("v3", Dense(nout(v2), 4), v2, traitfun = MutationShield)
-    v4 = mutable("v4", Dense(nout(v2), 2), v3)
+    v2 = fluxvertex("v2", Dense(nout(v1), 5), v1)
+    v3 = fluxvertex("v3", Dense(nout(v2), 4), v2, traitfun = MutationShield)
+    v4 = fluxvertex("v4", Dense(nout(v2), 2), v3)
     g1 = CompGraph(v1, v4)
 
     @testset "AllVertices" begin
@@ -71,7 +74,7 @@ end
 
 @testset "MutationShield allowed list" begin
 
-    import NaiveGAflux: DecoratingMutation
+    using NaiveGAflux: DecoratingMutation, allow_mutation
 
     struct MutationShieldTestMutation1 <: AbstractMutation{AbstractVertex} end
     struct MutationShieldTestMutation2 <: AbstractMutation{AbstractVertex} end
@@ -86,16 +89,16 @@ end
 
     TestShield(t) = MutationShield(t, MutationShieldTestMutation1)
 
-    @testset "Clone" begin
+    @testset "Functor" begin
         t1 = TestShield(SizeAbsorb())
-        @test clone(t1) == t1
+        @test fmap(identity, t1) == t1
     end
 
     v1 = inputvertex("v1", 3)
-    v2 = mutable("v2", Dense(nout(v1), 5), v1)
-    v3 = mutable("v3", Dense(nout(v2), 4), v2, traitfun = TestShield)
-    v4 = mutable("v4", Dense(nout(v3), 2), v3, traitfun = validated() ∘ TestShield)
-    v5 = mutable("v5", Dense(nout(v4), 1), v4)
+    v2 = fluxvertex("v2", Dense(nout(v1), 5), v1)
+    v3 = fluxvertex("v3", Dense(nout(v2), 4), v2, traitfun = TestShield)
+    v4 = fluxvertex("v4", Dense(nout(v3), 2), v3, traitfun = validated() ∘ TestShield)
+    v5 = fluxvertex("v5", Dense(nout(v4), 1), v4)
     g1 = CompGraph(v1, v5)
 
     @testset "Test allowed $m" for m in (
@@ -132,6 +135,8 @@ end
 end
 
 @testset "MutationShield abstract allowed list" begin
+
+    using NaiveGAflux: allow_mutation
     # This is not a java habit I promise! I have just been burnt by having to rename mock structs across tests when names clash too many times
     abstract type MutationShieldAbstractTestAbstractMutation <: AbstractMutation{AbstractVertex} end
     struct MutationShieldAbstractTestMutation1 <: MutationShieldAbstractTestAbstractMutation end
@@ -144,13 +149,13 @@ end
 
     TestShield(t) = MutationShield(t, MutationShieldAbstractTestAbstractMutation)
 
-    @testset "Clone" begin
+    @testset "Functor" begin
         t1 = TestShield(SizeAbsorb())
-        @test clone(t1) == t1
+        @test fmap(identity, t1) == t1
     end
 
     v1 = inputvertex("v1", 3)
-    v2 = mutable("v2", Dense(nout(v1), 5), v1; traitfun = TestShield)
+    v2 = fluxvertex("v2", Dense(nout(v1), 5), v1; traitfun = TestShield)
 
     @test allow_mutation(v2, m1())
     @test allow_mutation(v2, m2())
@@ -158,7 +163,7 @@ end
 end
 
 @testset "SelectWithMutation" begin
-    import NaiveGAflux: SelectWithMutation
+    using NaiveGAflux: SelectWithMutation, select
 
     struct SelectWithMutationMutation1 <: AbstractMutation{AbstractVertex} end
     struct SelectWithMutationMutation2 <: AbstractMutation{AbstractVertex} end
@@ -169,7 +174,7 @@ end
     TestShield(t) = MutationShield(t, SelectWithMutationMutation1)
 
     v1 = inputvertex("v1", 3)
-    v2 = mutable("v2", Dense(nout(v1), 5), v1; traitfun = TestShield)
+    v2 = fluxvertex("v2", Dense(nout(v1), 5), v1; traitfun = TestShield)
 
     @test name.(select(FilterMutationAllowed(), [v1,v2])) == []
 
@@ -182,39 +187,41 @@ end
 end
 
 @testset "remove_redundant_vertices" begin
+    using NaiveGAflux: check_apply
     v1 = inputvertex("in", 3)
-    v2 = mutable("v2", Dense(nout(v1), 5), v1)
-    v3 = mutable("V3", Dense(nout(v1), 5), v1)
-    v4 = traitconf(t -> RemoveIfSingleInput(NamedTrait(t, "v4"))) >>  v2 + v3
-    v5 = mutable("v5", BatchNorm(nout(v4)), v4)
+    v2 = fluxvertex("v2", Dense(nout(v1), 5), v1)
+    v3 = fluxvertex("V3", Dense(nout(v1), 5), v1)
+    v4 = traitconf(t -> RemoveIfSingleInput(NamedTrait("v4", t))) >>  v2 + v3
+    v5 = fluxvertex("v5", BatchNorm(nout(v4)), v4)
     v6 = concat("v6", v3, v5, traitfun = t -> RemoveIfSingleInput(t))
-    v7 = mutable("v7", Dense(nout(v6), 2), v6)
+    v7 = fluxvertex("v7", Dense(nout(v6), 2), v6)
 
     g = CompGraph(v1, v7)
 
-    nv_pre = nv(g)
+    nv_pre = nvertices(g)
 
     check_apply(g)
     # Nothing is redundant
-    @test nv_pre == nv(g)
+    @test nv_pre == nvertices(g)
 
     remove_edge!(v3, v4)
     check_apply(g)
 
-    @test nv_pre == nv(g)+1
+    @test nv_pre == nvertices(g)+1
 
     # Note, v3 also disappears from the graph as it is no longer used to compute the output
     remove_edge!(v3, v6)
     check_apply(g)
 
-    @test nv_pre == nv(g) + 3
+    @test nv_pre == nvertices(g) + 3
 end
 
-@testset "Clone ApplyIf" begin
+@testset "ApplyIf functor" begin
+    using Functors: fmap
     t = ApplyIf(x -> true, identity, SizeAbsorb())
-    ct(::SizeAbsorb;cf) = SizeInvariant()
-    ct(x...;cf=ct) = clone(x...,cf=cf)
-    tn = ct(t)
+    toinvariant(::SizeAbsorb) = SizeInvariant()
+    toinvariant(x) = x
+    tn = fmap(toinvariant, t)
     @test base(tn) == SizeInvariant()
 end
 
@@ -276,12 +283,8 @@ end
     @test typeof.(mm) == [Descent, Descent, Momentum]
 end
 
-@testset "Optimizer trait" begin
-    import NaiveGAflux: opttype, optmap, FluxOptimizer
-
-    @test opttype("Not an optimizer") === nothing
-    @test opttype(Descent()) == FluxOptimizer()
-    @test opttype(Flux.Optimiser(Descent(), ADAM())) == FluxOptimizer()
+@testset "optmap" begin
+    import NaiveGAflux: optmap, FluxOptimizer
 
     isopt = "Is an optimizer!"
     noopt = "Is not an optimizer!"

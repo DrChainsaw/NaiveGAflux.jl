@@ -289,7 +289,7 @@ Base.merge(v::AbstractVertex, trs::ShapeTrace...) = ShapeTrace(v, v, tuple(tuple
 Return a `AbstractShapeTrace` (default `ShapeTrace`) between `v` and `vs` where `vs` must be input ascendants to `v`. If `vs` is omitted then all input vertices will be used.
 """
 function shapetrace(v::AbstractVertex; trfun = v -> ShapeTrace(v))
-    ins = filter(v -> isempty(inputs(v)), NaiveNASlib.flatten(v))
+    ins = filter(v -> isempty(inputs(v)), ancestors(v))
     memo = Dict{AbstractVertex, Any}(ins .=> trfun.(ins))
     return output!(memo, v)
 end
@@ -327,8 +327,8 @@ end
 
 _Δshapes(::FluxNoParLayer, v) = _Δshapes(layer(v), v)
 _Δshapes(p::Union{MeanPool, MaxPool}, v) = Δshape_from_window(p, p.k, 1, p.pad), ShapeDiv(p.stride)
-_Δshapes(::Type{typeof(Flux.flatten)}, v) = _Δshapes_gp(actdim(v) .- 2)
-_Δshapes(::GlobalPool, v) = _Δshapes_gp(actdim(v) .- 2)
+_Δshapes(::Type{typeof(Flux.flatten)}, v) = _Δshapes_gp(NaiveNASflux.actdim(v) .- 2)
+_Δshapes(::GlobalPool, v) = _Δshapes_gp(NaiveNASflux.actdim(v) .- 2)
 
 Δshape_from_window(l::LT, ws::NTuple{N}, dilation::Integer, pad) where {N, LT} = Δshape_from_window(l, ws, ntuple(i -> dilation, N), pad)
 function Δshape_from_window(::LT, ws::NTuple{N}, dilation, pad) where {LT, N}

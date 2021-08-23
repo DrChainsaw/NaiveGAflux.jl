@@ -3,13 +3,14 @@
     v4n(graph::CompGraph, want) = v4n(vertices(graph), want)
     v4n(vs, want) = vs[findfirst(v -> want == name(v), vs)]
 
-    teststrat() = NaiveGAflux.default_crossoverswap_strategy(v -> 1:nout_org(v))
+    teststrat() = NaiveGAflux.default_crossoverswap_strategy(v -> 1) 
 
     @testset "CrossoverSwap" begin
-        import NaiveGAflux: crossoverswap!, separablefrom
+        using NaiveGAflux: crossoverswap!, separablefrom
+        using Functors: fmap
 
-        iv(np) = inputvertex("$np.in", 3, FluxDense())
-        dv(in, outsize, name) = mutable(name, Dense(nout(in), outsize), in)
+        iv(np) = denseinputvertex("$np.in", 3)
+        dv(in, outsize, name) = fluxvertex(name, Dense(nout(in), outsize), in)
 
         @testset "Simple Dense swap" begin
 
@@ -30,8 +31,8 @@
                 @test name.(vertices(ga)) == ["a.in", "a.dv1", "b.dv2", "a.dv3"]
                 @test name.(vertices(gb)) == ["b.in", "b.dv1", "a.dv2", "b.dv3"]
 
-                @test nout.(vertices(ga)) == [3,1,3,6]
-                @test nout.(vertices(gb)) == [3,1,3,3]
+                @test nout.(vertices(ga)) == [3,4,2,6]
+                @test nout.(vertices(gb)) == [3,1,5,3]
 
                 @test size(ga(ones(3, 2))) == (6, 2)
                 @test size(gb(ones(3, 2))) == (3, 2)
@@ -43,8 +44,8 @@
 
                 @test crossoverswap!(vertices(ga)[2], vertices(ga)[5], vertices(gb)[3], vertices(gb)[4]; strategy=teststrat) == (true,true)
 
-                @test nout.(vertices(ga)) == [3,2,4,8]
-                @test nout.(vertices(gb)) == [3,1,4,5,6,4,4,5]
+                @test nout.(vertices(ga)) == [3,2,3,8]
+                @test nout.(vertices(gb)) == [3,1,4,5,6,7,4,5]
 
                 @test size(ga(ones(3, 2))) == (8, 2)
                 @test size(gb(ones(3, 2))) == (5, 2)
@@ -53,9 +54,7 @@
             @testset "Swap same graph is noop" begin
                 ga = g(4:7, "a")
 
-                ren(str::String;cf=ren) = "b" * str[2:end]
-                ren(x...;cf=ren) = clone(x...;cf=cf)
-                gb = copy(ga, ren)
+                gb = fmap(x -> x isa String ? "b" * x[2:end] : x, ga)
 
                 indata = reshape(collect(Float32, 1:3*2),3,:)
                 orgout = ga(indata)
@@ -81,12 +80,12 @@
             end
 
             ga = g(3:7, "a", concat)
-            gb = g(3 .* ones(Int, 4), "b", (name, vs...) -> +(name >> vs[1], vs[2:end]...))
+            gb = g(fill(3, 4), "b", (name, vs...) -> +(name >> vs[1], vs[2:end]...))
 
             @test crossoverswap!(vertices(ga)[end-1], vertices(gb)[end-1]; strategy=teststrat) == (true, true)
 
-            @test nout.(vertices(ga)) == [3, 4, 4, 4, 4, 4, 7]
-            @test nout.(vertices(gb)) == [3, 1, 2, 2, 5, 3]
+            @test nout.(vertices(ga)) == [3, 6, 6, 6, 6, 6, 7]
+            @test nout.(vertices(gb)) == [3, 3, 3, 3, 9, 3]
 
             @test size(ga(ones(3, 2))) == (7, 2)
             @test size(gb(ones(3, 2))) == (3, 2)
@@ -101,12 +100,12 @@
             end
 
             ga = g(3:6, "a", concat)
-            gb = g(3 .* ones(Int, 6), "b", (name, vs...) -> +(name >> vs[1], vs[2:end]...))
+            gb = g(fill(3, 6), "b", (name, vs...) -> +(name >> vs[1], vs[2:end]...))
 
             @test crossoverswap!(vertices(ga)[end-1], vertices(gb)[end-1]; strategy=teststrat) == (true, true)
 
-            @test nout.(vertices(ga)) == [3, 3, 3, 3, 3, 6]
-            @test nout.(vertices(gb)) == [3, 1, 1, 1, 1, 1, 5, 3]
+            @test nout.(vertices(ga)) == [3, 5, 5, 5, 5, 6]
+            @test nout.(vertices(gb)) == [3, 3, 3, 3, 3, 3, 15, 3]
 
             @test size(ga(ones(3, 2))) == (6, 2)
             @test size(gb(ones(3, 2))) == (3, 2)
@@ -130,8 +129,8 @@
             @test name.(vertices(ga)) == ["a.in", "a.dv1", "a.dv2", "a.dv3", "a.merge", "b.merge", "a.dvo"]
             @test name.(vertices(gb)) == ["b.in", "b.dv1", "b.dv2", "b.dv3", "extramerge", "a.dvn", "b.dvn", "b.dvo"]
 
-            @test nout.(vertices(ga)) == [3, 1, 1, 1, 3, 3, 4]
-            @test nout.(vertices(gb)) == [3, 3, 3, 4, 10, 3, 2, 4]
+            @test nout.(vertices(ga)) == [3, 2, 3, 4, 9, 9, 4]
+            @test nout.(vertices(gb)) == [3, 2, 3, 4, 9, 2, 2, 4]
 
             @test size(ga(ones(3, 2))) == (4, 2)
             @test size(gb(ones(3, 2))) == (4, 2)
@@ -165,6 +164,30 @@
             end
         end
 
+        @testset "Dummy shall pass size validation" begin
+            import NaiveNASflux: named, validated, traitconf
+            # Evilness from this case: We want to swap out tv1 to dv2, but both tv1 and dv2 is input 
+            # to a elementwise addition. NaiveNASlib handles this, but if the dummy vertex does not 
+            # adjust its output size NaiveNASlib will think that the graph is size inconsistent as
+            # it does not know that we intend to remove the dummy vertex.
+
+            function g(np, sz)
+                vi = iv(np)
+                dv1 = dv(vi, sz, "$np.dv1")
+                tv1 = invariantvertex(identity, dv1; traitdecoration=named("$np.tv1") ∘ validated())
+                tv2 = invariantvertex(identity, tv1; traitdecoration=named("$np.tv2") ∘ validated())
+                dv2 = dv(tv2, nout(tv2), "$np.dv2")
+                add = traitconf(named("$np.add") ∘ validated()) >> dv2 + tv1
+                dv3 = dv(add, 2, "$np.dv3")
+                return CompGraph(vi, dv3), tv1, dv2
+            end
+
+            ga, vin1, vout1 = g("a", 2)
+            gb, vin2, vout2 = g("b", 4)
+
+            @test crossoverswap!(vin1, vout1, vin2, vout2; strategy=teststrat) == (true, true)
+        end
+
         @testset "Find swappable path" begin
 
             @testset "Residual on input" begin
@@ -186,7 +209,6 @@
                 vsa = vertices(ga)
                 aswap = separablefrom(v4n(ga, "a.dv3"), ga.inputs)
                 @test name.(aswap) == ["a.dv3", "a.add1"]
-
             end
 
             @testset "Dual branched graph with optional extra connection" begin
@@ -276,7 +298,6 @@
                 dummy = stripoutedges!(dva1)
                 @test outputs(dva1) == []
                 addoutedges!(dva1, dummy, teststrat)
-                apply_mutation(gg) # just to verify nothing has changed
 
                 actual1 = name.(outputs(dva1))
                 actual2 = mapreduce(vo -> name.(inputs(vo)), vcat, unique(outputs(dva1)))
@@ -297,10 +318,9 @@
                 expected = name.(inputs(ca1))
 
                 ins = stripinedges!(ca1)
-                @test mapreduce(inputs, vcat, inputs(ca1)) == []
+                @test mapreduce(inputs, vcat, inputs(ca1);init=[]) == []
                 addinedges!(ca1, ins, teststrat)
-                apply_mutation(gg) #just to verify nothing has changed
-
+ 
                 actual = name.(inputs(ca1))
 
                 @test actual == expected
@@ -309,7 +329,7 @@
             end
 
             g_org = g("a")
-            g_new = copy(g_org)
+            g_new = deepcopy(g_org)
 
             indata = randn(MersenneTwister(0), 3, 2)
             out_org = g_org(indata)
@@ -332,7 +352,7 @@
         end
 
         @testset "Partial success" begin
-            idv(in, outsize, name) = mutable(name, Dense(nout(in), outsize), in; traitfun=t -> NamedTrait(Immutable(), name))
+            idv(in, outsize, name) = fluxvertex(name, Dense(nout(in), outsize), in; traitfun=t -> NamedTrait(name, Immutable()))
 
             function g(np, mergesize, mergeop)
                 vi = iv(np)
@@ -344,30 +364,30 @@
             end
 
             @testset "Fail first" begin
-                ga = g("a", 3, (vname, vs...) -> +(vname >> vs[1], vs[2:end]...))
-                gb = g("b", 5, concat)
-
-                @test @test_logs (:warn, "Failed to align sizes for vertices b.dv2 and a.dv2.dummy for crossover. Reverting...") crossoverswap!(vertices(ga)[end-1], vertices(gb)[end-1]; strategy=teststrat) == (true, false)
-
-                @test name.(vertices(ga)) == ["a.in", "a.dv1", "a.dv2", "b.m1", "a.dv3"]
-                @test size(ga(ones(3,2))) == (5,2)
-            end
-
-            @testset "Fail second" begin
                 ga = g("a", 5, concat)
                 gb = g("b", 3, (vname, vs...) -> +(vname >> vs[1], vs[2:end]...))
 
-                @test @test_logs (:warn, "Failed to align sizes for vertices a.dv2 and b.dv2.dummy for crossover. Reverting...") crossoverswap!(vertices(ga)[end-1], vertices(gb)[end-1]; strategy=teststrat) == (false, true)
+                @test @test_logs (:warn, "Failed to align sizes for vertices a.dv2 and b.dv2.dummy for crossover. Attempt aborted!") crossoverswap!(vertices(ga)[end-1], vertices(gb)[end-1]; strategy=teststrat) == (false, true)
 
                 @test name.(vertices(gb)) == ["b.in", "b.dv1", "b.dv2", "a.m1", "b.dv3"]
                 @test size(gb(ones(3,2))) == (5,2)
             end
+
+            @testset "Fail second" begin
+                ga = g("a", 3, (vname, vs...) -> +(vname >> vs[1], vs[2:end]...))
+                gb = g("b", 5, concat)
+     
+                @test @test_logs (:warn, "Failed to align sizes for vertices b.dv2 and a.dv2.dummy for crossover. Attempt aborted!") crossoverswap!(vertices(ga)[end-1], vertices(gb)[end-1]; strategy=teststrat) == (true, false)
+
+                @test name.(vertices(ga)) == ["a.in", "a.dv1", "a.dv2", "b.m1", "a.dv3"]
+                @test size(ga(ones(3,2))) == (5,2)
+            end
         end
 
         @testset "Swap invariant layers" begin
-            bv(in, name) = mutable(name, BatchNorm(nout(in)), in)
-            pv(in, name) = mutable(name, MaxPool((3,3); pad=(1,1)), in)
-            cv(in, outsize, name) = mutable(name, Conv((3,3), nout(in) => outsize; pad=(1,1)), in)
+            bv(in, name) = fluxvertex(name, BatchNorm(nout(in)), in)
+            pv(in, name) = fluxvertex(name, MaxPool((3,3); pad=(1,1)), in)
+            cv(in, outsize, name) = fluxvertex(name, Conv((3,3), nout(in) => outsize; pad=(1,1)), in)
 
             @testset "Linear graph" begin
                 function g(np)
@@ -418,7 +438,7 @@
                     indata = randn(Float32, 4,4,3,2)
                     out_org = g_org(indata)
 
-                    g_new = copy(g_org)
+                    g_new = deepcopy(g_org)
 
                     @test crossoverswap!(v4n(g_org, "a.bv1"), v4n(g_new, "a.bv1"); strategy=teststrat) == (true, true)
 
@@ -442,7 +462,7 @@
                 ga = g((3,2), "a")
                 gb = g((6,2), "b")
 
-                strat = () -> NaiveGAflux.default_crossoverswap_strategy(v -> 1:nout_org(v))
+                strat = () -> NaiveGAflux.default_crossoverswap_strategy(v -> 1)
                 @test crossoverswap!(vertices(ga)[3], vertices(ga)[4], vertices(gb)[3], vertices(gb)[4]; strategy = strat) == (true,true)
 
                 @test name.(vertices(ga)) == ["a.in", "a.cv1", "b.bv1", "b.bv2", "a.cv2", "a.cv3"]
@@ -457,10 +477,10 @@
     @testset "VertexCrossover" begin
         import NaiveGAflux: GlobalPool, sameactdims, default_pairgen
 
-        iv(np) = inputvertex("$np.in", 3, FluxDense())
-        dv(in, outsize, name) = mutable(name, Dense(nout(in), outsize), in)
+        iv(np) = denseinputvertex("$np.in", 3)
+        dv(in, outsize, name) = fluxvertex(name, Dense(nout(in), outsize), in)
         gv(in, name) = invariantvertex(GlobalPool(MaxPool), in; traitdecoration = named(name))
-        cv(in, outsize, name) = mutable(name, Conv((3,3), nout(in) => outsize; pad=(1,1)), in)
+        cv(in, outsize, name) = fluxvertex(name, Conv((3,3), nout(in) => outsize; pad=(1,1)), in)
 
         @testset "Linear graph" begin
             function g(np, cvs, dvs)
@@ -541,9 +561,7 @@
                 bnames = name.(vertices(gb))
 
                 ga_new, gb_new = crossover(ga, gb; pairgen=pairgen_outer, crossoverfun=crossfun)
-                @test nout.(vertices(ga_new)) == nout_org.(vertices(ga_new))
-                @test nout.(vertices(gb_new)) == nout_org.(vertices(gb_new))
-
+            
                 # Originals not impacted
                 @test anames == name.(vertices(ga))
                 @test bnames == name.(vertices(gb))
@@ -551,13 +569,13 @@
                 @test name.(vertices(ga_new)) == ["a.in", "b.cv2", "b.cv3", "a.pv1", "b.dv2", "b.dv3"]
                 @test name.(vertices(gb_new)) == ["b.in", "b.cv1", "a.cv1", "a.cv2", "b.pv1", "b.dv1", "a.dv1", "a.dv2"]
 
-                @test size(ga_new(ones(Float32, 4,4,3,2))) == (6, 2)
-                @test size(gb_new(ones(Float32, 4,4,3,2))) == (6, 2)
+                @test size(ga_new(ones(Float32, 4,4,3,2))) == (7, 2)
+                @test size(gb_new(ones(Float32, 4,4,3,2))) == (7, 2)
             end
 
             @testset "VertexCrossover" begin
                 import NaiveGAflux: default_pairgen
-
+    
                 pairgen_outer(vs1,vs2; ind1=1) = default_pairgen(vs1, vs2; ind1=2ind1)
                 pairgen_inner(vs1, vs2) = default_pairgen(vs1, vs2; ind1=length(vs1))
 
@@ -571,9 +589,6 @@
 
                 ga_new, gb_new = c((ga,gb))
 
-                @test nout.(vertices(ga_new)) == nout_org.(vertices(ga_new))
-                @test nout.(vertices(gb_new)) == nout_org.(vertices(gb_new))
-
                 # Originals not impacted
                 @test anames == name.(vertices(ga))
                 @test bnames == name.(vertices(gb))
@@ -581,26 +596,23 @@
                 @test name.(vertices(ga_new)) == ["a.in", "a.cv1", "b.cv2", "a.cv3", "a.cv4", "a.pv1", "b.dv6", "a.dv2"]
                 @test name.(vertices(gb_new)) == ["b.in", "b.cv1", "a.cv2", "b.pv1", "b.dv1", "b.dv2", "b.dv3", "b.dv4", "b.dv5", "a.dv1", "b.dv7"]
 
-                @test nout.(vertices(ga_new)) == nout_org.(vertices(ga_new))
-                @test mapreduce(nin, vcat, vertices(ga_new)) == mapreduce(nin_org, vcat, vertices(ga_new))
-
-                @test nout.(vertices(gb_new)) == nout_org.(vertices(gb_new))
-                @test mapreduce(nin, vcat, vertices(gb_new)) == mapreduce(nin_org, vcat, vertices(gb_new))
-
                 NaiveNASflux.forcemutation(ga_new)
                 NaiveNASflux.forcemutation(gb_new)
 
-                @test nout(v4n(ga_new, "b.cv2")) == nout(layer(v4n(ga_new, "b.cv2")))
-                @test nin(v4n(ga_new, "a.cv3")) == [nin(layer(v4n(ga_new, "a.cv3")))]
+                lnout(v) = nout(layer(v)) 
+                lnin(v) = nin(layer(v))
 
-                @test nout(v4n(ga_new, "b.dv6")) == nout(layer(v4n(ga_new, "b.dv6")))
-                @test nin(v4n(ga_new, "a.dv2")) == [nin(layer(v4n(ga_new, "a.dv2")))]
+                @test nout(v4n(ga_new, "b.cv2")) == lnout(v4n(ga_new, "b.cv2"))
+                @test nin(v4n(ga_new, "a.cv3")) == lnin(v4n(ga_new, "a.cv3"))
 
-                @test nout(v4n(gb_new, "a.cv2")) == nout(layer(v4n(gb_new, "a.cv2")))
-                @test nin(v4n(gb_new, "b.dv1")) == [nin(layer(v4n(gb_new, "b.dv1")))]
+                @test nout(v4n(ga_new, "b.dv6")) == lnout(v4n(ga_new, "b.dv6"))
+                @test nin(v4n(ga_new, "a.dv2")) == lnin(v4n(ga_new, "a.dv2"))
 
-                @test nout(v4n(gb_new, "a.dv1")) == nout(layer(v4n(gb_new, "a.dv1")))
-                @test nin(v4n(gb_new, "b.dv7")) == [nin(layer(v4n(gb_new, "b.dv7")))]
+                @test nout(v4n(gb_new, "a.cv2")) == lnout(v4n(gb_new, "a.cv2"))
+                @test nin(v4n(gb_new, "b.dv1")) == lnin(v4n(gb_new, "b.dv1"))
+
+                @test nout(v4n(gb_new, "a.dv1")) == lnout(v4n(gb_new, "a.dv1"))
+                @test nin(v4n(gb_new, "b.dv7")) == lnin(v4n(gb_new, "b.dv7"))
 
                 @test size(ga_new(ones(Float32, 4,4,3,2))) == (8,2)
                 @test size(gb_new(ones(Float32, 4,4,3,2))) == (10,2)
@@ -639,13 +651,12 @@
                 return CompGraph(vi, dvn)
             end
 
-            @testset "Crossover with MutationProbability and NeuronSelectMutation" begin
+            @testset "Crossover with MutationProbability" begin
                 import NaiveGAflux: default_pairgen
 
                 pairgen_inner(vs1, vs2) = default_pairgen(vs1, vs2; ind1=length(vs1))
 
-                # NeuronSelectMutation doesn't really do anything. It is just to test the code path until a use case for it materializes. I should probably just have deleted the methods instead when no longer needed...
-                c = VertexCrossover(MutationProbability(PostMutation(NeuronSelectMutation(CrossoverSwap(;pairgen=pairgen_inner, strategy=teststrat)), neuronselect), Probability(0.2, MockRng([0.3, 0.1, 0.3]))))
+                c = VertexCrossover(MutationProbability(CrossoverSwap(;pairgen=pairgen_inner, strategy=teststrat), Probability(0.2, MockRng([0.3, 0.1, 0.3]))))
 
                 ga = g("a", 3:6, 7:8)
                 gb = g("b", 2:3, 4:10)
@@ -662,19 +673,13 @@
                 @test unique(first.(split.(name.(vertices(ga_new)), '.'))) == ["a" ,"b"]
                 @test unique(first.(split.(name.(vertices(gb_new)), '.'))) == ["b" ,"a"]
 
-                @test nout.(vertices(ga_new)) == nout_org.(vertices(ga_new))
-                @test mapreduce(nin, vcat, vertices(ga_new)) == mapreduce(nin_org, vcat, vertices(ga_new))
-
-                @test nout.(vertices(gb_new)) == nout_org.(vertices(gb_new))
-                @test mapreduce(nin, vcat, vertices(gb_new)) == mapreduce(nin_org, vcat, vertices(gb_new))
-
                 @test size(ga_new(ones(Float32, 4,4,3,2))) == (8,2)
                 @test size(gb_new(ones(Float32, 4,4,3,2))) == (10,2)
             end
         end
 
         @testset "Crossover conv size mismatch" begin
-            pv(in, name) = mutable(name, MaxPool((2,2); stride=(2,2)), in)
+            pv(in, name) = fluxvertex(name, MaxPool((2,2); stride=(2,2)), in)
             function g(np)
                 vi = iv(np)
                 cv1 = cv(vi, 4, "$np.cv1")

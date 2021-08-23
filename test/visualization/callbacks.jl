@@ -8,14 +8,14 @@
             nv::Int
             np::Int
         end
-        NaiveNASlib.nv(g::DummyGraph) = g.nv
+        NaiveNASlib.nvertices(g::DummyGraph) = g.nv
         NaiveGAflux.nparams(g::DummyGraph) = g.np
         struct PlotTestCand <: AbstractCandidate
             fitness::Real
             graph::DummyGraph
             PlotTestCand(fitness, nv, np) = new(fitness, DummyGraph(nv, np))
         end
-        NaiveGAflux.graph(c::PlotTestCand, f=identity) = f(c.graph)
+        NaiveGAflux.model(c::PlotTestCand, f=identity) = f(c.graph)
         NaiveGAflux.fitness(c::PlotTestCand) = c.fitness
 
         try

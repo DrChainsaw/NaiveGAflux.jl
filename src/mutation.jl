@@ -4,8 +4,13 @@
 Abstract type defining a mutation operation on entities of type `T`.
 
 Implementations are expected to be callable using an entity of type `T` as only input.
+
+May also implement a callable accepting a `AbstractVector{<:T}` if it is useful to work on
+all items to mutate at once.
 """
 abstract type AbstractMutation{T} end
+
+(m::AbstractMutation{T})(es::AbstractVector{<:T}) where T = m.(es)
 
 """
     AbstractCrossover{T}
@@ -14,12 +19,15 @@ Type alias for `AbstractMutation{Tuple{T,T}}` defining a crossover of two entiti
 
 Implementations are expected to be callable using a tuple of two type `T` as only input.
 """
-AbstractCrossover{T} = AbstractMutation{Tuple{T,T}}
+const AbstractCrossover{T} = AbstractMutation{Tuple{T,T}}
 
 """
     DecoratingMutation{T}
 
 Abstract type indicating that the type itself does not perform any mutation but wraps a type which might do.
+
+Must either implement callable method for `AbstractVector{<:T}` or accept keyword arguments `next=wrapped(m)` and
+`noop=identity` along with a single `T`.
 """
 abstract type DecoratingMutation{T} <: AbstractMutation{T} end
 wrapped(m::DecoratingMutation) = m.m
@@ -28,6 +36,34 @@ mutationleaves(m::DecoratingMutation) = (mutationleaves(wrapped(m))...,)
 mutationleaves(tm::Tuple) = mapreduce(mutationleaves, (t1,t2) -> (t1...,t2...), tm)
 mutationleaves(m) = tuple(m)
 
+# Apart from being overengineered this helps protecting against forgetting to handle arrays in a DecoratingMutation
+# The next/noop happens to work with most existing DecoratingMutations, but it is a bit arbitrary and in some cases 
+# one must implement both the per-element and the vector of elements versions.
+function (m::DecoratingMutation{T})(es::AbstractVector{<:T}) where T 
+    cnt = Ref(1)
+    fornext = Int[]
+    next = function(e) 
+        push!(fornext, cnt[])
+        cnt[] += 1
+        e
+    end
+    noop = function(e)
+        cnt[] += 1
+        e
+    end
+
+    allres = m.(es; next, noop)
+    mres = wrapped(m)(es[fornext])
+
+    # Mutation might accidentally widen the type compared to allres and then we can't insert mres into allres.
+    # Lets fix that if it happens
+    RT = typejoin(eltype(allres), eltype(mres))
+    res = RT === eltype(allres) ? allres :  convert(Vector{RT}, allres)
+
+    res[fornext] = mres
+    return res
+end
+
 """
     MutationProbability{T} <: DecoratingMutation{T}
     MutationProbability(m::AbstractMutation{T}, p::Probability)
@@ -35,12 +71,12 @@ mutationleaves(m) = tuple(m)
 
 Applies `m` with probability `p`.
 """
-struct MutationProbability{T} <: DecoratingMutation{T}
+struct MutationProbability{T, P<:Probability} <: DecoratingMutation{T}
     m::AbstractMutation{T}
-    p::Probability
+    p::P
 end
 MutationProbability(m::AbstractMutation{T}, p::Number) where T = MutationProbability(m, Probability(p))
-(m::MutationProbability)(e) = apply(() -> m.m(e), m.p, () -> e)
+(m::MutationProbability{T})(e::T; next=m.m, noop=identity) where T = apply(() -> next(e), m.p, () -> noop(e))
 
 """
     WeightedMutationProbability{T,F} <: DecoratingMutation{T}
@@ -52,34 +88,34 @@ struct WeightedMutationProbability{T,F} <: DecoratingMutation{T}
     m::AbstractMutation{T}
     pfun::F
 end
-(m::WeightedMutationProbability)(e) = apply(() -> m.m(e), m.pfun(e), () -> e)
+(m::WeightedMutationProbability{T})(e::T; next=m.m, noop=identity) where T = apply(() -> next(e), m.pfun(e), () -> noop(e))
 
 """
-    HighValueMutationProbability(m::AbstractMutation{T}, pbase::Real, rng=rng_default; spread=0.5)
+    HighUtilityMutationProbability(m::AbstractMutation{T}, pbase::Real, rng=rng_default; spread=0.5)
 
-Return a `WeightedMutationProbability` which applies `m` to vertices with an (approximately) average probability of `pbase` and where high `neuron_value` compared to other vertices in same graph means higher probability.
+Return a `WeightedMutationProbability` which applies `m` to vertices with an (approximately) average probability of `pbase` and where high `neuronutility` compared to other vertices in same graph means higher probability.
 
-Parameter `spread` can be used to control how much the difference in probability is between high and low values. High spread means high difference while low spread means low difference.
+Parameter `spread` can be used to control how much the difference in probability is between high and low utlity. High spread means high difference while low spread means low difference.
 """
-HighValueMutationProbability(m::AbstractMutation{T}, pbase::Real, rng=rng_default;spread=0.5) where T <: AbstractVertex = WeightedMutationProbability(m, weighted_neuron_value_high(pbase, rng,spread=spread))
+HighUtilityMutationProbability(m::AbstractMutation{T}, pbase::Real, rng=rng_default;spread=0.5) where T <: AbstractVertex = WeightedMutationProbability(m, weighted_neuronutility_high(pbase, rng,spread=spread))
 
 """
-    LowValueMutationProbability(m::AbstractMutation{T}, pbase::Real, rng=rng_default; spread=2)
+    LowUtilityMutationProbability(m::AbstractMutation{T}, pbase::Real, rng=rng_default; spread=2)
 
-Return a `WeightedMutationProbability` which applies `m` to vertices with an (approximately) average probability of `pbase` and where low `neuron_value` compared to other vertices in same graph means higher probability.
+Return a `WeightedMutationProbability` which applies `m` to vertices with an (approximately) average probability of `pbase` and where low `neuronutility` compared to other vertices in same graph means higher probability.
 
-Parameter `spread` can be used to control how much the difference in probability is between high and low values. High spread means high difference while low spread means low difference.
+Parameter `spread` can be used to control how much the difference in probability is between high and low utlity. High spread means high difference while low spread means low difference.
 """
-LowValueMutationProbability(m::AbstractMutation{T}, pbase::Real, rng=rng_default;spread=2) where T <: AbstractVertex = WeightedMutationProbability(m, weighted_neuron_value_low(pbase, rng, spread=spread))
+LowUtilityMutationProbability(m::AbstractMutation{T}, pbase::Real, rng=rng_default;spread=2) where T <: AbstractVertex = WeightedMutationProbability(m, weighted_neuronutility_low(pbase, rng, spread=spread))
 
 
-weighted_neuron_value_high(pbase, rng=rng_default; spread=0.5) = function(v::AbstractVertex)
-    ismissing(neuron_value(v)) && return pbase
+weighted_neuronutility_high(pbase, rng=rng_default; spread=0.5) = function(v::AbstractVertex)
+    ismissing(NaiveNASflux.neuronutility(v)) && return pbase
     return Probability(fixnan(pbase ^ normexp(v, spread), pbase), rng)
 end
 
-weighted_neuron_value_low(pbase, rng=rng_default;spread=2) = function(v::AbstractVertex)
-    ismissing(neuron_value(v)) && return pbase
+weighted_neuronutility_low(pbase, rng=rng_default;spread=2) = function(v::AbstractVertex)
+    ismissing(NaiveNASflux.neuronutility(v)) && return pbase
     return Probability(fixnan(pbase ^ (1/normexp(v, 1/spread)), pbase), rng)
 end
 
@@ -88,13 +124,15 @@ fixnan(x, rep) = isnan(x) ? rep : clamp(x, 0.0, 1.0)
 # This is pretty hacky and arbitrary. Change to something better
 function normexp(v::AbstractVertex, s)
     allvertices = filter(allow_mutation, all_in_graph(v))
-    allvalues = map(vi -> neuron_value(vi), allvertices)
+    allvalues = map(vi -> NaiveNASflux.neuronutility(vi), allvertices)
     meanvalues = map(mean, skipmissing(allvalues))
     meanvalue = mean(meanvalues)
     maxvalue = maximum(meanvalues)
-    value = mean(neuron_value(v))
-    # Basic idea: maxvalue - value means the (to be) exponent is <= 0 while the division seems to normalize so that average of pbase ^ normexp across allvertices is near pbase (no proof!). The factor 2 is just to prevent probability of vertex with maxvalue to be 1.
-    return (2maxvalue^s - value^s) / (2maxvalue^s - meanvalue^s)
+    utlity = mean(NaiveNASflux.neuronutility(v))
+    # Basic idea: maxvalue - utlity means the (to be) exponent is <= 0 while the division seems to normalize so that 
+    # average of pbase ^ normexp across allvertices is near pbase (no proof!). The factor 2 is just to prevent 
+    # probability of vertex with maxvalue to be 1.
+    return (2maxvalue^s - utlity^s) / (2maxvalue^s - meanvalue^s)
 end
 
 
@@ -110,7 +148,9 @@ struct MutationChain{T} <: DecoratingMutation{T}
     m::Tuple{Vararg{AbstractMutation{T}}}
 end
 MutationChain(m::AbstractMutation{T}...) where T = MutationChain(m)
-(m::MutationChain)(e) = foldl((ei, mi) -> mi(ei), m.m; init=e)
+# Identical, but can't use Union due to ambiguity
+(m::MutationChain{T})(es::AbstractVector{<:T}) where T = foldl((ei, mi) -> mi(ei), m.m; init=es)
+(m::MutationChain{T})(e::T) where T = foldl((ei, mi) -> mi(ei), m.m; init=e)
 
 """
     RecordMutation{T} <: DecoratingMutation{T}
@@ -122,11 +162,11 @@ Intended use case is to be able to do parameter selection on mutated vertices.
 """
 struct RecordMutation{T} <: DecoratingMutation{T}
     m::AbstractMutation{T}
-    mutated::AbstractVector{T}
+    mutated::Vector{T}
 end
 RecordMutation(m::AbstractMutation{T}) where T = RecordMutation(m, T[])
-function (m::RecordMutation)(e)
-    em = m.m(e)
+function (m::RecordMutation{T})(e::T; next=m.m, noop=identity) where T
+    em = next(e)
     push!(m.mutated, em)
     return em
 end
@@ -149,16 +189,16 @@ Calling `nextlogfun(e)` where `e` is the entity to mutate produces an `AbstractL
 
 By default, this is used to add a level of indentation to subsequent logging calls which makes logs of hierarchical mutations (e.g. mutate a CompGraph by applying mutations to some of its vertices) easier to read. Set `nextlogfun = e -> current_logger()` to remove this behaviour.
 """
-struct LogMutation{F,L<:LogLevel,LF,T} <: DecoratingMutation{T}
+struct LogMutation{T,F,L<:LogLevel,LF} <: DecoratingMutation{T}
     strfun::F
     level::L
     nextlogfun::LF
     m::AbstractMutation{T}
 end
 LogMutation(strfun, m::AbstractMutation{T}; level = Logging.Info, nextlogfun=e -> PrefixLogger("   ")) where T = LogMutation(strfun, level, nextlogfun, m)
-function (m::LogMutation)(e)
+function (m::LogMutation{T})(e::T; next=m.m, noop=identity) where T
     @logmsg m.level m.strfun(e)
-    return with_logger(() -> m.m(e), m.nextlogfun(e))
+    return with_logger(() -> next(e), m.nextlogfun(e))
 end
 
 """
@@ -167,13 +207,13 @@ end
 
 Applies mutation `m` only for entities `e` for which `predicate(e)` returns true.
 """
-struct MutationFilter{T} <: DecoratingMutation{T}
-    predicate
+struct MutationFilter{T,P} <: DecoratingMutation{T}
+    predicate::P
     m::AbstractMutation{T}
 end
-function (m::MutationFilter)(e)
-    m.predicate(e) && return m.m(e)
-    return e
+function (m::MutationFilter{T})(e::T; next=m.m, noop=identity) where T
+    m.predicate(e) && return next(e)
+    return noop(e)
 end
 
 
@@ -186,15 +226,13 @@ Applies a wrapped `AbstractMutation{AbstractVertex}` to each selected vertex in 
 
 Vertices to select is determined by the configured `AbstractVertexSelection`.
 """
-struct VertexMutation <: DecoratingMutation{CompGraph}
+struct VertexMutation{S<:AbstractVertexSelection} <: DecoratingMutation{CompGraph}
     m::AbstractMutation{AbstractVertex}
-    s::AbstractVertexSelection
+    s::S
 end
 VertexMutation(m::AbstractMutation{AbstractVertex}) = VertexMutation(m, FilterMutationAllowed())
 function (m::VertexMutation)(g::CompGraph)
-    for v in select(m.s, g, m)
-        m.m(v)
-    end
+    m.m(select(m.s, g, m))
     return g
 end
 
@@ -204,38 +242,54 @@ end
     NoutMutation(limit, rng::AbstractRNG=rng_default)
     NoutMutation(l1,l2)
 
-Mutate the out size of a vertex.
+Mutate the out size of a vertex or vector of vertices.
 
-Size is changed by `x * nout(v)` quantized to closest non-zero integer of `minΔnoutfactor(v)` where `x` is drawn from `U(minrel, maxrel)` where `minrel` and `maxrel` are `l1` and `l2` if `l1 < l2` and `l2` and `l1` otherwise.
+Size is changed by `x * nout(v)` rounded away from from zero where `x` is drawn from `U(minrel, maxrel)` where 
+`minrel` and `maxrel` are `l1` and `l2` if `l1 < l2` and `l2` and `l1` otherwise.
 """
-struct NoutMutation <:AbstractMutation{AbstractVertex}
-    minrel::Real
-    maxrel::Real
-    rng::AbstractRNG
-    NoutMutation(l1,l2, rng) = l1 < l2 ? new(l1, l2, rng) : new(l2,l1, rng)
+struct NoutMutation{R<:Real, RNG<:AbstractRNG} <:AbstractMutation{AbstractVertex}
+    minrel::R
+    maxrel::R
+    rng::RNG
+    function NoutMutation(l1::R1, l2::R2, rng::RNG) where {R1, R2, RNG} 
+        R = promote_type(R1, R2)
+        return l1 < l2 ? new{R, RNG}(promote(l1, l2)..., rng) : new{R, RNG}(promote(l2, l1)..., rng)
+    end
 end
 NoutMutation(limit, rng::AbstractRNG=rng_default) = NoutMutation(0, limit, rng)
 NoutMutation(l1,l2) = NoutMutation(l1,l2, rng_default)
-function (m::NoutMutation)(v::AbstractVertex)
-    Δfactor = minΔnoutfactor(v)
-    # Missing Δfactor means vertex can't be mutated, for example if it touches an immutable vertex such as an input vertex
-    ismissing(Δfactor) && return v
+(m::NoutMutation)(v::AbstractVertex) = first(m([v]))
+function (m::NoutMutation)(vs::AbstractVector{<:AbstractVertex})
 
+    Δs = Dict{AbstractVertex, Int}()
     shift = m.minrel
     scale = m.maxrel - m.minrel
 
-    x = rand(m.rng) * scale + shift
-    xq = (nout(v) * x) ÷ Δfactor
-    Δ = Int(sign(x) * max(Δfactor, abs(xq) * Δfactor))
+    for v in vs
+        terminputs = findterminating(v, inputs)
 
-    minsize = min(nout(v), minimum(nout.(findterminating(v, inputs))))
-    minsize + Δ <= Δfactor && return v
+        # We are basically just searching for Immutable vertices here, allow_mutation(trait(v)) happens to do just that
+        any(tv -> allow_mutation(trait(tv)), terminputs) || continue
+        
+        Δfloat = rand(m.rng) * scale + shift
 
-    fallback = ΔNout{Relaxed}(v, Δ, LogΔSizeExec(Logging.Warn, "Could not change nout of $v by $(Δ) after relaxation! Vertex not changed!", ΔSizeFailNoOp()))
-    strategy = ΔNout{Exact}(v, Δ, LogΔSizeExec(Logging.Warn, "Could not change nout of $v by $(Δ)! Relaxing constraints...", fallback))
+        Δ = ceil(Int, abs(Δfloat) * nout(v)) *  sign(Δfloat)
+        minsize = minimum(nout.(terminputs))
+        # Or else we might increase the size despite Δ being negative which would be surprising to a user who has specified 
+        # strictly negative size changes
+        minsize + Δ <= 0 && continue
 
-    Δsize(strategy , all_in_Δsize_graph(v, Output()))
-    return v
+        Δs[v] = Δ
+    end
+
+    if !isempty(Δs)
+        failmsg = (args...) -> "Could not change nout of $(join(NaiveNASlib.nameorrepr.(keys(Δs)), ", ", " and ")) by $(join(values(Δs), ", ", " and ")). No change!"
+
+        strategy = TimeOutAction(;base=ΔNoutRelaxed(Δs), fallback=LogΔSizeExec(failmsg, Logging.Warn, ΔSizeFailNoOp()))
+
+        Δsize!(strategy)
+    end
+    return vs
 end
 
 """
@@ -249,11 +303,11 @@ Insert a vertex from the wrapped `AbstractArchSpace` `s` after a given vertex `v
 
 The function `outselect` takes an `AbstractVector{AbstractVertex}` representing the output of `v` and returns an `AbstractVector{AbstractVertex}` which shall be reconnected to the vertex `v'` returned by `s`. Defaults to `identity` meaning all outputs of `v` are reconnected to `v'`.
 """
-struct AddVertexMutation <:AbstractMutation{AbstractVertex}
-    s::AbstractArchSpace
-    outselect::Function
-    weightinit::AbstractWeightInit
-    rng::AbstractRNG
+struct AddVertexMutation{S<:AbstractArchSpace, F, WI<:AbstractWeightInit, RNG<:AbstractRNG} <:AbstractMutation{AbstractVertex}
+    s::S
+    outselect::F
+    weightinit::WI
+    rng::RNG
 end
 AddVertexMutation(s, outselect::Function=identity) = AddVertexMutation(s, outselect, IdentityWeightInit(), rng_default)
 AddVertexMutation(s, rng::AbstractRNG) = AddVertexMutation(s, identity, IdentityWeightInit(), rng)
@@ -277,21 +331,25 @@ Default reconnect strategy is `ConnectAll`.
 
 Note: High likelyhood of large accuracy degradation after applying this mutation.
 """
-struct RemoveVertexMutation <:AbstractMutation{AbstractVertex}
-    s::RemoveStrategy
+struct RemoveVertexMutation{S<:RemoveStrategy} <:AbstractMutation{AbstractVertex}
+    s::S
 end
-RemoveVertexMutation() = RemoveVertexMutation(RemoveStrategy(CheckAligned(CheckNoSizeCycle(ApplyMutation(SelectOutputs(select = SelectDirection(OutSelect{NaiveNASlib.Exact}(LogSelectionFallback("Reverting...", NoutRevert()))),
-valuefun = default_neuronselect, align=IncreaseSmaller(DecreaseBigger(AlignSizeBoth(FailAlignSizeWarn()))))), FailAlignSizeWarn(msgfun = (vin,vout) -> "Can not remove vertex $(name(vin))! Size cycle detected!")))))
+function RemoveVertexMutation() 
+    alignstrat = IncreaseSmaller(fallback=DecreaseBigger(fallback=AlignSizeBoth(fallback=FailAlignSizeWarn(msgfun = (vin,vout) -> "Can not remove vertex $(name(vin))! Could not align sizes of neighbours!"))))
+    return RemoveVertexMutation(RemoveStrategy(CheckAligned(CheckNoSizeCycle(alignstrat, FailAlignSizeWarn(msgfun = (vin,vout) -> "Can not remove vertex $(name(vin))! Size cycle detected!")))))
+end
 
 function (m::RemoveVertexMutation)(v::AbstractVertex)
     remove!(v, m.s)
     return v
 end
 
+default_neuronselect(args...) = NaiveNASlib.defaultutility(args...)
+
 """
     AddEdgeMutation <: AbstractMutation{AbstractVertex}
-    AddEdgeMutation(p; rng=rng_default, mergefun=default_mergefun(rng=rng), filtfun=no_shapechange, valuefun=default_neuronselect)
-    AddEdgeMutation(p::Probability; rng=rng_default, mergefun=default_mergefun(rng=rng), filtfun=no_shapechange, valuefun=default_neuronselect)
+    AddEdgeMutation(p; rng=rng_default, mergefun=default_mergefun(rng=rng), filtfun=no_shapechange, utilityfun=default_neuronselect)
+    AddEdgeMutation(p::Probability; rng=rng_default, mergefun=default_mergefun(rng=rng), filtfun=no_shapechange, utilityfun=default_neuronselect)
 
 Add an edge from a vertex `vi` to another vertex `vo` randomly selected from `vs = filtfun(vi)`.
 
@@ -299,30 +357,30 @@ Higher values of `p` will give more preference to earlier vertices of `vs`.
 
 If `vo` is not capable of having multiple inputs (determined by `singleinput(v) == true`), `vm = mergefun(voi)` where `voi` is a randomly selected input to `vo` will be used instead of `vo` and `vo` will be added as the output of `vm`.
 
-When selecting neurons/outputs after any eventual size change the values `valuefun(v)` will be used to determine the value of each output in vertex `v`. Note that `length(valuefun(v)) == nout_org(v)` must hold.
+When selecting neurons/outputs after any eventual size change the output of `utilityfun(v)` will be used to determine the utlity of each output in vertex `v`. Note that `length(utilityfun(v)) == nout(v)` must hold.
 
 Note: High likelyhood of large accuracy degradation after applying this mutation.
 """
-struct AddEdgeMutation{F1, F2, F3, R} <: AbstractMutation{AbstractVertex}
+struct AddEdgeMutation{F1, F2, F3, P<:Probability, RNG} <: AbstractMutation{AbstractVertex}
     mergefun::F1
     filtfun::F2
-    valuefun::F3
-    p::Probability
-    rng::R
+    utilityfun::F3
+    p::P
+    rng::RNG
 end
-AddEdgeMutation(p; rng=rng_default, mergefun=default_mergefun(rng=rng), filtfun=no_shapechange, valuefun=default_neuronselect) = AddEdgeMutation(Probability(p, rng), rng=rng, mergefun=mergefun, filtfun=filtfun, valuefun=valuefun)
-AddEdgeMutation(p::Probability; rng=rng_default, mergefun=default_mergefun(rng=rng), filtfun=no_shapechange, valuefun=default_neuronselect) = AddEdgeMutation(mergefun, filtfun, valuefun, p, rng)
+AddEdgeMutation(p; rng=rng_default, mergefun=default_mergefun(rng=rng), filtfun=no_shapechange, utilityfun=default_neuronselect) = AddEdgeMutation(Probability(p, rng), rng=rng, mergefun=mergefun, filtfun=filtfun, utilityfun=utilityfun)
+AddEdgeMutation(p::Probability; rng=rng_default, mergefun=default_mergefun(rng=rng), filtfun=no_shapechange, utilityfun=default_neuronselect) = AddEdgeMutation(mergefun, filtfun, utilityfun, p, rng)
 
 default_mergefun(pconc = 0.5; rng=rng_default, traitfun = MutationShield ∘ RemoveIfSingleInput ∘ validated() ∘ default_logging(), layerfun = ActivationContribution) = function(vin)
     if rand(rng) > pconc
         return invariantvertex(layerfun(+), vin, traitdecoration=traitfun ∘ named(name(vin) * ".add"))
     end
-    return concat(vin ,mutation=IoChange, traitfun = traitfun ∘ named(name(vin) * ".cat"), layerfun=layerfun)
+    return concat(vin, traitfun = traitfun ∘ named(name(vin) * ".cat"), layerfun=layerfun)
 end
 
 function no_shapechange(vi)
     # all_in_graph is not sorted, and we want some kind of topoligical order here so that earlier indices are closer to vi
-    allsorted = mapreduce(NaiveNASlib.flatten, vcat, filter(v -> isempty(outputs(v)), all_in_graph(vi))) |> unique
+    allsorted = mapreduce(ancestors, vcat, filter(v -> isempty(outputs(v)), all_in_graph(vi))) |> unique
     
     # Vertices which have the same input as vi and are singleinput
     #   Reason is that this will cause a new vertex to be added between the target output vertex vo
@@ -330,7 +388,7 @@ function no_shapechange(vi)
     #   try_add_edge to fail.
     inouts = filter(singleinput, mapreduce(outputs, vcat, inputs(vi); init=[]))
     # All vertices which are after vi in the topology
-    vsafter = setdiff(allsorted, NaiveNASlib.flatten(vi), outputs(vi), inouts)
+    vsafter = setdiff(allsorted, ancestors(vi), outputs(vi), inouts)
     
     vitrace = shapetrace(vi) 
     viorder = allΔshapetypes(vitrace)
@@ -357,11 +415,11 @@ function (m::AddEdgeMutation)(vi::AbstractVertex)
     vo = foldl(selfun, allverts, init=nothing)
     vo = isnothing(vo) ? rand(m.rng, allverts) : vo
 
-    try_add_edge(vi, vo, m.mergefun, m.valuefun)
+    try_add_edge(vi, vo, m.mergefun, m.utilityfun)
     return vi
 end
 
-function try_add_edge(vi, vo, mergefun, valuefun=default_neuronselect)
+function try_add_edge(vi, vo, mergefun, utilityfun=default_neuronselect)
 
     # Need to add a vertex which can handle multiple inputs if vo is single input only
     # For cleaning up added vertex if the whole operation fails
@@ -370,7 +428,7 @@ function try_add_edge(vi, vo, mergefun, valuefun=default_neuronselect)
         voi = inputs(vo)[1]
         # If the input to vo is capable of multi input we don't need to create a new vertex
         # We must also check that this input does not happen to be an input to vi as this would create a cycle in the graph
-        if singleinput(voi) || voi in NaiveNASlib.flatten(vi)
+        if singleinput(voi) || voi in ancestors(vi)
             vm = mergefun(voi)
             # Insert vm between voi and vo, i.e voi -> vo turns into voi -> vm -> vo
             # vs -> [vo] means only add the new vertex between voi and vo as voi could have other outputs
@@ -388,41 +446,33 @@ function try_add_edge(vi, vo, mergefun, valuefun=default_neuronselect)
     # This is mainly because FailAlignSizeRevert does not work when the same vertex is input more than once, but it also seems kinda redundant.
     vi in inputs(vo) && return
     @debug "Create edge between $(name(vi)) and $(name(vo))"
-    create_edge!(vi, vo, strategy = create_edge_strat(vo, valuefun))
+    create_edge!(vi, vo, strategy = create_edge_strat(vo, utilityfun))
     cleanup_failed()
 end
 # Need to override this one for strange types e.g. layers which support exactly 2 inputs or something.
 singleinput(v) = isempty(inputs(v)) || length(inputs(v)) == 1
 
-create_edge_strat(v::AbstractVertex, valuefun) = create_edge_strat(trait(v), valuefun)
-create_edge_strat(d::DecoratingTrait, valuefun) = create_edge_strat(base(d), valuefun)
-function create_edge_strat(::SizeInvariant, valuefun)
-    alignstrat = IncreaseSmaller(DecreaseBigger(AlignSizeBoth(FailAlignSizeWarn(msgfun = (vin,vout) -> "Could not align sizes of $(name(vin)) and $(name(vout))!"))))
+create_edge_strat(v::AbstractVertex, utilityfun) = create_edge_strat(trait(v), utilityfun)
+create_edge_strat(d::DecoratingTrait, utilityfun) = create_edge_strat(base(d), utilityfun)
+function create_edge_strat(::SizeInvariant, utilityfun)
+    warnfailalign = FailAlignSizeWarn(msgfun = (vin,vout) -> "Could not align sizes of $(name(vin)) and $(name(vout))!")
+    alignstrat = AlignSizeBoth(;mapstrat=WithUtilityFun(utilityfun), fallback = warnfailalign)
+    # Tricky failure case: It is possible that CheckCreateEdgeNoSizeCycle does not detect any size cycle until after the edge has been created?
+    sizecyclewarn = FailAlignSizeWarn(msgfun = (vin,vout) -> "Could not align sizes of $(name(vin)) and $(name(vout))! Size cycle detected!") 
 
-    selectstrat = OutSelect{Exact}(LogSelectionFallback("Reverting...", NoutRevert()))
-
-    okstrat = PostApplyMutation(SelectOutputs(selectstrat, alignstrat, valuefun))
-
-    # Tricky failure case: It is possible that CheckCreateEdgeNoSizeCycle does not detect any size cycle until after the edge has been created. When this happens, we run PostSelectOutputs to revert all size changes before removing the edge. The latter might not be strictly needed (I really don't know actually), but it does stay true to the contract of "no size change if operation does not succeed".
-    nokstrat = FailAlignSizeWarn(msgfun = (vin,vout) -> "Could not align sizes of $(name(vin)) and $(name(vout))! Size cycle detected! Reverting...", andthen=PostSelectOutputs(select=NoutRevert(), align=NoSizeChange(), fallback=FailAlignSizeRevert())) # NoutRevert returns success=false, meaning that fallback will be invoked
-
-    return CheckCreateEdgeNoSizeCycle(okstrat, nokstrat)
+    return CheckCreateEdgeNoSizeCycle(ifok=alignstrat, ifnok=sizecyclewarn)
 end
-function create_edge_strat(::SizeStack, valuefun)
+function create_edge_strat(::SizeStack, utilityfun)
+    warnfailalign = FailAlignSizeWarn(msgfun = (vin,vout) -> "Could not align sizes of $(name(vin)) and $(name(vout))!")
+    alignstrat = PostAlign(TruncateInIndsToValid(WithUtilityFun(utilityfun, AlignNinToNout(;fallback=ΔSizeFailNoOp()))), fallback=warnfailalign)
 
-    alignstrat = PostAlignJuMP(DefaultJuMPΔSizeStrategy(), fallback=FailAlignSizeWarn(msgfun = (vin,vout) -> "Could not align sizes of $(name(vin)) and $(name(vout))!"))
-
-    selectstrat = OutSelect{Exact}(LogSelectionFallback("Reverting...", NoutRevert()))
-
-    okstrat = PostApplyMutation(PostSelectOutputs(selectstrat, alignstrat, valuefun, FailAlignSizeRevert()))
-
-    nokstrat = FailAlignSizeWarn(msgfun = (vin,vout) -> "Could not align sizes of $(name(vin)) and $(name(vout))! Size cycle detected! Reverting...")
-    return CheckCreateEdgeNoSizeCycle(okstrat, nokstrat)
+    sizecyclewarn = FailAlignSizeWarn(msgfun = (vin,vout) -> "Could not align sizes of $(name(vin)) and $(name(vout))! Size cycle detected!")
+    return CheckCreateEdgeNoSizeCycle(ifok=alignstrat, ifnok=sizecyclewarn)
 end
 
 """
     RemoveEdgeMutation <: AbstractMutation{AbstractVertex}
-    RemoveEdgeMutation(;valuefun=default_neuronselect, rng=rng_default)
+    RemoveEdgeMutation(;utilityfun=default_neuronselect, rng=rng_default)
 
 Remove an edge from a vertex `vi` to another vertex `vo` randomly selected from `outputs(vi)`.
 
@@ -430,15 +480,15 @@ Vertex `vi` must have more than one output and vertex `vo` must have more than o
 
 If there are multiple edges between `vi` and `vo` no change will be made due to NaiveNASlib not being able to revert a failed operation in this case..
 
-When selecting neurons/outputs after any eventual size change the values `valuefun(v)` will be used to determine the value of each output in vertex `v`. Note that `length(valuefun(v)) == nout_org(v)` must hold.
+When selecting neurons/outputs after any eventual size change the output of `utilityfun(v)` will be used to determine the utlity of each output in vertex `v`. Note that `length(utilityfun(v)) == nout(v)` must hold.
 
 Note: High likelyhood of large accuracy degradation after applying this mutation.
 """
-struct RemoveEdgeMutation{F, R} <: AbstractMutation{AbstractVertex}
-    valuefun::F
-    rng::R
+struct RemoveEdgeMutation{F, RNG<:AbstractRNG} <: AbstractMutation{AbstractVertex}
+    utilityfun::F
+    rng::RNG
 end
-RemoveEdgeMutation(;valuefun=default_neuronselect, rng=rng_default) = RemoveEdgeMutation(valuefun, rng)
+RemoveEdgeMutation(;utilityfun=default_neuronselect, rng=rng_default) = RemoveEdgeMutation(utilityfun, rng)
 
 function (m::RemoveEdgeMutation)(vi::AbstractVertex)
     length(outputs(vi)) < 2 && return vi
@@ -451,14 +501,14 @@ function (m::RemoveEdgeMutation)(vi::AbstractVertex)
     sum(inputs(vo) .== vi) > 1 && return vi# Not implemented in NaiveNASlib
 
     @debug "Remove edge between $(name(vi)) and $(name(vo))"
-    remove_edge!(vi, vo, strategy=remove_edge_strat(vo, m.valuefun))
+    remove_edge!(vi, vo, strategy=remove_edge_strat(vo, m.utilityfun))
     return vi
 end
 
-remove_edge_strat(v::AbstractVertex, valuefun) = remove_edge_strat(trait(v), valuefun)
-remove_edge_strat(d::DecoratingTrait, valuefun) = remove_edge_strat(base(d), valuefun)
-remove_edge_strat(::SizeInvariant, valuefun) = NoSizeChange()
-remove_edge_strat(t::SizeStack, valuefun) = create_edge_strat(t, valuefun)
+remove_edge_strat(v::AbstractVertex, utilityfun) = remove_edge_strat(trait(v), utilityfun)
+remove_edge_strat(d::DecoratingTrait, utilityfun) = remove_edge_strat(base(d), utilityfun)
+remove_edge_strat(::SizeInvariant, utilityfun) = NoSizeChange()
+remove_edge_strat(t::SizeStack, utilityfun) = create_edge_strat(t, utilityfun)
 
 """
     KernelSizeMutation{N} <: AbstractMutation{AbstractVertex}
@@ -469,6 +519,8 @@ remove_edge_strat(t::SizeStack, valuefun) = create_edge_strat(t, valuefun)
 Mutate the size of filter kernels of convolutional layers.
 
 Note: High likelyhood of large accuracy degradation after applying this mutation.
+
+`KernelSizeMutation2D` is a convenience constructor for `KernelSizeMutation(absΔ, absΔ;...)`.
 """
 struct KernelSizeMutation{N,F,P} <: AbstractMutation{AbstractVertex}
     Δsizespace::AbstractParSpace{N, Int}
@@ -488,7 +540,7 @@ function (m::KernelSizeMutation{N})(v::AbstractVertex) where N
     Δsize = Int.(clamp.(m.Δsizespace(m.rng), 1 .- currsize, m.maxsize(v) .- currsize)) # ensure new size is > 0 and < maxsize
     # This will eventually boil down to Setfield doing its thing, and that won't be using any convenience constructors
     pad = Flux.calc_padding(typeof(l), m.pad, currsize .+ Δsize, dilation(l), stride(l))
-    mutate_weights(v, KernelSizeAligned(Δsize, pad))
+    KernelSizeAligned(Δsize, pad)(v)
     return v
 end
 dilation(l) = l.dilation
@@ -504,9 +556,9 @@ Mutate the activation function of layers which have an activation function.
 
 Note: High likelyhood of large accuracy degradation after applying this mutation.
 """
-struct ActivationFunctionMutation{T,R} <: AbstractMutation{AbstractVertex} where {T <: AbstractParSpace{1}, R <: AbstractRNG}
+struct ActivationFunctionMutation{T,RNG} <: AbstractMutation{AbstractVertex} where {T <: AbstractParSpace{1}, R <: AbstractRNG}
     actspace::T
-    rng::R
+    rng::RNG
 end
 ActivationFunctionMutation(acts...;rng=rng_default) = ActivationFunctionMutation(collect(acts), rng=rng)
 ActivationFunctionMutation(acts::AbstractVector;rng=rng_default) = ActivationFunctionMutation(ParSpace(acts), rng)
@@ -516,102 +568,12 @@ function (m::ActivationFunctionMutation)(v::AbstractVertex)
     return v
 end
 function (m::ActivationFunctionMutation)(t, v) end
-(m::ActivationFunctionMutation)(::Union{FluxDense, FluxConvolutional}, v) = setlayer(v, (σ = m.actspace(m.rng),))
-(m::ActivationFunctionMutation)(::FluxParNorm, v) = setlayer(v, (λ = m.actspace(m.rng),))
+(m::ActivationFunctionMutation)(::Union{FluxDense, FluxConvolutional}, v) = NaiveNASflux.setlayer!(v, (σ = m.actspace(m.rng),))
+(m::ActivationFunctionMutation)(::FluxParNorm, v) = NaiveNASflux.setlayer!(v, (λ = m.actspace(m.rng),))
 function (m::ActivationFunctionMutation)(::FluxRnn, v)
     newcell = setproperties(layer(v).cell, (σ = m.actspace(m.rng),))
-    setlayer(v, (cell = newcell,))
+    NaiveNASflux.setlayer!(v, (cell = newcell,))
 end
-
-# TODO: Move to NaiveNASflux??
-function setlayer(x, propval) end
-setlayer(v::AbstractVertex, propval) = setlayer(base(v), propval)
-setlayer(v::CompVertex, propval) = setlayer(v.computation, propval)
-setlayer(m::AbstractMutableComp, propval) = setlayer(NaiveNASflux.wrapped(m), propval)
-setlayer(m::NaiveNASflux.ResetLazyMutable, propval) = setlayer(m.wrapped, propval)
-setlayer(m::NaiveNASflux.MutationTriggered, propval) = setlayer(m.wrapped, propval)
-function setlayer(m::MutableLayer, propval)
-    m.layer = setproperties(m.layer, propval)
-end
-
-
-"""
-    NeuronSelectMutation{T} <: AbstractMutation{AbstractVertex}
-    NeuronSelectMutation(m::AbstractMutation{AbstractVertex})
-    NeuronSelectMutation(rankfun, m::AbstractMutation{AbstractVertex})
-    NeuronSelectMutation(rankfun::Function, strategy, m::RecordMutation{AbstractVertex})
-
-Selects neurons of vertices mutated by the wrapped `RecordMutation`.
-
-Possible to select ranking method for neurons using `rankfun` which takes a mutated vertex as input and value/utility per neuron (higher is better).
-
-How to select neurons depends a bit on what operation the wrapped `RecordMutation` performs. If not supplied explicitly an attempt to infer it will be made, resulting in an error if not possible.
-"""
-struct NeuronSelectMutation{T, MT} <: AbstractMutation{MT}
-    rankfun::Function
-    strategy::T
-    m::RecordMutation{MT}
-end
-NeuronSelectMutation(rankfun, m::AbstractMutation) = NeuronSelectMutation(rankfun, neuron_select_strategy(m), m)
-NeuronSelectMutation(rankfun, strategy, m::AbstractMutation) = NeuronSelectMutation(rankfun, strategy, RecordMutation(m))
-NeuronSelectMutation(m::AbstractMutation) = NeuronSelectMutation(default_neuronselect, m)
-NeuronSelectMutation(m::RecordMutation) = NeuronSelectMutation(default_neuronselect, neuron_select_strategy(m.m), m)
-
-(m::NeuronSelectMutation)(v::AbstractVertex) = m.m(v)
-(m::NeuronSelectMutation)(vs::NTuple{N, AbstractVertex}) where N = m.m(vs)
-
-neuron_select_strategy(::T) where T <:AbstractMutation = error("Neuron select strategy not implemented for $T")
-neuron_select_strategy(::RemoveVertexMutation) = NeuronSelectOut()
-neuron_select_strategy(::NoutMutation) =  NeuronSelectOut()
-neuron_select_strategy(::AbstractCrossover) = NeuronSelectFlatten()
-
-struct NeuronSelectFlatten{T}
-    s::T
-end
-NeuronSelectFlatten() = NeuronSelectFlatten(NeuronSelectOut())
-
-struct NeuronSelectOut
-    s::AbstractSelectionStrategy
-end
-NeuronSelectOut() = NeuronSelectOut(ApplyAfter())
-
-"""
-    select(m::NeuronSelectMutation)
-
-Select neurons for each `AbstractVertex` mutated by `m`.
-"""
-select(m::NeuronSelectMutation) = select_neurons(m.strategy, fetchmutated!(m.m), m.rankfun)
-
-function select_neurons(s, vs::AbstractArray{NTuple{N, AbstractVertex}}, rankfun) where N
-    vsn = reduce((t, r) -> vcat.(t, r), vs)
-    map(vsi -> select_neurons(s, vsi, rankfun), vsn) |> all
-end
-select_neurons(s, v::AbstractVertex, rankfun) = select_neurons(s, [v], rankfun)
-
-function select_neurons(s::NeuronSelectFlatten, vs::AbstractArray{<:AbstractVertex}, rankfun)
-    allvs = foldr(NaiveNASlib.flatten, vs, init=AbstractVertex[])
-    select_neurons(s.s, allvs, rankfun)
-end
-
-function select_neurons(strategy::NeuronSelectOut, vs::AbstractArray{<:AbstractVertex}, rankfun)
-    vchanged = filter(vs) do v
-        # Some structural operations (create/remove edges/vertices) might result in nout(v) being unchanged but nin of its outputs is changed
-        nout(v) != nout_org(v) || any(vo -> nin(vo) != nin_org(vo), outputs(v))
-    end
-    isempty(vchanged) && return true
-
-    vall = unique(mapreduce(v -> all_in_Δsize_graph(v, Output()), vcat, vchanged))
-    Δoutputs(strategy.s, vall, rankfun)
-end
-
-default_neuronselect(v) = neuron_value_safe(trait(v), v)
-
-neuron_value_safe(t::DecoratingTrait, v) = neuron_value_safe(base(t), v)
-neuron_value_safe(::Immutable, v) = ones(nout(v))
-neuron_value_safe(::MutationSizeTrait, v) = clean_values(cpu(neuron_value(v)),v)
-clean_values(::Missing, v) = ones(nout_org(v))
-# NaN should perhaps be < 0, but since SelectDirection is used, this might lead to inconsistent results as a subset of neurons for a vertex v whose output vertices are not part of the selection (typically because only v's inputs are touched) are selected. As the output vertices are not changed this will lead to a size inconsistency. Cleanest fix might be to separate "touch output" from "touch input" when formulating the output selection problem.
-clean_values(a::AbstractArray{T}, v, repval=eps(T)) where T <: AbstractFloat = replace(a, NaN => repval, 0.0 => repval, Inf => repval, -Inf => repval)
 
 
 """
@@ -623,29 +585,17 @@ Performs a set of actions after a wrapped `AbstractMutation` is applied.
 
 Actions will be invoked with arguments (m::PostMutation{T}, e::T) where m is the enclosing `PostMutation` and `e` is the mutated entity of type `T`.
 """
-struct PostMutation{T} <: DecoratingMutation{T}
-    actions
+struct PostMutation{T,A} <: DecoratingMutation{T}
+    actions::A
     m::AbstractMutation{T}
 end
 PostMutation(m::AbstractMutation{T}, actions...) where T = PostMutation(actions, m)
 PostMutation(action::Function, m::AbstractMutation{T}) where T = PostMutation(m, action)
-function (m::PostMutation)(e)
-    eout = m.m(e)
+function (m::PostMutation{T})(e::T; next=m.m, noop=identity) where T
+    eout = next(e)
     foreach(a -> a(m, eout), m.actions)
     return eout
 end
-
-
-"""
-    neuronselect(m, e)
-
-Search `AbstractMutation` hieararchy `m` for `NeuronSelectMutations` and invoke `select` on them
-"""
-neuronselect(m, e) = neuronselect(m)
-function neuronselect(m) end
-neuronselect(m::T) where T <:AbstractMutation = foreach(fn -> neuronselect(getfield(m,fn)), fieldnames(T))
-neuronselect(a::Union{AbstractVector, Tuple}) = foreach(ae -> neuronselect(ae), a)
-neuronselect(m::NeuronSelectMutation) = select(m)
 
 """
     RemoveZeroNout()
@@ -738,7 +688,7 @@ LearningRateMutation(rng=rng_default) = OptimizerMutation(o -> nudgelr(o, rng))
 
 (m::OptimizerMutation)(opt::Flux.Optimiser) = Flux.Optimiser(m.(opt.os))
 (m::OptimizerMutation)(o::ShieldedOpt) = o;
-(m::OptimizerMutation)(o) = m.optfun(o)
+(m::OptimizerMutation)(o::FluxOptimizer) = m.optfun(o)
 
 
 nudgelr(o, rng=rng_default) = sameopt(o, nudgelr(learningrate(o), rng))
@@ -762,7 +712,7 @@ struct AddOptimizerMutation{F} <: AbstractMutation{FluxOptimizer}
     optgen::F
 end
 (m::AddOptimizerMutation)(o::ShieldedOpt) = o;
-(m::AddOptimizerMutation)(o) = m(Flux.Optimiser([o]))
+(m::AddOptimizerMutation)(o::FluxOptimizer) = m(Flux.Optimiser([o]))
 function (m::AddOptimizerMutation)(opt::Flux.Optimiser)
     newopt = m.optgen(opt)
     return Flux.Optimiser(mergeopts(typeof(newopt), newopt, opt.os...))
