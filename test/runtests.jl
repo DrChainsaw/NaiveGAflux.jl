@@ -57,11 +57,11 @@ using NaiveNASlib.Advanced, NaiveNASlib.Extend
     @info "Testing visualization"
     include("visualization/callbacks.jl")
 
-    if VERSION === v"1.6.2"
+    if VERSION === v"1.7.2"
         @info "Testing README examples"
         include("examples.jl")
     else
-        @warn "README examples will only be tested in julia version 1.6.2 due to rng dependency. Skipping..."
+        @warn "README examples will only be tested in julia version 1.7.2 due to rng dependency. Skipping..."
     end
 
     @info "Testing AutoFlux"
