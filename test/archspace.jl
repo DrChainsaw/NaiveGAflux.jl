@@ -62,7 +62,7 @@
         @test name(s2) == "test"
 
         l1 = s1(3, rng)
-        l2 = (@test_logs (:debug, "Create Dense(3, 2) from test") min_level=Logging.Debug s2(3,rng))
+        l2 = (@test_logs (:debug, "Create Dense(3 => 2) from test") min_level=Logging.Debug s2(3,rng))
 
         @test l1.σ == l2.σ
         @test size(weights(l1)) == size(weights(l2))
