@@ -7,7 +7,8 @@
     import MemPool
     @testset "$ctype" for (ctype, candfun) in (
         (CandidateModel, CandidateModel),
-        (CandidateOptModel, g -> CandidateOptModel(Descent(0.01), g))
+        (CandidateOptModel, g -> CandidateOptModel(Descent(0.01), g)),
+        (CandidateBatchSize, g -> CandidateBatchSize(BatchSizeSelectionWithDefaultInShape((3,)), 16, 32, CandidateModel(g)))
     )
     
         @testset " $lbl" for (lbl, wrp) in (
@@ -38,15 +39,26 @@
                 @test NaiveGAflux.model(nvertices, newcand) == 4
                 @test NaiveGAflux.model(nvertices, cand) == 3
 
-                optimizer(c) = typeof(opt(c)) 
+                opttype(c) = typeof(opt(c)) 
 
                 if ctype === CandidateOptModel
-                    @test optimizer(newcand) !== optimizer(cand) !== Nothing
+                    @test opttype(newcand) !== opttype(cand) !== Nothing
                     fmapped = fmap(identity, newcand)
                     @test opt(fmapped) !== opt(newcand)
-                    @test optimizer(fmapped) === optimizer(newcand)
+                    @test opttype(fmapped) === opttype(newcand)
                 else
-                    @test optimizer(newcand) === optimizer(cand) === Nothing
+                    @test opttype(newcand) === opttype(cand) === Nothing
+                end
+
+                if ctype == CandidateBatchSize
+                    @test batchsize(cand; withgradient=true, default=64) == 16  
+                    @test batchsize(cand; withgradient=false, default=128) == 32  
+                    # TODO Add mutation
+                    @test batchsize(newcand; withgradient=true, default=64) == 16  
+                    @test batchsize(newcand; withgradient=false, default=128) == 32  
+                else
+                    @test batchsize(cand; withgradient=true, default=64) == 64  
+                    @test batchsize(cand; withgradient=false, default=128) == 128  
                 end
 
                 teststrat() = NaiveGAflux.default_crossoverswap_strategy(v -> 1)
@@ -56,8 +68,8 @@
 
                 newcand1, newcand2 = crossfun((cand, newcand))
 
-                @test optimizer(newcand1) === optimizer(newcand)
-                @test optimizer(newcand2) === optimizer(cand)
+                @test opttype(newcand1) === opttype(newcand)
+                @test opttype(newcand2) === opttype(cand)
 
                 @test NaiveGAflux.model(nvertices, newcand1) == 4
                 @test NaiveGAflux.model(nvertices, newcand2) == 3

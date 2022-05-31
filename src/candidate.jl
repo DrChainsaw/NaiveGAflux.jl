@@ -45,8 +45,10 @@ opt(::AbstractCandidate; default=nothing) = default
 Return the loss function of candidate `c` if `c` has a lossfunction, `default` (which defaults to `nothing`) otherwise.
 """
 lossfun(::AbstractCandidate; default=nothing) = default
+
 fitness(::AbstractCandidate; default=nothing) = default
 generation(::AbstractCandidate; default=nothing) = default
+batchsize(::AbstractCandidate; withgradient, default=nothing) = default
 
 
 wrappedcand(::T) where T <: AbstractCandidate = error("$T does not wrap any candidate! Check your base case!")
@@ -72,7 +74,7 @@ opt(c::AbstractWrappingCandidate; kwargs...) = opt(wrappedcand(c); kwargs...)
 lossfun(c::AbstractWrappingCandidate; kwargs...) = lossfun(wrappedcand(c); kwargs...)
 fitness(c::AbstractWrappingCandidate; kwargs...) = fitness(wrappedcand(c); kwargs...)
 generation(c::AbstractWrappingCandidate; kwargs...) = generation(wrappedcand(c); kwargs...)
-
+batchsize(c::AbstractWrappingCandidate; kwargs...) = batchsize(wrappedcand(c); kwargs...)
 
 """
     CandidateModel <: Candidate
@@ -117,6 +119,45 @@ end
 opt(c::CandidateOptModel; kwargs...) = c.opt 
 
 newcand(c::CandidateOptModel, mapfield) = CandidateOptModel(mapfield(c.opt), newcand(wrappedcand(c), mapfield))
+
+
+struct CandidateBatchSize{F, C <: AbstractCandidate} <: AbstractWrappingCandidate
+    tbs::TrainBatchSize
+    vbs::ValidationBatchSize
+    limitfun::F
+    c::C
+
+    function CandidateBatchSize{F, C}(limitfun::F, tbs::TrainBatchSize, vbs::ValidationBatchSize, c::C) where {F, C}
+        new{F, C}(TrainBatchSize(limitfun(c, tbs)), ValidationBatchSize(limitfun(c, vbs)), limitfun, c)
+    end
+end
+
+@functor CandidateBatchSize
+
+function CandidateBatchSize(limitfun, tbs::Integer, vbs::Integer, c)
+    CandidateBatchSize(limitfun, TrainBatchSize(tbs), ValidationBatchSize(vbs), c)
+end
+function CandidateBatchSize(limitfun::F, tbs::TrainBatchSize, vbs::ValidationBatchSize, c::C) where {C<:AbstractCandidate, F}
+    CandidateBatchSize{F, C}(limitfun, tbs, vbs, c)
+end
+
+
+function batchsize(c::CandidateBatchSize; withgradient, inshape_nobatch=nothing, default=nothing, kwargs...) 
+    bs = withgradient ? c.tbs : c.vbs
+    isnothing(inshape_nobatch) ? batchsize(bs) : c.limitfun(c, bs; inshape_nobatch, kwargs...) 
+end
+
+function newcand(c::CandidateBatchSize, mapfield) 
+    CandidateBatchSize(mapfield(c.limitfun),
+                       mapfield(c.tbs), 
+                       mapfield(c.vbs), 
+                       newcand(c.c, mapfield))
+end
+
+limit_maxbatchsize(c::AbstractCandidate, bs; inshape_nobatch, availablebytes = _availablebytes()) = model(c) do model
+    isnothing(model) && return bs
+    limit_maxbatchsize(model, bs; inshape_nobatch, availablebytes)
+end
 
 """
     FileCandidate <: AbstractWrappingCandidate

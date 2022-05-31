@@ -3,6 +3,7 @@ module NaiveGAflux
 using Base: release
 using Reexport
 @reexport using NaiveNASflux
+using NaiveNASlib: name
 using NaiveNASflux: FluxDense, FluxConv, FluxConvolutional, FluxNoParLayer, FluxParNorm, FluxRnn, FluxBatchNorm
 using NaiveNASflux: nograd, layertype
 using NaiveNASlib.Advanced, NaiveNASlib.Extend
@@ -32,7 +33,7 @@ const modeldir = "models"
 export fitness, AbstractFitness, LogFitness, GpuFitness, AccuracyFitness, TrainThenFitness, TrainAccuracyFitness, MapFitness, EwmaFitness, TimeFitness, SizeFitness, AggFitness
 
 # Candidate
-export evolvemodel, AbstractCandidate, CandidateModel, CandidateOptModel, FittedCandidate, model, opt, lossfun
+export evolvemodel, AbstractCandidate, CandidateModel, CandidateOptModel, CandidateBatchSize, FittedCandidate, model, opt, lossfun, batchsize
 
 # Evolution
 export evolve, AbstractEvolution, NoOpEvolution, AfterEvolution, EliteSelection, SusSelection, TournamentSelection, CombinedEvolution, EvolutionChain, PairCandidates, ShuffleCandidates, EvolveCandidates
@@ -42,6 +43,8 @@ export Population, generation
 
 # misc types
 export Probability, MutationShield, ApplyIf, RemoveIfSingleInput, PersistentArray, ShieldedOpt
+
+export BatchSizeSelectionWithDefaultInShape, BatchSizeSelectionScaled, BatchSizeSelectionFromAlternatives, BatchSizeSelectionMaxSize
 
 # Iterators. These should preferably come from somewhere else, but I haven't found anything which fits the bill w.r.t repeatability over subsets
 export RepeatPartitionIterator, SeedIterator, MapIterator, GpuIterator, BatchIterator, ShuffleIterator, TimedIterator, TimedIteratorStop, StatefulGenerationIter
@@ -78,6 +81,7 @@ export PlotFitness, ScatterPop, ScatterOpt, MultiPlot, CbAll
 
 include("util.jl")
 include("shape.jl")
+include("batchsize.jl")
 include("archspace.jl")
 include("mutation.jl")
 include("crossover.jl")

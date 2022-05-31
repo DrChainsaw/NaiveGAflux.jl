@@ -30,6 +30,9 @@ using NaiveNASlib.Advanced, NaiveNASlib.Extend
     @info "Testing shape"
     include("shape.jl")
 
+    @info "Testing batch size utils"
+    include("batchsize.jl")
+
     @info "Testing archspace"
     include("archspace.jl")
 
@@ -57,7 +60,7 @@ using NaiveNASlib.Advanced, NaiveNASlib.Extend
     @info "Testing visualization"
     include("visualization/callbacks.jl")
 
-    if VERSION === v"1.7.2"
+    if VERSION === v"1.7.3"
         @info "Testing README examples"
         include("examples.jl")
     else
