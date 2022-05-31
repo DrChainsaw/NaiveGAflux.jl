@@ -134,18 +134,18 @@ struct CandidateBatchSize{F, C <: AbstractCandidate} <: AbstractWrappingCandidat
     limitfun::F
     c::C
 
-    function CandidateBatchSize{F, C}(limitfun::F, tbs::TrainBatchSize, vbs::ValidationBatchSize, c::C) where {F, C}
+    function CandidateBatchSize{F, C}(tbs::TrainBatchSize, vbs::ValidationBatchSize, limitfun::F, c::C) where {F, C}
         new{F, C}(TrainBatchSize(limitfun(c, tbs)), ValidationBatchSize(limitfun(c, vbs)), limitfun, c)
     end
 end
 
 @functor CandidateBatchSize
 
-function CandidateBatchSize(limitfun, tbs::Integer, vbs::Integer, c)
-    CandidateBatchSize(limitfun, TrainBatchSize(tbs), ValidationBatchSize(vbs), c)
+function CandidateBatchSize(tbs::Integer, vbs::Integer, limitfun, c)
+    CandidateBatchSize(TrainBatchSize(tbs), ValidationBatchSize(vbs), limitfun, c)
 end
-function CandidateBatchSize(limitfun::F, tbs::TrainBatchSize, vbs::ValidationBatchSize, c::C) where {C<:AbstractCandidate, F}
-    CandidateBatchSize{F, C}(limitfun, tbs, vbs, c)
+function CandidateBatchSize(tbs::TrainBatchSize, vbs::ValidationBatchSize, limitfun::F, c::C) where {C<:AbstractCandidate, F}
+    CandidateBatchSize{F, C}(tbs, vbs, limitfun, c)
 end
 
 
@@ -155,9 +155,9 @@ function batchsize(c::CandidateBatchSize; withgradient, inshape_nobatch=nothing,
 end
 
 function newcand(c::CandidateBatchSize, mapfield) 
-    CandidateBatchSize(mapfield(c.limitfun),
-                       mapfield(c.tbs), 
-                       mapfield(c.vbs), 
+    CandidateBatchSize(mapfield(c.tbs), 
+                       mapfield(c.vbs),
+                       mapfield(c.limitfun), 
                        newcand(c.c, mapfield))
 end
 

@@ -64,9 +64,12 @@ using NaiveNASlib.Advanced, NaiveNASlib.Extend
         @info "Testing README examples"
         include("examples.jl")
     else
-        @warn "README examples will only be tested in julia version 1.7.2 due to rng dependency. Skipping..."
+        @warn "README examples will only be tested in julia version 1.7.3 due to rng dependency. Skipping..."
     end
 
     @info "Testing AutoFlux"
     include("app/autoflux.jl")
+
+    import Documenter
+    Documenter.doctest(NaiveGAflux)
 end

@@ -14,26 +14,25 @@ julia> v0 = conv2dinputvertex("v0", 3);
 
 julia> v1 = fluxvertex("v1", Conv((3,3), nout(v0) => 8), v0);
 
-julia> model = CompGraph(v0, v1);
+julia> graph = CompGraph(v0, v1);
 """
 
 generic_batchsizeselection_example(sbs, kwres...) = """
-# availablebytes is automatically computed if omitted, but here we supply it to avoid doctest errors
-julia> bs(model, TrainBatchSize(512); $(first(kwres[1]))availablebytes = 10_000_000)
+julia> bs(graph, TrainBatchSize(512); $(first(kwres[1]))availablebytes = 10_000_000) # availablebytes supplied for doctest reasons
 $(last(kwres[1]))
 
-julia> bs(model, TrainBatchSize(512); $(first(kwres[2]))availablebytes = 1000_000_000)
+julia> bs(graph, TrainBatchSize(512); $(first(kwres[2]))availablebytes = 1000_000_000)
 $(last(kwres[2]))
 
 julia> $sbs
 
-julia> sbs(model, TrainBatchSize(512); $(first(kwres[3]))availablebytes = 10_000_000)
+julia> sbs(graph, TrainBatchSize(512); $(first(kwres[3]))availablebytes = 10_000_000)
 $(last(kwres[3]))
 
-julia> sbs(model, TrainBatchSize(512); $(first(kwres[4]))availablebytes = 1000_000_000)
+julia> sbs(graph, TrainBatchSize(512); $(first(kwres[4]))availablebytes = 1000_000_000)
 $(last(kwres[4]))
 
-julia> bs(model, ValidationBatchSize(512); $(first(kwres[5]))availablebytes=10_000_000)
+julia> bs(graph, ValidationBatchSize(512); $(first(kwres[5]))availablebytes=10_000_000)
 $(last(kwres[5]))
 """
 
@@ -53,7 +52,7 @@ batchsize(bs::ValidationBatchSize) = bs.size
 """
     BatchSizeSelectionWithDefaultInShape{T, F}
     BatchSizeSelectionWithDefaultInShape(default_inshape)
-    BatchSizeSelectionWithDefaultInShape(batchsizefun, default_inshape)
+    BatchSizeSelectionWithDefaultInShape(default_inshape, batchsizefun)
 
 Batch size selection with a default assumed inshape used for estimating valid batch sizes.
 
@@ -65,17 +64,15 @@ Composable with other batch size selection types which may be used as `batchsize
 
 # Examples
 ```jldoctest
-julia> using NaiveGAflux
+julia> using NaiveGAflux, Flux
 
-# These should not generally be needed in user code, but here we need them to make the examples
-julia> import NaiveGAflux: TrainBatchSize, ValidationBatchSize
+julia> import NaiveGAflux: TrainBatchSize, ValidationBatchSize # Needed only for examples
 
 $(generic_batchsizefun_testgraph())
-
 julia> bs = BatchSizeSelectionWithDefaultInShape((32,32,3));
 
 $(generic_batchsizeselection_example(
-    "sbs = BatchSizeSelectionWithDefaultInShape(BatchSizeSelectionScaled(0.5), (32,32,3))",
+    "sbs = BatchSizeSelectionWithDefaultInShape((32,32,3), BatchSizeSelectionScaled(0.5));",
     "" => "120",
     "" => "512",
     "" => "60",
@@ -84,11 +81,11 @@ $(generic_batchsizeselection_example(
 ```
 """
 struct BatchSizeSelectionWithDefaultInShape{T, F}
-    batchsizefun::F
     default_inshape::T
+    batchsizefun::F
 end
 function BatchSizeSelectionWithDefaultInShape(default_inshape) 
-        BatchSizeSelectionWithDefaultInShape(limit_maxbatchsize, default_inshape)
+        BatchSizeSelectionWithDefaultInShape(default_inshape, limit_maxbatchsize)
 end
 function (bs::BatchSizeSelectionWithDefaultInShape)(args...; inshape_nobatch=bs.default_inshape ,kwargs...) 
         bs.batchsizefun(args...; inshape_nobatch, kwargs...)
@@ -98,7 +95,7 @@ end
 """
     BatchSizeSelectionScaled{F}
     BatchSizeSelectionScaled(scale)
-    BatchSizeSelectionScaled(batchsizefun, scale)
+    BatchSizeSelectionScaled(scale, batchsizefun)
 
 Batch size selection with a margin applied when estimating valid batch sizes.
 
@@ -110,17 +107,15 @@ Composable with other batch size selection types which may be used as `batchsize
 
 # Examples
 ```jldoctest
-julia> using NaiveGAflux
+julia> using NaiveGAflux, Flux
 
-# These should not generally be needed in user code, but here we need them to make the examples
-julia> import NaiveGAflux: TrainBatchSize, ValidationBatchSize
+julia> import NaiveGAflux: TrainBatchSize, ValidationBatchSize # Needed only for examples
 
 $(generic_batchsizefun_testgraph())
-
 julia> bs = BatchSizeSelectionScaled(0.5);
 
 $(generic_batchsizeselection_example(
-    "sbs = BatchSizeSelectionScaled(BatchSizeSelectionWithDefaultInShape((32,32,3)), 0.5);",
+    "sbs = BatchSizeSelectionScaled(0.5, BatchSizeSelectionWithDefaultInShape((32,32,3)));",
     "inshape_nobatch=(32,32,3), " => "60",
     "inshape_nobatch=(32,32,3), " => "512",
     "" => "60",
@@ -129,18 +124,18 @@ $(generic_batchsizeselection_example(
 ```
 """
 struct BatchSizeSelectionScaled{F}
-    batchsizefun::F
     scale::Float64
+    batchsizefun::F
 end
-BatchSizeSelectionScaled(scale::AbstractFloat) = BatchSizeSelectionScaled(limit_maxbatchsize, scale)  
+BatchSizeSelectionScaled(scale::AbstractFloat) = BatchSizeSelectionScaled(scale, limit_maxbatchsize)  
 function (bs::BatchSizeSelectionScaled)(args...; availablebytes=_availablebytes(), kwargs...) 
     bs.batchsizefun(args...;availablebytes = floor(Int, bs.scale * availablebytes), kwargs...)
 end
 
 """
-    BatchSizeSelectionFromAlternatives{F, T}
+    BatchSizeSelectionFromAlternatives{T, F}
     BatchSizeSelectionFromAlternatives(alts)
-    BatchSizeSelectionFromAlternatives(batchsizefun, alts)
+    BatchSizeSelectionFromAlternatives(alts, batchsizefun)
 
 Batch size selection from a set of available alternatives. Useful for iterators which need to be pre-loaded with batch size, for example the iterators in this package.
 
@@ -152,17 +147,15 @@ Composable with other batch size selection types which may be used as `batchsize
 
 # Examples
 ```jldoctest
-julia> using NaiveGAflux
+julia> using NaiveGAflux, Flux
 
-# These should not generally be needed in user code, but here we need them to make the examples
-julia> import NaiveGAflux: TrainBatchSize, ValidationBatchSize
+julia> import NaiveGAflux: TrainBatchSize, ValidationBatchSize # Needed only for examples
 
 $(generic_batchsizefun_testgraph())
-
 julia> bs = BatchSizeSelectionFromAlternatives(2 .^ (0:10));
 
 $(generic_batchsizeselection_example(
-    "sbs = BatchSizeSelectionFromAlternatives(BatchSizeSelectionScaled(0.5), 2 .^ (0:10));",
+    "sbs = BatchSizeSelectionFromAlternatives(2 .^ (0:10), BatchSizeSelectionScaled(0.5));",
     "inshape_nobatch=(32,32,3), " => "64",
     "inshape_nobatch=(32,32,3), " => "512",
     "inshape_nobatch=(32,32,3), " => "32",
@@ -170,11 +163,11 @@ $(generic_batchsizeselection_example(
     "inshape_nobatch=(32,32,3), " => "128"))
 ```
 """
-struct BatchSizeSelectionFromAlternatives{F, T}
-    batchsizefun::F
+struct BatchSizeSelectionFromAlternatives{T, F}
     alts::T
+    batchsizefun::F
 end
-BatchSizeSelectionFromAlternatives(alts) = BatchSizeSelectionFromAlternatives(limit_maxbatchsize, alts)
+BatchSizeSelectionFromAlternatives(alts) = BatchSizeSelectionFromAlternatives(alts, limit_maxbatchsize)
 
 function (bs::BatchSizeSelectionFromAlternatives)(args...;kwargs...) 
     select_bestfit_smaller(bs.batchsizefun(args...;kwargs...), bs.alts)
@@ -189,7 +182,7 @@ end
 """
     BatchSizeSelectionMaxSize{F}
     BatchSizeSelectionMaxSize(uppersize) 
-    BatchSizeSelectionMaxSize(batchsizefun, uppersize) 
+    BatchSizeSelectionMaxSize(uppersize, batchsizefun) 
 
 Batch size selection which always try to select `uppersize`. Basically the strategy to select the largest batchsize which fits in memory.
 
@@ -201,17 +194,15 @@ Composable with other batch size selection types which may be used as `batchsize
 
 # Examples
 ```jldoctest
-julia> using NaiveGAflux
+julia> using NaiveGAflux, Flux
 
-# These should not generally be needed in user code, but here we need them to make the examples
-julia> import NaiveGAflux: TrainBatchSize, ValidationBatchSize
+julia> import NaiveGAflux: TrainBatchSize, ValidationBatchSize # Needed only for examples
 
 $(generic_batchsizefun_testgraph())
-
 julia> bs = BatchSizeSelectionMaxSize(1024);
 
 $(generic_batchsizeselection_example(
-    "sbs = BatchSizeSelectionMaxSize(BatchSizeSelectionScaled(0.5), 1024);",
+    "sbs = BatchSizeSelectionMaxSize(1024, BatchSizeSelectionScaled(0.5));",
     "inshape_nobatch=(32,32,3), " => "120",
     "inshape_nobatch=(32,32,3), " => "1024",
     "inshape_nobatch=(32,32,3), " => "60",
@@ -220,10 +211,10 @@ $(generic_batchsizeselection_example(
 ```
 """
 struct BatchSizeSelectionMaxSize{F}
-    batchsizefun::F
     uppersize::Int
+    batchsizefun::F
 end
-BatchSizeSelectionMaxSize(uppersize) = BatchSizeSelectionMaxSize(limit_maxbatchsize, uppersize)
+BatchSizeSelectionMaxSize(uppersize) = BatchSizeSelectionMaxSize(uppersize, limit_maxbatchsize)
 function (bs::BatchSizeSelectionMaxSize)(c, orgbs, args...; kwargs...)
      bs.batchsizefun(c, newbatchsize(orgbs, bs.uppersize), args...; kwargs...)
 end
@@ -248,57 +239,54 @@ If `alternatives` is not nothing, the returned batchsize will be quantized to th
 
 # Examples
 ```jldoctest
-julia> using NaiveGAflux
+julia> using NaiveGAflux, Flux
 
-# These should not generally be needed in user code, but here we need them to make the examples
-julia> import NaiveGAflux: TrainBatchSize, ValidationBatchSize
+julia> import NaiveGAflux: TrainBatchSize, ValidationBatchSize # Needed only for examples
 
 $(generic_batchsizefun_testgraph())
-
 julia> bs = batchsizeselection((32,32,3));
 
-# availablebytes is automatically computed if omitted, but here we supply it to avoid doctest errors
-julia> bs(model, TrainBatchSize(128); availablebytes = 10_000_000)
+julia> bs(graph, TrainBatchSize(128); availablebytes = 10_000_000) # availablebytes supplied for doctest reasons
 84
 
-julia> bs(model, ValidationBatchSize(128); availablebytes = 10_000_000)
+julia> bs(graph, ValidationBatchSize(128); availablebytes = 10_000_000)
 128
 
 julia> bs = batchsizeselection((32,32,3); maxmemutil=0.1);
 
-julia> bs(model, TrainBatchSize(128); availablebytes = 10_000_000)
+julia> bs(graph, TrainBatchSize(128); availablebytes = 10_000_000)
 12
 
-julia> bs(model, ValidationBatchSize(128); availablebytes = 10_000_000)
+julia> bs(graph, ValidationBatchSize(128); availablebytes = 10_000_000)
 24
 
 julia> bs = batchsizeselection((32,32,3); uppersize=1024);
 
-julia> bs(model, TrainBatchSize(128); availablebytes = 10_000_000)
+julia> bs(graph, TrainBatchSize(128); availablebytes = 10_000_000)
 84
 
-julia> bs(model, ValidationBatchSize(128); availablebytes = 10_000_000)
+julia> bs(graph, ValidationBatchSize(128); availablebytes = 10_000_000)
 170
 
 julia> bs = batchsizeselection((32,32,3); uppersize=1024, alternatives = 2 .^ (0:10));
 
-julia> bs(model, TrainBatchSize(128); availablebytes = 10_000_000)
+julia> bs(graph, TrainBatchSize(128); availablebytes = 10_000_000)
 64
 
-julia> bs(model, ValidationBatchSize(128); availablebytes = 10_000_000)
+julia> bs(graph, ValidationBatchSize(128); availablebytes = 10_000_000)
 128
+```
 """
 function batchsizeselection(inshape_nobatch::Tuple;
                             batchsizefun=limit_maxbatchsize, 
                             maxmemutil=0.7, 
                             uppersize=nothing, 
                             alternatives=nothing)
-    bs = BatchSizeSelectionWithDefaultInShape(batchsizefun, inshape_nobatch)
-    bs = isnothing(maxmemutil) ? bs : BatchSizeSelectionScaled(bs, maxmemutil)
-    bs = isnothing(uppersize) ? bs : BatchSizeSelectionMaxSize(bs, uppersize)
-    bs = isnothing(alternatives) ? bs : BatchSizeSelectionFromAlternatives(bs, alternatives)
+    bs = BatchSizeSelectionWithDefaultInShape(inshape_nobatch, batchsizefun)
+    bs = isnothing(maxmemutil) ? bs : BatchSizeSelectionScaled(maxmemutil, bs)
+    bs = isnothing(uppersize) ? bs : BatchSizeSelectionMaxSize(uppersize, bs)
+    bs = isnothing(alternatives) ? bs : BatchSizeSelectionFromAlternatives(alternatives, bs)
 end
-
 
 # specialization for CompGraph needed to avoid ambiguity with method that just unwraps an AbstractCandidate :( 
 # Consider refactoring

@@ -8,7 +8,7 @@
     @testset "$ctype" for (ctype, candfun) in (
         (CandidateModel, CandidateModel),
         (CandidateOptModel, g -> CandidateOptModel(Descent(0.01), g)),
-        (CandidateBatchSize, g -> CandidateBatchSize(batchsizeselection((3,)), 16, 32, CandidateModel(g)))
+        (CandidateBatchSize, g -> CandidateBatchSize(16, 32, batchsizeselection((3,)), CandidateModel(g)))
     )
     
         @testset " $lbl" for (lbl, wrp) in (
@@ -141,7 +141,7 @@
             @testset "Hold in mem" begin
                 import NaiveGAflux: wrappedcand, callcand, candinmem
                 struct BoolCand <: AbstractCandidate
-                    x::Ref{Bool}
+                    x::Base.RefValue{Bool}
                 end
                 testref(c::BoolCand, f=identity) = f(c.x)
                 testref(c::AbstractWrappingCandidate) = testref(wrappedcand(c))

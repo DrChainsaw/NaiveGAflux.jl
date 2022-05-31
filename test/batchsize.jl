@@ -5,20 +5,20 @@
             return x => inshape_nobatch
         end
 
-        @test BatchSizeSelectionWithDefaultInShape(testfun, (2,3,4))(13) == (13 => (2,3,4))
+        @test BatchSizeSelectionWithDefaultInShape((2,3,4), testfun)(13) == (13 => (2,3,4))
 
-        @test BatchSizeSelectionWithDefaultInShape(testfun, (2,3,4))(13; inshape_nobatch=(3,)) == (13 => (3,))
+        @test BatchSizeSelectionWithDefaultInShape((2,3,4), testfun)(13; inshape_nobatch=(3,)) == (13 => (3,))
     end
 
     @testset "BatchSizeSelectionScaled" begin
         testfun = function(x; availablebytes=1)
             return x => availablebytes
         end
-        @test BatchSizeSelectionScaled(testfun, 0.5)(4; availablebytes=6) == (4 => 3)
+        @test BatchSizeSelectionScaled(0.5, testfun)(4; availablebytes=6) == (4 => 3)
     end
 
     @testset "BatchSizeSelectionFromAlternatives" begin
-        bs = BatchSizeSelectionFromAlternatives(identity, [2, 3, 7])
+        bs = BatchSizeSelectionFromAlternatives([2, 3, 7], identity)
         @test bs(0) === 0
         @test bs(1) === 0
         @test bs(2) === 2
@@ -31,10 +31,8 @@
     end
 
     @testset "BatchSizeSelectionMaxSize" begin
-        BatchSizeSelectionMaxSize(10) do x,y
-            @test x === 1
-            @test y === 10
-        end(1, 13)
+
+        BatchSizeSelectionMaxSize(10, Pair)(1, 13) == 10 => 13
     end
 
     @testset "availablebytes" begin
