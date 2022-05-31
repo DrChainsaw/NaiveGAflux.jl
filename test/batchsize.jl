@@ -18,10 +18,10 @@
     end
 
     @testset "BatchSizeSelectionFromAlternatives" begin
-        bs = BatchSizeSelectionFromAlternatives(identity, [1, 3, 7])
-        @test bs(0) === nothing
-        @test bs(1) === 1
-        @test bs(2) === 1
+        bs = BatchSizeSelectionFromAlternatives(identity, [2, 3, 7])
+        @test bs(0) === 0
+        @test bs(1) === 0
+        @test bs(2) === 2
         @test bs(3) === 3
         @test bs(4) === 3
         @test bs(5) === 3
@@ -77,5 +77,32 @@
         @test limit_maxbatchsize(graph, ValidationBatchSize(6); inshape_nobatch=(5,), availablebytes=1000) == 6
         @test limit_maxbatchsize(graph, ValidationBatchSize(8); inshape_nobatch=(5,), availablebytes=1000) == 8
         @test limit_maxbatchsize(graph, ValidationBatchSize(10); inshape_nobatch=(5,), availablebytes=1000) == 8
+    end
+
+    @testset "batchsizeselection" begin
+        import NaiveGAflux: limit_maxbatchsize, TrainBatchSize, ValidationBatchSize
+        # Pretty much the integration tests as it uses all the above components
+        graph = testgraph(4)
+        bs = batchsizeselection((4,))
+        
+        @test bs(graph, TrainBatchSize(31), availablebytes=10000) == 19
+        @test bs(graph, ValidationBatchSize(31), availablebytes=10000) == 31
+
+        bs = batchsizeselection((4,); maxmemutil=0.1)
+        @test bs(graph, TrainBatchSize(31), availablebytes=10000) == 2
+        @test bs(graph, ValidationBatchSize(31), availablebytes=10000) == 8
+
+        bs = batchsizeselection((4,); uppersize=64)
+        @test bs(graph, TrainBatchSize(31), availablebytes=10000) == 19
+        @test bs(graph, ValidationBatchSize(31), availablebytes=10000) == 64
+
+        bs = batchsizeselection((4,); alternatives=2 .^ (0:10))
+        @test bs(graph, TrainBatchSize(33), availablebytes=10000) == 16
+        @test bs(graph, ValidationBatchSize(33), availablebytes=10000) == 32
+
+        bs = batchsizeselection((4,); uppersize=65, alternatives=2 .^ (0:10))
+        @test bs(graph, TrainBatchSize(31), availablebytes=10000) == 16
+        @test bs(graph, ValidationBatchSize(31), availablebytes=10000) == 64
+
     end
 end

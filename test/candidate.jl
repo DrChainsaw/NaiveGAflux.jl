@@ -8,7 +8,7 @@
     @testset "$ctype" for (ctype, candfun) in (
         (CandidateModel, CandidateModel),
         (CandidateOptModel, g -> CandidateOptModel(Descent(0.01), g)),
-        (CandidateBatchSize, g -> CandidateBatchSize(BatchSizeSelectionWithDefaultInShape((3,)), 16, 32, CandidateModel(g)))
+        (CandidateBatchSize, g -> CandidateBatchSize(batchsizeselection((3,)), 16, 32, CandidateModel(g)))
     )
     
         @testset " $lbl" for (lbl, wrp) in (

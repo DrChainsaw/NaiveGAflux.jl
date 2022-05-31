@@ -94,7 +94,7 @@ newcand(c::CandidateModel, mapfield) = CandidateModel(map(mapfield, getproperty.
 
 """
     CandidateOptModel <: AbstractCandidate
-    CandidateOptModel(candidate::AbstractCandidate, optimizer)
+    CandidateOptModel(optimizer, candidate)
 
 A candidate adding an optimizer to another candidate. The optimizer is accessed by [`opt(c)`] for `CandidateOptModel c`.
 """
@@ -120,7 +120,14 @@ opt(c::CandidateOptModel; kwargs...) = c.opt
 
 newcand(c::CandidateOptModel, mapfield) = CandidateOptModel(mapfield(c.opt), newcand(wrappedcand(c), mapfield))
 
+"""
+    CandidateBatchSize <: AbstractWrappingCandidate
+    CandidateBatchSize(limitfun, trainbatchsize, validationbatchsize, candidate)
 
+A candidate adding batch sizes to another candiate. `limitfun` is used to try to ensure that batch sizes are small enough so that training and validating the model does not risk an out of memory error. Use [`batchsizeselection`](@ref) to create an appropriate `limitfun`.
+
+The batch sizes are accessed by [`batchsize(c; withgradient)`] for `CandidateBatchSize c` where `withgradient=true` gives the training batch size and `withgradient=false` gives the validation batch size.
+"""
 struct CandidateBatchSize{F, C <: AbstractCandidate} <: AbstractWrappingCandidate
     tbs::TrainBatchSize
     vbs::ValidationBatchSize
