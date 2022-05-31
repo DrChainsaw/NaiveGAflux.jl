@@ -46,7 +46,7 @@ makedocs(   sitename="NaiveGAflux",
                     "reference/fitness.md",
                     "reference/candidate.md",
                     "reference/evolution.md",
-                    "reference/batchsize.md"
+                    "reference/batchsize.md",
                     "reference/iterators.md",
                     "reference/utils.md",
                 ]
