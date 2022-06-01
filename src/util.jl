@@ -202,7 +202,7 @@ julia> extrema(cumsum([brw() for i in 1:10000]))
 struct BoundedRandomWalk{T <: Real, R <: Function}
     lb::T
     ub::T
-    state::Ref{T}
+    state::Base.RefValue{T}
     rfun::R
 end
 BoundedRandomWalk(lb::T,ub::T, rfun = (x...) -> 0.2randn(rng_default)) where T = BoundedRandomWalk(lb,ub, Ref(zero(ub)), rfun)
