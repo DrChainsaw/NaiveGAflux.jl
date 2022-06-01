@@ -163,6 +163,10 @@ struct BatchIterator{R, D}
     batchsize::Int
     rng::R
     data::D
+    function BatchIterator(nobs::Int, batchsize::Int, rng::R, data::D) where {R,D}
+        batchsize > 1 || throw(ArgumentError("Batch size must be > 0. Got $(batchsize)!"))
+        new{R,D}(nobs, batchsize, rng, data)
+    end
 end
 BatchIterator(data::Union{AbstractArray, Singleton}, bs::Int; kwargs...) = BatchIterator(size(data)[end], bs, data; kwargs...)
 function BatchIterator(data::Tuple, bs; kwargs...) 
@@ -301,8 +305,15 @@ julia> map(x -> Pair(x...), itr) # Pair to make results a bit easier on the eyes
 struct ReBatchingIterator{I}
     batchsize::Int
     base::I
+
+    function ReBatchingIterator(batchsize::Int, base::I) where I
+        batchsize > 1 || throw(ArgumentError("Batch size must be > 0. Got $(batchsize)!"))
+        new{I}(batchsize, base)
+    end
 end
-ReBatchingIterator(base, batchsize::Int) = ReBatchingIterator(batchsize, base)
+function ReBatchingIterator(base, batchsize::Int) 
+    ReBatchingIterator(batchsize, base)
+end
 
 """
     setbatchsize(itr, batchsize) 
