@@ -164,7 +164,7 @@ struct BatchIterator{R, D}
     rng::R
     data::D
     function BatchIterator(nobs::Int, batchsize::Int, rng::R, data::D) where {R,D}
-        batchsize > 1 || throw(ArgumentError("Batch size must be > 0. Got $(batchsize)!"))
+        batchsize > 0 || throw(ArgumentError("Batch size must be > 0. Got $(batchsize)!"))
         new{R,D}(nobs, batchsize, rng, data)
     end
 end
@@ -271,6 +271,8 @@ end
 # itergeneration on timeoutaction just in case user e.g. wants to deepcopy it to avoid some shared state.
 itergeneration(itr::TimedIterator, gen) = TimedIterator(itr.timelimit, itr.patience, itergeneration(itr.timeoutaction, gen), itr.accumulate_timeouts, itergeneration(itr.base, gen))
 
+setbatchsize(itr::TimedIterator, batchsize) = TimedIterator(itr.timelimit, itr.patience, itr.timeoutaction, itr.accumulate_timeouts, setbatchsize(itr.base, batchsize))
+
 """
     ReBatchingIterator{I}
     ReBatchingIterator(base, batchsize)
@@ -307,7 +309,7 @@ struct ReBatchingIterator{I}
     base::I
 
     function ReBatchingIterator(batchsize::Int, base::I) where I
-        batchsize > 1 || throw(ArgumentError("Batch size must be > 0. Got $(batchsize)!"))
+        batchsize > 0 || throw(ArgumentError("Batch size must be > 0. Got $(batchsize)!"))
         new{I}(batchsize, base)
     end
 end
@@ -378,3 +380,34 @@ _collectbatch(b) = b
 
 _innerbatchsize(t::Tuple) = _innerbatchsize(first(t))
 _innerbatchsize(a::AbstractArray) = size(a, ndims(a))
+
+
+## Temp workaround for CUDA memory issue where it for some reason takes very long time to make use of available memory
+struct GpuGcIterator{I}
+    base::I
+end
+
+function Base.iterate(itr::GpuGcIterator) 
+    valstate = iterate(itr.base)
+    valstate === nothing && return nothing
+    val, state = valstate
+    return val, (2, state)
+end
+
+function Base.iterate(itr::GpuGcIterator, (cnt, state)) 
+    meminfo = CUDA.MemoryInfo()
+    if meminfo.total_bytes - meminfo.pool_reserved_bytes < 2e9
+        NaiveGAflux.gpu_gc()
+    end
+    valstate = iterate(itr.base, state)
+    valstate === nothing && return nothing
+    val, state = valstate
+    return val, (cnt+1, state)
+end
+
+Base.IteratorSize(::Type{GpuGcIterator{I}}) where I = Base.IteratorSize(I)
+Base.IteratorEltype(::Type{GpuGcIterator{I}}) where I = Base.IteratorEltype(I)
+
+Base.length(itr::GpuGcIterator) = length(itr.base)
+Base.size(itr::GpuGcIterator) = size(itr.base)
+Base.eltype(::Type{GpuGcIterator{I}}) where I = eltype(I)

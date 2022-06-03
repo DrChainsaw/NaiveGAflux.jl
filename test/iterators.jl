@@ -82,8 +82,11 @@ end
         @test "biter: $itr" == "biter: BatchIterator(size=(2, 3, 4, 5), batchsize=2, shuffle=false)"
     end
 
-    @testset "Batch size 0" begin
-        @test_throws ArgumentError BatchIterator(1:20, 0)      
+    @testset "Batch size 0 and 1" begin
+        @test_throws ArgumentError BatchIterator(1:20, 0)     
+        @testset "Iteration $i" for (i, j) in enumerate(BatchIterator(1:20, 1))
+            @test [i] == j
+        end
     end
 
     @testset "Tuple data shuffle=$shuffle" for shuffle in (true, false)
@@ -282,8 +285,11 @@ end
         @test reduce(vcat,itr) == 1:31    
     end
 
-    @testset "Batch size 0" begin
-        @test_throws ArgumentError ReBatchingIterator(BatchIterator(1:20, 4), 0)      
+    @testset "Batch size 0 and 1" begin
+        @test_throws ArgumentError ReBatchingIterator(BatchIterator(1:20, 4), 0)  
+        @testset "Iteration $i" for (i, j) in enumerate(ReBatchingIterator(BatchIterator(1:20, 7), 1))
+            @test [i] == j
+        end    
     end
 
     @testset "With tuple" begin

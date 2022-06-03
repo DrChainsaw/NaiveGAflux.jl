@@ -133,7 +133,7 @@ end
 
 """
     struct BatchedIterConfig{T, V}
-    BatchedIterConfig(;batchsize=32, dataaug=identity, iterwrap=GpuIterator) 
+    BatchedIterConfig(;batchsize=32, dataaug=identity, iterwrap=identity) 
 
 Configuration for creating batch iterators from array data.
 
@@ -146,12 +146,12 @@ struct BatchedIterConfig{T, V}
     dataaug::T
     iterwrap::V
 end
-BatchedIterConfig(;batchsize=32, dataaug=identity, iterwrap=GpuIterator) = BatchedIterConfig(batchsize, dataaug, iterwrap)
+BatchedIterConfig(;batchsize=32, dataaug=identity, iterwrap=identity) = BatchedIterConfig(batchsize, dataaug, iterwrap)
 dataiter(s::BatchedIterConfig, x, y) = dataiter(x, y, s.batchsize, s.dataaug) |> s.iterwrap
 
 """
     struct ShuffleIterConfig{T, V}
-    ShuffleIterConfig(;batchsize=32, seed=123, dataaug=identity, iterwrap=GpuIterator) 
+    ShuffleIterConfig(;batchsize=32, seed=123, dataaug=identity, iterwrap=identity) 
 
 Configuration for creating shuffled batch iterators from array data. Data will be re-shuffled every time the iterator restarts.
 
@@ -168,7 +168,7 @@ struct ShuffleIterConfig{T, V}
     dataaug::T
     iterwrap::V
 end
-ShuffleIterConfig(;batchsize=32, seed=123, dataaug=identity, iterwrap=GpuIterator) = ShuffleIterConfig(batchsize, seed, dataaug, iterwrap)
+ShuffleIterConfig(;batchsize=32, seed=123, dataaug=identity, iterwrap=identity) = ShuffleIterConfig(batchsize, seed, dataaug, iterwrap)
 dataiter(s::ShuffleIterConfig, x, y) = dataiter(x, y, s.batchsize, s.seed, s.dataaug) |> s.iterwrap
 
 

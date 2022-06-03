@@ -48,7 +48,8 @@ lossfun(::AbstractCandidate; default=nothing) = default
 
 fitness(::AbstractCandidate; default=nothing) = default
 generation(::AbstractCandidate; default=nothing) = default
-batchsize(::AbstractCandidate; withgradient, default=nothing) = default
+trainiterator(::AbstractCandidate; default=nothing) = default
+validationiterator(::AbstractCandidate; default=nothing) = default
 
 
 wrappedcand(::T) where T <: AbstractCandidate = error("$T does not wrap any candidate! Check your base case!")
@@ -74,7 +75,8 @@ opt(c::AbstractWrappingCandidate; kwargs...) = opt(wrappedcand(c); kwargs...)
 lossfun(c::AbstractWrappingCandidate; kwargs...) = lossfun(wrappedcand(c); kwargs...)
 fitness(c::AbstractWrappingCandidate; kwargs...) = fitness(wrappedcand(c); kwargs...)
 generation(c::AbstractWrappingCandidate; kwargs...) = generation(wrappedcand(c); kwargs...)
-batchsize(c::AbstractWrappingCandidate; kwargs...) = batchsize(wrappedcand(c); kwargs...)
+trainiterator(c::AbstractWrappingCandidate; kwargs...) = trainiterator(wrappedcand(c); kwargs...)
+validationiterator(c::AbstractWrappingCandidate; kwargs...) = validationiterator(wrappedcand(c); kwargs...)
 
 """
     CandidateModel <: Candidate
@@ -149,9 +151,14 @@ function CandidateBatchSize(tbs::TrainBatchSize, vbs::ValidationBatchSize, limit
 end
 
 
-function batchsize(c::CandidateBatchSize; withgradient, inshape_nobatch=nothing, default=nothing, kwargs...) 
-    bs = withgradient ? c.tbs : c.vbs
-    isnothing(inshape_nobatch) ? batchsize(bs) : c.limitfun(c, bs; inshape_nobatch, kwargs...) 
+function trainiterator(c::CandidateBatchSize; kwargs...) 
+    iter = trainiterator(wrappedcand(c); kwargs...)
+    setbatchsize(iter, batchsize(c.tbs))
+end
+
+function validationiterator(c::CandidateBatchSize; kwargs...) 
+    iter = validationiterator(wrappedcand(c); kwargs...)
+    setbatchsize(iter, batchsize(c.vbs))
 end
 
 function newcand(c::CandidateBatchSize, mapfield) 

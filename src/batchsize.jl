@@ -317,18 +317,20 @@ function maxvalidationbatchsize(model, inshape_nobatch, availablebytes=_availabl
 end
 
 function activationsizes(model::CompGraph, inshape_nobatch, elemsize = model |> params |> first |> eltype |> sizeof)
+    model = cpu(model) # Flux.outputsize does not work for CuArrays
     activations = if length(inputs(model)) == 1
         Dict{AbstractVertex, Any}(v => Flux.nil_input(true, inshape_nobatch) for v in inputs(model))
     else
         Dict{AbstractVertex, Any}(v => Flux.nil_input(true, inshape_nobatch)[i] for (i, v) in inputs(model))
     end
-    for v in outputs(model) 
+    for v in outputs(model)
         output!(activations, v)
     end
 
     mapreduce(act -> length(act) * elemsize, +, values(activations))
 end
 
+# TODO: Take model as input and look at params to determine of cpu or gpu
 function _availablebytes()
     if CUDA.functional()
         info = CUDA.MemoryInfo()

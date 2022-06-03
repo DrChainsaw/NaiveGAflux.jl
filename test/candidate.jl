@@ -2,7 +2,7 @@
 
     struct DummyFitness <: AbstractFitness end
     NaiveGAflux._fitness(::DummyFitness, f::AbstractCandidate) = 17
-    using NaiveGAflux: FileCandidate, AbstractWrappingCandidate, FittedCandidate
+    using NaiveGAflux: FileCandidate, AbstractWrappingCandidate, FittedCandidate, trainiterator, validationiterator
     using Functors: fmap
     import MemPool
     @testset "$ctype" for (ctype, candfun) in (
@@ -51,14 +51,14 @@
                 end
 
                 if ctype == CandidateBatchSize
-                    @test batchsize(cand; withgradient=true, default=64) == 16  
-                    @test batchsize(cand; withgradient=false, default=128) == 32  
+                    @test length(first(trainiterator(cand; default=(1:100,)))) == 16  
+                    @test length(first(validationiterator(cand; default=(1:100,)))) == 32  
                     # TODO Add mutation
-                    @test batchsize(newcand; withgradient=true, default=64) == 16  
-                    @test batchsize(newcand; withgradient=false, default=128) == 32  
+                    @test length(first(trainiterator(newcand; default=(1:100,)))) == 16  
+                    @test length(first(validationiterator(newcand; default=(1:100,)))) == 32  
                 else
-                    @test batchsize(cand; withgradient=true, default=64) == 64  
-                    @test batchsize(cand; withgradient=false, default=128) == 128  
+                    @test length(first(trainiterator(cand; default=(1:100,)))) == 100  
+                    @test length(first(validationiterator(cand; default=(1:100,)))) == 100
                 end
 
                 teststrat() = NaiveGAflux.default_crossoverswap_strategy(v -> 1)
