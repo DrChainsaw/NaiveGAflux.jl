@@ -136,9 +136,12 @@ end
 function _fitnessiterator(f, c::AbstractCandidate, iter)
     geniter = itergeneration(iter, generation(c; default=0))
     canditer = f(c; default=geniter)
-    matchdatatype(params(c) |> first, canditer)
+    matchdatatype(params(c), canditer)
 end
 
+matchdatatype(ps::Flux.Params, iter) = isempty(ps) ? iter : matchdatatype(first(ps), iter)
+# TODO: GpuGcIterator is a temporary workaround for what seems like a CUDA issue where memory allocation becomes very slow
+# after the number of reserved (but still available) bytes is close to the totol available GPU memory
 matchdatatype(::CUDA.CuArray, iter) = GpuGcIterator(GpuIterator(iter))
 matchdatatype(::AbstractArray, iter) = iter
 
@@ -196,7 +199,7 @@ function _fitness(s::TrainThenFitness, c::AbstractCandidate)
         end
         iter = _fitnessiterator(trainiterator, c, s.dataiter)
     
-        Flux.train!(nanguard, params(m), GpuGcIterator(GpuIterator(iter)), o)
+        Flux.train!(nanguard, params(m), iter, o)
         cleanopt!(o)
         valid
     end
