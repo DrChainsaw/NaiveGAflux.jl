@@ -286,7 +286,7 @@ generation(c::FittedCandidate; default=nothing) = c.gen
 newcand(c::FittedCandidate, mapfield) = FittedCandidate(c.gen, c.fitness, newcand(wrappedcand(c), mapfield))
 
 nparams(c::AbstractCandidate) = model(nparams, c)
-nparams(x) = mapreduce(prod ∘ size, +, params(x).order; init=0)
+nparams(x) = mapreduce(length, +, params(x).order; init=0)
 
 """
     MapType{T, F1, F2}
@@ -411,15 +411,6 @@ function (e::MapCandidate{<:NTuple{N, AbstractCrossover}, F})((c1,c2)) where {N,
     return newcand(c1, mapc1), newcand(c2, mapc2)
 end
 
-
-function mapcandidate(mapgraph, mapothers=deepcopy)
-    mapfield(g::CompGraph) = mapgraph(g)
-    mapfield(f) = mapothers(f)
-    # Replace with fmap?
-    # Maybe not, because we don't want to descend into models?
-    return c -> newcand(c, mapfield)
-end
-
 """
     randomlrscale(rfun = BoundedRandomWalk(-1.0, 1.0))
 
@@ -444,6 +435,7 @@ Intended to be used with `AfterEvolution` to create things like global learning 
 See `https://github.com/DrChainsaw/NaiveGAExperiments/blob/master/lamarckism/experiments.ipynb` for some hints as to why this might be needed.
 """
 function global_optimizer_mutation(pop, optfun)
-    om = optfun(pop)
-    map(c -> newcand(c, optmap(om)), pop)
+    mt = MapType{FluxOptimizer}(optfun(pop), identity)
+    mc = MapCandidate(mt, identity)
+    map(mc, pop)
 end
