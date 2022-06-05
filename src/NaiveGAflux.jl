@@ -33,7 +33,7 @@ const modeldir = "models"
 export fitness, AbstractFitness, LogFitness, GpuFitness, AccuracyFitness, TrainThenFitness, TrainAccuracyFitness, MapFitness, EwmaFitness, TimeFitness, SizeFitness, AggFitness
 
 # Candidate
-export evolvemodel, AbstractCandidate, CandidateModel, CandidateOptModel, CandidateBatchSize, FittedCandidate, model, opt, lossfun
+export evolvemodel, AbstractCandidate, CandidateModel, CandidateOptModel, CandidateDataIterMap, FittedCandidate, model, opt, lossfun
 
 # Evolution
 export evolve, AbstractEvolution, NoOpEvolution, AfterEvolution, EliteSelection, SusSelection, TournamentSelection, CombinedEvolution, EvolutionChain, PairCandidates, ShuffleCandidates, EvolveCandidates
@@ -49,6 +49,9 @@ export BatchSizeSelectionWithDefaultInShape, BatchSizeSelectionScaled, BatchSize
 
 # Iterators. These should preferably come from somewhere else, but I haven't found anything which fits the bill w.r.t repeatability over subsets
 export RepeatPartitionIterator, SeedIterator, MapIterator, GpuIterator, BatchIterator, ShuffleIterator, TimedIterator, TimedIteratorStop, StatefulGenerationIter
+
+# Iterator mapping types for evolving hyperparameters related to datasets, e.g. augmentation and batch size
+export BatchSizeIteratorMap, IteratorMaps
 
 # Persistence
 export persist
@@ -83,6 +86,7 @@ export PlotFitness, ScatterPop, ScatterOpt, MultiPlot, CbAll
 include("util.jl")
 include("shape.jl")
 include("batchsize.jl")
+include("iteratormaps.jl")
 include("archspace.jl")
 include("mutation.jl")
 include("crossover.jl")

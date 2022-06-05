@@ -1,14 +1,132 @@
+@testset "MapType" begin
+    import NaiveGAflux: MapType
+
+    @testset "Basic" begin
+        mt = MapType{Integer}(x -> 2x, identity)
+
+        @test mt(2) == 4
+        @test mt(UInt16(3)) == 6
+        @test mt('c') == 'c'
+        @test mt(2.0) == 2.0
+    end
+
+    @testset "Crossover" begin
+        import NaiveGAflux: FluxOptimizer
+
+        struct MapTypeTestCrossover{T} <: AbstractCrossover{T} end
+        (::MapTypeTestCrossover)((c1, c2)) = c2,c1
+
+
+        c1 = CandidateOptModel(Descent(), CompGraph(inputvertex("c1", 1), AbstractVertex[]))
+        c2 = CandidateOptModel(Momentum(), CompGraph(inputvertex("c2", 1), AbstractVertex[]))
+        
+        mt1, mt2 = MapType(MapTypeTestCrossover{CompGraph}(), (c1,c2), (identity, identity))
+        @test name.(inputs(mt1(model(c1)))) == ["c2"]
+        @test name.(inputs(mt2(model(c2)))) == ["c1"]
+        @test mt1(3) == 3
+        @test mt2('c') == 'c'
+
+        mt1, mt2 = MapType(MapTypeTestCrossover{FluxOptimizer}(), (c1,c2), (identity, identity))
+        @test typeof(mt1(opt(c1))) == Momentum
+        @test typeof(mt2(opt(c2))) == Descent 
+        @test mt1(3) == 3
+        @test mt2('c') == 'c'
+    end
+end
+
+@testset "MapCandidate" begin
+    import NaiveGAflux: MapCandidate
+    
+    struct CollectMutation{T} <: AbstractMutation{T}
+        seen::Vector{T}
+    end
+    CollectMutation{T}() where T = CollectMutation{T}(T[])
+    # This way CollectMutation is type stable. Mutation often isn't though, but now we can test that 
+    # MapCandidate does not add any extra type instability
+    (m::CollectMutation{T1})(x::T2) where {T1, T2<:T1} = push!(m.seen, x)[end]::T2
+
+    function testcand(name, opt=Descent())
+        v0 = inputvertex(name * "_v0", 2)
+        v1 = fluxvertex(name * "_v1", Dense(nout(v0) => 3), v0)
+        CandidateOptModel(opt, CompGraph(v0, v1))
+    end
+    @testset "Mutation" begin
+
+        @testset "CompGraph" begin
+            graphmutation = CollectMutation{CompGraph}()
+            cnew = @inferred MapCandidate(graphmutation, deepcopy)(testcand("c"))
+            @test length(graphmutation.seen) == 1 
+            @test graphmutation.seen[] === model(cnew)       
+        end
+
+        @testset "Optimiser" begin
+            optmutation = CollectMutation{FluxOptimizer}()
+            cnew = MapCandidate(optmutation, deepcopy)(testcand("c"))
+            @test length(optmutation.seen) == 1
+            @test optmutation.seen[] === opt(cnew)
+        end
+
+        @testset "CompGraph + Optimiser" begin  
+            graphmutation = CollectMutation{CompGraph}()
+            optmutation = CollectMutation{FluxOptimizer}()
+            cnew = @inferred MapCandidate((graphmutation, optmutation), deepcopy)(testcand("c"))
+            
+            @test length(graphmutation.seen) == 1 
+            @test graphmutation.seen[] === model(cnew)   
+            
+            @test length(optmutation.seen) == 1
+            @test optmutation.seen[] === opt(cnew)
+        end
+    end
+
+    @testset "Crossover" begin
+        
+        @testset "CompGraph" begin
+            graphcrossover = CollectMutation{Tuple{CompGraph, CompGraph}}()
+            c1,c2 = testcand("c1"), testcand("c2")
+            cnew1, cnew2 = @inferred MapCandidate(graphcrossover, deepcopy)((c1, c2))
+
+            @test length(graphcrossover.seen) == 1 
+            @test graphcrossover.seen[] === (model(cnew1), model(cnew2))  
+        end
+
+        @testset "Optimiser" begin
+            optcrossover = CollectMutation{Tuple{FluxOptimizer, FluxOptimizer}}()
+            c1,c2 = testcand("c1", Descent()), testcand("c2", Momentum())
+            cnew1, cnew2 = @inferred MapCandidate(optcrossover , deepcopy)((c1, c2))
+
+            @test length(optcrossover.seen) == 1 
+            @test optcrossover.seen[] === (opt(cnew1), opt(cnew2))  
+        end
+
+        @testset "CompGraph + Optimiser" begin
+            graphcrossover = CollectMutation{Tuple{CompGraph, CompGraph}}()
+            optcrossover = CollectMutation{Tuple{FluxOptimizer, FluxOptimizer}}()
+            c1,c2 = testcand("c1", Descent()), testcand("c2", Momentum())
+            cnew1, cnew2 = @inferred MapCandidate((graphcrossover, optcrossover), deepcopy)((c1, c2))
+
+            @test length(graphcrossover.seen) == 1 
+            @test graphcrossover.seen[] === (model(cnew1), model(cnew2))  
+            @test length(optcrossover.seen) == 1 
+            @test optcrossover.seen[] === (opt(cnew1), opt(cnew2))  
+        end
+    end
+end
+
 @testset "Candidate" begin
 
     struct DummyFitness <: AbstractFitness end
     NaiveGAflux._fitness(::DummyFitness, f::AbstractCandidate) = 17
-    using NaiveGAflux: FileCandidate, AbstractWrappingCandidate, FittedCandidate, trainiterator, validationiterator
+    using NaiveGAflux: FileCandidate, AbstractWrappingCandidate, FittedCandidate, trainiterator, validationiterator, _evolvemodel
     using Functors: fmap
     import MemPool
+
+    CandidateBatchIterMap(g) = CandidateDataIterMap(BatchSizeIteratorMap(16,32, batchsizeselection((3,)), g), CandidateModel(g))
+
     @testset "$ctype" for (ctype, candfun) in (
         (CandidateModel, CandidateModel),
         (CandidateOptModel, g -> CandidateOptModel(Descent(0.01), g)),
-        (CandidateBatchSize, g -> CandidateBatchSize(16, 32, batchsizeselection((3,)), CandidateModel(g)))
+        (CandidateBatchIterMap, CandidateBatchIterMap)
     )
     
         @testset " $lbl" for (lbl, wrp) in (
@@ -33,7 +151,7 @@
 
                 graphmutation = VertexMutation(MutationFilter(v -> name(v)=="hlayer", AddVertexMutation(ArchSpace(DenseSpace([1], [relu])))))
                 optmutation = OptimizerMutation((Momentum, Nesterov, ADAM))
-                evofun = evolvemodel(graphmutation, optmutation)
+                evofun = _evolvemodel(graphmutation, optmutation)
                 newcand = evofun(cand)
 
                 @test NaiveGAflux.model(nvertices, newcand) == 4
@@ -50,7 +168,7 @@
                     @test opttype(newcand) === opttype(cand) === Nothing
                 end
 
-                if ctype == CandidateBatchSize
+                if ctype == CandidateBatchIterMap
                     @test length(first(trainiterator(cand; default=(1:100,)))) == 16  
                     @test length(first(validationiterator(cand; default=(1:100,)))) == 32  
                     # TODO Add mutation
@@ -64,7 +182,7 @@
                 teststrat() = NaiveGAflux.default_crossoverswap_strategy(v -> 1)
                 graphcrossover = VertexCrossover(CrossoverSwap(;pairgen = (v1,v2) -> (1,1), strategy=teststrat); pairgen = (v1,v2;ind1) -> ind1==1 ? (2,3) : nothing)
                 optcrossover = OptimizerCrossover()
-                crossfun = evolvemodel(graphcrossover, optcrossover)
+                crossfun = _evolvemodel(graphcrossover, optcrossover)
 
                 newcand1, newcand2 = crossfun((cand, newcand))
 

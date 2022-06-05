@@ -3,11 +3,13 @@
 ```@docs
 CandidateModel 
 CandidateOptModel
-CandidateBatchSize
+CandidateDataIterMap
 FittedCandidate
-evolvemodel
+MapCandidate
 Population
 model
 opt
 lossfun
+BatchSizeIteratorMap
+AbstractIteratorMap
 ```

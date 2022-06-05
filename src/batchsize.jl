@@ -10,11 +10,12 @@ The type of `batchsize` may be used to e.g. determine if one shall account for b
 """
 
 generic_batchsizefun_testgraph() = """
-julia> v0 = conv2dinputvertex("v0", 3);
 
-julia> v1 = fluxvertex("v1", Conv((3,3), nout(v0) => 8), v0);
-
-julia> graph = CompGraph(v0, v1);
+julia> graph =  let 
+                    v0 = conv2dinputvertex("v0", 3);
+                    v1 = fluxvertex("v1", Conv((3,3), nout(v0) => 8), v0);
+                    CompGraph(v0, v1);
+                end;
 """
 
 generic_batchsizeselection_example(sbs, kwres...) = """
@@ -47,7 +48,6 @@ struct ValidationBatchSize
     size::Int
 end
 batchsize(bs::ValidationBatchSize) = bs.size
-
 
 """
     BatchSizeSelectionWithDefaultInShape{T, F}

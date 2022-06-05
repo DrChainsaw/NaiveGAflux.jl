@@ -33,6 +33,9 @@ using NaiveNASlib.Advanced, NaiveNASlib.Extend
     @info "Testing batch size utils"
     include("batchsize.jl")
 
+    @info "Testing iterator mapping"
+    include("iteratormaps.jl")
+
     @info "Testing archspace"
     include("archspace.jl")
 
@@ -70,6 +73,7 @@ using NaiveNASlib.Advanced, NaiveNASlib.Extend
     @info "Testing AutoFlux"
     include("app/autoflux.jl")
 
+    @info "Testing documentation"
     import Documenter
     Documenter.doctest(NaiveGAflux)
 end
