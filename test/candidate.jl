@@ -121,7 +121,7 @@ end
     using Functors: fmap
     import MemPool
 
-    CandidateBatchIterMap(g) = CandidateDataIterMap(BatchSizeIteratorMap(16,32, batchsizeselection((3,)), g), CandidateModel(g))
+    CandidateBatchIterMap(g) = CandidateDataIterMap(BatchSizeIteratorMap(16,32, batchsizeselection((3,))), CandidateModel(g))
 
     @testset "$ctype" for (ctype, candfun) in (
         (CandidateModel, CandidateModel),
@@ -194,6 +194,52 @@ end
             finally
                 MemPool.cleanup()
             end
+        end
+    end
+
+    @testset "CandidateDataIterMap" begin
+        import NaiveGAflux: MapType, batchsize
+
+        function grabmodellimitfun()
+            seenmodel = Symbol[]
+            function(bs, m)
+                push!(seenmodel, m)
+                return 17
+            end
+        end
+
+        @testset "With BatchSizeIteratorMap" begin
+
+            bsim = BatchSizeIteratorMap(16, 32, grabmodellimitfun())
+            c = CandidateDataIterMap(bsim, CandidateModel(:m1))
+            mc = MapCandidate(MapType{Symbol}(Returns(:m2), deepcopy), identity)
+
+            cnew = mc(c)
+
+            @test model(cnew) == :m2
+            @test cnew.map.limitfun.seenmodel == [:m1, :m1, :m2, :m2]
+            @test batchsize(cnew.map.tbs) == 17
+            @test batchsize(cnew.map.vbs) == 17
+        end
+
+        @testset "With IteratorMaps" begin
+
+            dummyim = Ref(Val(:DummyIm1))
+            NaiveGAflux.limit_maxbatchsize(d::Base.RefValue{Val{:DummyIm1}}, args...; kwargs...) = d
+
+            bsim = BatchSizeIteratorMap(16, 32, grabmodellimitfun())
+            im = IteratorMaps(bsim, dummyim)
+            c = CandidateDataIterMap(im, CandidateModel(:m1))
+            mc = MapCandidate(MapType{Symbol}(Returns(:m2), deepcopy), identity)
+
+            cnew = mc(c)
+
+            @test model(cnew) == :m2
+            @test cnew.map.maps[1].limitfun.seenmodel == [:m1, :m1, :m2, :m2]
+            @test batchsize(cnew.map.maps[1].tbs) == 17
+            @test batchsize(cnew.map.maps[1].vbs) == 17
+
+            @test dummyim !== cnew.map.maps[2]
         end
     end
 

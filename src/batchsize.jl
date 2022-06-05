@@ -19,21 +19,21 @@ julia> graph =  let
 """
 
 generic_batchsizeselection_example(sbs, kwres...) = """
-julia> bs(graph, TrainBatchSize(512); $(first(kwres[1]))availablebytes = 10_000_000) # availablebytes supplied for doctest reasons
+julia> bs(TrainBatchSize(512), graph; $(first(kwres[1]))availablebytes = 10_000_000) # availablebytes supplied for doctest reasons
 $(last(kwres[1]))
 
-julia> bs(graph, TrainBatchSize(512); $(first(kwres[2]))availablebytes = 1000_000_000)
+julia> bs(TrainBatchSize(512), graph; $(first(kwres[2]))availablebytes = 1000_000_000)
 $(last(kwres[2]))
 
 julia> $sbs
 
-julia> sbs(graph, TrainBatchSize(512); $(first(kwres[3]))availablebytes = 10_000_000)
+julia> sbs(TrainBatchSize(512), graph; $(first(kwres[3]))availablebytes = 10_000_000)
 $(last(kwres[3]))
 
-julia> sbs(graph, TrainBatchSize(512); $(first(kwres[4]))availablebytes = 1000_000_000)
+julia> sbs(TrainBatchSize(512), graph; $(first(kwres[4]))availablebytes = 1000_000_000)
 $(last(kwres[4]))
 
-julia> bs(graph, ValidationBatchSize(512); $(first(kwres[5]))availablebytes=10_000_000)
+julia> bs(ValidationBatchSize(512), graph; $(first(kwres[5]))availablebytes=10_000_000)
 $(last(kwres[5]))
 """
 
@@ -215,8 +215,8 @@ struct BatchSizeSelectionMaxSize{F}
     batchsizefun::F
 end
 BatchSizeSelectionMaxSize(uppersize) = BatchSizeSelectionMaxSize(uppersize, limit_maxbatchsize)
-function (bs::BatchSizeSelectionMaxSize)(c, orgbs, args...; kwargs...)
-     bs.batchsizefun(c, newbatchsize(orgbs, bs.uppersize), args...; kwargs...)
+function (bs::BatchSizeSelectionMaxSize)(orgbs, args...; kwargs...)
+     bs.batchsizefun(newbatchsize(orgbs, bs.uppersize), args...; kwargs...)
 end
 # For strange batch size types which can't be created from just a number
 newbatchsize(::T, newsize) where T = T(newsize) 
@@ -246,34 +246,34 @@ julia> import NaiveGAflux: TrainBatchSize, ValidationBatchSize # Needed only for
 $(generic_batchsizefun_testgraph())
 julia> bs = batchsizeselection((32,32,3));
 
-julia> bs(graph, TrainBatchSize(128); availablebytes = 10_000_000) # availablebytes supplied for doctest reasons
+julia> bs(TrainBatchSize(128), graph; availablebytes = 10_000_000) # availablebytes supplied for doctest reasons
 84
 
-julia> bs(graph, ValidationBatchSize(128); availablebytes = 10_000_000)
+julia> bs(ValidationBatchSize(128), graph; availablebytes = 10_000_000)
 128
 
 julia> bs = batchsizeselection((32,32,3); maxmemutil=0.1);
 
-julia> bs(graph, TrainBatchSize(128); availablebytes = 10_000_000)
+julia> bs(TrainBatchSize(128), graph; availablebytes = 10_000_000)
 12
 
-julia> bs(graph, ValidationBatchSize(128); availablebytes = 10_000_000)
+julia> bs(ValidationBatchSize(128), graph; availablebytes = 10_000_000)
 24
 
 julia> bs = batchsizeselection((32,32,3); uppersize=1024);
 
-julia> bs(graph, TrainBatchSize(128); availablebytes = 10_000_000)
+julia> bs(TrainBatchSize(128), graph; availablebytes = 10_000_000)
 84
 
-julia> bs(graph, ValidationBatchSize(128); availablebytes = 10_000_000)
+julia> bs(ValidationBatchSize(128), graph; availablebytes = 10_000_000)
 170
 
 julia> bs = batchsizeselection((32,32,3); uppersize=1024, alternatives = 2 .^ (0:10));
 
-julia> bs(graph, TrainBatchSize(128); availablebytes = 10_000_000)
+julia> bs(TrainBatchSize(128), graph; availablebytes = 10_000_000)
 64
 
-julia> bs(graph, ValidationBatchSize(128); availablebytes = 10_000_000)
+julia> bs(ValidationBatchSize(128), graph; availablebytes = 10_000_000)
 128
 ```
 """
@@ -290,14 +290,14 @@ end
 
 # specialization for CompGraph needed to avoid ambiguity with method that just unwraps an AbstractCandidate :( 
 # Consider refactoring
-function limit_maxbatchsize(model::CompGraph, bs::TrainBatchSize; inshape_nobatch, availablebytes = _availablebytes())
+function limit_maxbatchsize(bs::TrainBatchSize, model::CompGraph; inshape_nobatch, availablebytes = _availablebytes())
     min(batchsize(bs), maxtrainbatchsize(model, inshape_nobatch, availablebytes))
 end
 
 # specialization for CompGraph needed to avoid ambiguity with method that just unwraps an AbstractCandidate :( 
 # Consider refactoring
-function limit_maxbatchsize(model::CompGraph, 
-                            bs::ValidationBatchSize; 
+function limit_maxbatchsize(bs::ValidationBatchSize,
+                            model::CompGraph; 
                             inshape_nobatch,
                             availablebytes = _availablebytes()
                             )

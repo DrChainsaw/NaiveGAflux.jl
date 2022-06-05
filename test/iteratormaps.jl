@@ -1,5 +1,5 @@
 @testset "Iterator maps" begin
-    import NaiveGAflux: maptrain, mapvalidation
+    import NaiveGAflux: maptrain, mapvalidation, limit_maxbatchsize
 
     @testset "BatchSizeIteratorMap" begin
         function testgraph(insize)
@@ -10,11 +10,15 @@
             CompGraph(v0, "v4" >> v3 + v3)
         end
 
-        bsim = BatchSizeIteratorMap(2, 4, batchsizeselection((5,)), testgraph(5))
-             
+        bsim = BatchSizeIteratorMap(2, 4, batchsizeselection((5,); batchsizefun=(bs, newbs; scale, kws...) -> newbs * scale))
+
         @testset "Single array" begin
             @test collect(maptrain(bsim, (1:20,))) == [a:a+1 for a in 1:2:20]    
             @test collect(mapvalidation(bsim, (1:20,))) == [a:a+3 for a in 1:4:20]   
+            
+            bsimnew = limit_maxbatchsize(bsim, 2; scale=5)
+            @test collect(maptrain(bsimnew, (1:20,))) == [a:a+9 for a in 1:10:20] 
+            @test collect(mapvalidation(bsimnew, (1:20,))) == [a:a+9 for a in 1:10:20] 
         end
 
         @testset "BatchIterator" begin

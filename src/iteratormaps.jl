@@ -13,6 +13,8 @@ abstract type AbstractIteratorMap end
 maptrain(::AbstractIteratorMap, iter) = iter
 mapvalidation(::AbstractIteratorMap, iter) = iter
 
+limit_maxbatchsize(im::AbstractIteratorMap, args...; kwargs...) = im
+ 
 """
     BatchSizeIteratorMap{F} <: AbstractIteratorMap 
     BatchSizeIteratorMap(limitfun, trainbatchsize, validationbatchsize, model)
@@ -23,12 +25,11 @@ Use [`batchsizeselection`](@ref) to create an appropriate `limitfun`.
 
 # Examples
 ```jldoctest
-julia> using NaiveGAflux, Flux
+julia> using NaiveGAflux
 
 julia> import NaiveGAflux: maptrain, mapvalidation # needed for examples only
 
-$(generic_batchsizefun_testgraph())
-julia> bsim = BatchSizeIteratorMap(4, 8, batchsizeselection((32,32,3)), graph);
+julia> bsim = BatchSizeIteratorMap(4, 8, batchsizeselection((32,32,3)));
 
 julia> collect(maptrain(bsim, (1:20,)))
 5-element Vector{Vector{Int64}}:
@@ -65,26 +66,18 @@ struct BatchSizeIteratorMap{F} <: AbstractIteratorMap
     tbs::TrainBatchSize
     vbs::ValidationBatchSize
     limitfun::F
-    function BatchSizeIteratorMap{F}(tbs::TrainBatchSize, vbs::ValidationBatchSize, limitfun::F, model) where F
-        new{F}(TrainBatchSize(limitfun(model, tbs)), ValidationBatchSize(limitfun(model, vbs)), limitfun)
-    end
 end
 
-function BatchSizeIteratorMap(tbs::Integer, vbs::Integer, limitfun, model)
-    BatchSizeIteratorMap(TrainBatchSize(tbs), ValidationBatchSize(vbs), limitfun, model)
-end
-
-
-function BatchSizeIteratorMap(tbs::TrainBatchSize, vbs::ValidationBatchSize, limitfun::F, model) where F
-    BatchSizeIteratorMap{F}(tbs, vbs, limitfun, model)
-end
-
-apply_mapfield(::typeof(deepcopy), bsim::BatchSizeIteratorMap, c) = model(c) do m
-    BatchSizeIteratorMap(bsim.tbs, bsim.vbs, deepcopy(bsim.limitfun), m)
+function BatchSizeIteratorMap(tbs::Integer, vbs::Integer, limitfun)
+    BatchSizeIteratorMap(TrainBatchSize(tbs), ValidationBatchSize(vbs), limitfun)
 end
 
 maptrain(bs::BatchSizeIteratorMap, iter) = setbatchsize(iter, batchsize(bs.tbs))
 mapvalidation(bs::BatchSizeIteratorMap, iter) = setbatchsize(iter, batchsize(bs.vbs))
+
+function limit_maxbatchsize(bsim::BatchSizeIteratorMap, args...; kwargs...) 
+    BatchSizeIteratorMap(bsim.limitfun(bsim.tbs, args...; kwargs...), bsim.limitfun(bsim.vbs, args...; kwargs...), bsim.limitfun)
+end
 
 """
     IteratorMaps{T} <: AbstractIteratorMap 
@@ -96,3 +89,5 @@ IteratorMaps(x...) = IteratorMaps(x)
 
 maptrain(iws::IteratorMaps, iter) = foldr(maptrain, iws.maps; init=iter)
 mapvalidation(iws::IteratorMaps, iter) = foldr(mapvalidation, iws.maps; init=iter)
+
+limit_maxbatchsize(ims::IteratorMaps, args...; kwargs...) = IteratorMaps(map(im -> limit_maxbatchsize(im, args...; kwargs...), ims.maps))

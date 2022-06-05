@@ -68,13 +68,13 @@
         import NaiveGAflux: limit_maxbatchsize, TrainBatchSize, ValidationBatchSize
         graph = testgraph(5)
 
-        @test limit_maxbatchsize(graph, TrainBatchSize(1); inshape_nobatch=(5,), availablebytes=1000) == 1 
-        @test limit_maxbatchsize(graph, TrainBatchSize(2); inshape_nobatch=(5,), availablebytes=1000) == 2
-        @test limit_maxbatchsize(graph, TrainBatchSize(3); inshape_nobatch=(5,), availablebytes=1000) == 2
+        @test limit_maxbatchsize(TrainBatchSize(1), graph; inshape_nobatch=(5,), availablebytes=1000) == 1 
+        @test limit_maxbatchsize(TrainBatchSize(2), graph; inshape_nobatch=(5,), availablebytes=1000) == 2
+        @test limit_maxbatchsize(TrainBatchSize(3), graph; inshape_nobatch=(5,), availablebytes=1000) == 2
         
-        @test limit_maxbatchsize(graph, ValidationBatchSize(6); inshape_nobatch=(5,), availablebytes=1000) == 6
-        @test limit_maxbatchsize(graph, ValidationBatchSize(8); inshape_nobatch=(5,), availablebytes=1000) == 8
-        @test limit_maxbatchsize(graph, ValidationBatchSize(10); inshape_nobatch=(5,), availablebytes=1000) == 8
+        @test limit_maxbatchsize(ValidationBatchSize(6), graph; inshape_nobatch=(5,), availablebytes=1000) == 6
+        @test limit_maxbatchsize(ValidationBatchSize(8), graph; inshape_nobatch=(5,), availablebytes=1000) == 8
+        @test limit_maxbatchsize(ValidationBatchSize(10), graph; inshape_nobatch=(5,), availablebytes=1000) == 8
     end
 
     @testset "batchsizeselection" begin
@@ -83,24 +83,24 @@
         graph = testgraph(4)
         bs = batchsizeselection((4,))
         
-        @test bs(graph, TrainBatchSize(31), availablebytes=10000) == 19
-        @test bs(graph, ValidationBatchSize(31), availablebytes=10000) == 31
+        @test bs(TrainBatchSize(31), graph; availablebytes=10000) == 19
+        @test bs(ValidationBatchSize(31), graph; availablebytes=10000) == 31
 
         bs = batchsizeselection((4,); maxmemutil=0.1)
-        @test bs(graph, TrainBatchSize(31), availablebytes=10000) == 2
-        @test bs(graph, ValidationBatchSize(31), availablebytes=10000) == 8
+        @test bs(TrainBatchSize(31), graph; availablebytes=10000) == 2
+        @test bs(ValidationBatchSize(31), graph; availablebytes=10000) == 8
 
         bs = batchsizeselection((4,); uppersize=64)
-        @test bs(graph, TrainBatchSize(31), availablebytes=10000) == 19
-        @test bs(graph, ValidationBatchSize(31), availablebytes=10000) == 64
+        @test bs(TrainBatchSize(31), graph; availablebytes=10000) == 19
+        @test bs(ValidationBatchSize(31), graph; availablebytes=10000) == 64
 
         bs = batchsizeselection((4,); alternatives=2 .^ (0:10))
-        @test bs(graph, TrainBatchSize(33), availablebytes=10000) == 16
-        @test bs(graph, ValidationBatchSize(33), availablebytes=10000) == 32
+        @test bs(TrainBatchSize(33), graph; availablebytes=10000) == 16
+        @test bs(ValidationBatchSize(33), graph; availablebytes=10000) == 32
 
         bs = batchsizeselection((4,); uppersize=65, alternatives=2 .^ (0:10))
-        @test bs(graph, TrainBatchSize(31), availablebytes=10000) == 16
-        @test bs(graph, ValidationBatchSize(31), availablebytes=10000) == 64
+        @test bs(TrainBatchSize(31), graph; availablebytes=10000) == 16
+        @test bs(ValidationBatchSize(31), graph; availablebytes=10000) == 64
 
     end
 end

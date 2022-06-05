@@ -135,7 +135,12 @@ for validation for speed reasons.
 """
 struct CandidateDataIterMap{T<:AbstractIteratorMap, C<:AbstractCandidate} <: AbstractWrappingCandidate
     map::T
-    c::C
+    c::C   
+    
+    CandidateDataIterMap(map, c::C) where C<:AbstractCandidate = model(c) do m
+        lmap = limit_maxbatchsize(map, m)
+        new{typeof(lmap), C}(lmap, c)
+    end
 end
 
 @functor CandidateDataIterMap
@@ -143,13 +148,8 @@ end
 trainiterator(c::CandidateDataIterMap; kwargs...) = maptrain(c.map, trainiterator(wrappedcand(c); kwargs...))
 validationiterator(c::CandidateDataIterMap; kwargs...) = mapvalidation(c.map, validationiterator(wrappedcand(c); kwargs...))
 
-function newcand(c::CandidateDataIterMap, mapfield) 
-    nc =  newcand(wrappedcand(c), mapfield)
-    CandidateDataIterMap(apply_mapfield(mapfield, c.map, nc), nc)
-end
+newcand(c::CandidateDataIterMap, mapfield) = CandidateDataIterMap(mapfield(c.map), newcand(wrappedcand(c), mapfield))
 
-# Just because BatchSizeIteratorMap needs the model to limit the batch sizes :(
-apply_mapfield(f, x, ::AbstractCandidate) = f(x)
 
 """
     FileCandidate <: AbstractWrappingCandidate
@@ -327,6 +327,14 @@ function MapType(c::AbstractCrossover{FluxOptimizer}, (c1, c2), (nomatch1, nomat
     o1n, o2n = c((o1, o2))
     return MapType{FluxOptimizer}(Returns(o1n), nomatch1), MapType{FluxOptimizer}(Returns(o2n), nomatch2)
 end
+
+# Just because BatchSizeIteratorMap needs the model to limit the batch sizes :(
+# Try to come up with a cleaner design...
+apply_mapfield(f::MapType, x, args...) = (@info "apply $f to $x"; apply_mapfield(f.nomatch, x, args...))
+apply_mapfield(f::MapType{T1}, x::T2, args...) where {T1, T2<:T1} = apply_mapfield(f.match, x, args...)
+apply_mapfield(f::typeof(deepcopy), x, args...) = f(x)
+apply_mapfield(f, x, args...) = f(x, args...)
+    
 
 """
     MapCandidate{T, F} 
