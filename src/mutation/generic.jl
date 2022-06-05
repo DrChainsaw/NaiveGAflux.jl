@@ -71,8 +71,8 @@ end
 
 Applies `m` with probability `p`.
 """
-struct MutationProbability{T, P<:Probability} <: DecoratingMutation{T}
-    m::AbstractMutation{T}
+struct MutationProbability{T, M<:AbstractMutation{T}, P<:Probability} <: DecoratingMutation{T}
+    m::M
     p::P
 end
 MutationProbability(m::AbstractMutation{T}, p::Number) where T = MutationProbability(m, Probability(p))
@@ -144,8 +144,8 @@ Chains multiple `AbstractMutation{T}`s after each other.
 
 Input entities will be mutated by the first `AbstractMutation{T}` in the chain and the output will be fed into the next `AbstractMutation{T}` in the chain and so on. The output from the last `AbstractMutation{T}` is returned.
 """
-struct MutationChain{T} <: DecoratingMutation{T}
-    m::Tuple{Vararg{AbstractMutation{T}}}
+struct MutationChain{T, M<:Tuple{Vararg{AbstractMutation{T}}}} <: DecoratingMutation{T}
+    m::M
 end
 MutationChain(m::AbstractMutation{T}...) where T = MutationChain(m)
 # Identical, but can't use Union due to ambiguity
@@ -160,8 +160,8 @@ Records all mutated entities.
 
 Intended use case is to be able to do parameter selection on mutated vertices.
 """
-struct RecordMutation{T} <: DecoratingMutation{T}
-    m::AbstractMutation{T}
+struct RecordMutation{T, M<:AbstractMutation{T}} <: DecoratingMutation{T}
+    m::M
     mutated::Vector{T}
 end
 RecordMutation(m::AbstractMutation{T}) where T = RecordMutation(m, T[])
@@ -189,11 +189,11 @@ Calling `nextlogfun(e)` where `e` is the entity to mutate produces an `AbstractL
 
 By default, this is used to add a level of indentation to subsequent logging calls which makes logs of hierarchical mutations (e.g. mutate a CompGraph by applying mutations to some of its vertices) easier to read. Set `nextlogfun = e -> current_logger()` to remove this behaviour.
 """
-struct LogMutation{T,F,L<:LogLevel,LF} <: DecoratingMutation{T}
+struct LogMutation{T,F,L<:LogLevel,LF,M<:AbstractMutation{T}} <: DecoratingMutation{T}
     strfun::F
     level::L
     nextlogfun::LF
-    m::AbstractMutation{T}
+    m::M
 end
 LogMutation(strfun, m::AbstractMutation{T}; level = Logging.Info, nextlogfun=e -> PrefixLogger("   ")) where T = LogMutation(strfun, level, nextlogfun, m)
 function (m::LogMutation{T})(e::T; next=m.m, noop=identity) where T
@@ -207,9 +207,9 @@ end
 
 Applies mutation `m` only for entities `e` for which `predicate(e)` returns true.
 """
-struct MutationFilter{T,P} <: DecoratingMutation{T}
+struct MutationFilter{T,P,M<:AbstractMutation{T}} <: DecoratingMutation{T}
     predicate::P
-    m::AbstractMutation{T}
+    m::M
 end
 function (m::MutationFilter{T})(e::T; next=m.m, noop=identity) where T
     m.predicate(e) && return next(e)

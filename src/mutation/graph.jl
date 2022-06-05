@@ -8,14 +8,14 @@ Applies a wrapped `AbstractMutation{AbstractVertex}` to each selected vertex in 
 
 Vertices to select is determined by the configured `AbstractVertexSelection`.
 """
-struct VertexMutation{S<:AbstractVertexSelection} <: DecoratingMutation{CompGraph}
-m::AbstractMutation{AbstractVertex}
-s::S
+struct VertexMutation{M<:AbstractMutation{AbstractVertex}, S<:AbstractVertexSelection} <: DecoratingMutation{CompGraph}
+    m::M
+    s::S
 end
 VertexMutation(m::AbstractMutation{AbstractVertex}) = VertexMutation(m, FilterMutationAllowed())
 function (m::VertexMutation)(g::CompGraph)
-m.m(select(m.s, g, m))
-return g
+    m.m(select(m.s, g, m))
+    return g
 end
 
 """
@@ -30,48 +30,48 @@ Size is changed by `x * nout(v)` rounded away from from zero where `x` is drawn 
 `minrel` and `maxrel` are `l1` and `l2` if `l1 < l2` and `l2` and `l1` otherwise.
 """
 struct NoutMutation{R<:Real, RNG<:AbstractRNG} <:AbstractMutation{AbstractVertex}
-minrel::R
-maxrel::R
-rng::RNG
-function NoutMutation(l1::R1, l2::R2, rng::RNG) where {R1, R2, RNG} 
-    R = promote_type(R1, R2)
-    return l1 < l2 ? new{R, RNG}(promote(l1, l2)..., rng) : new{R, RNG}(promote(l2, l1)..., rng)
-end
+    minrel::R
+    maxrel::R
+    rng::RNG
+    function NoutMutation(l1::R1, l2::R2, rng::RNG) where {R1, R2, RNG} 
+        R = promote_type(R1, R2)
+        return l1 < l2 ? new{R, RNG}(promote(l1, l2)..., rng) : new{R, RNG}(promote(l2, l1)..., rng)
+    end
 end
 NoutMutation(limit, rng::AbstractRNG=rng_default) = NoutMutation(0, limit, rng)
 NoutMutation(l1,l2) = NoutMutation(l1,l2, rng_default)
 (m::NoutMutation)(v::AbstractVertex) = first(m([v]))
 function (m::NoutMutation)(vs::AbstractVector{<:AbstractVertex})
 
-Δs = Dict{AbstractVertex, Int}()
-shift = m.minrel
-scale = m.maxrel - m.minrel
+    Δs = Dict{AbstractVertex, Int}()
+    shift = m.minrel
+    scale = m.maxrel - m.minrel
 
-for v in vs
-    terminputs = findterminating(v, inputs)
+    for v in vs
+        terminputs = findterminating(v, inputs)
 
-    # We are basically just searching for Immutable vertices here, allow_mutation(trait(v)) happens to do just that
-    any(tv -> allow_mutation(trait(tv)), terminputs) || continue
-    
-    Δfloat = rand(m.rng) * scale + shift
+        # We are basically just searching for Immutable vertices here, allow_mutation(trait(v)) happens to do just that
+        any(tv -> allow_mutation(trait(tv)), terminputs) || continue
+        
+        Δfloat = rand(m.rng) * scale + shift
 
-    Δ = ceil(Int, abs(Δfloat) * nout(v)) *  sign(Δfloat)
-    minsize = minimum(nout.(terminputs))
-    # Or else we might increase the size despite Δ being negative which would be surprising to a user who has specified 
-    # strictly negative size changes
-    minsize + Δ <= 0 && continue
+        Δ = ceil(Int, abs(Δfloat) * nout(v)) *  sign(Δfloat)
+        minsize = minimum(nout.(terminputs))
+        # Or else we might increase the size despite Δ being negative which would be surprising to a user who has specified 
+        # strictly negative size changes
+        minsize + Δ <= 0 && continue
 
-    Δs[v] = Δ
-end
+        Δs[v] = Δ
+    end
 
-if !isempty(Δs)
-    failmsg = (args...) -> "Could not change nout of $(join(NaiveNASlib.nameorrepr.(keys(Δs)), ", ", " and ")) by $(join(values(Δs), ", ", " and ")). No change!"
+    if !isempty(Δs)
+        failmsg = (args...) -> "Could not change nout of $(join(NaiveNASlib.nameorrepr.(keys(Δs)), ", ", " and ")) by $(join(values(Δs), ", ", " and ")). No change!"
 
-    strategy = TimeOutAction(;base=ΔNoutRelaxed(Δs), fallback=LogΔSizeExec(failmsg, Logging.Warn, ΔSizeFailNoOp()))
+        strategy = TimeOutAction(;base=ΔNoutRelaxed(Δs), fallback=LogΔSizeExec(failmsg, Logging.Warn, ΔSizeFailNoOp()))
 
-    Δsize!(strategy)
-end
-return vs
+        Δsize!(strategy)
+    end
+    return vs
 end
 
 """
@@ -86,18 +86,18 @@ Insert a vertex from the wrapped `AbstractArchSpace` `s` after a given vertex `v
 The function `outselect` takes an `AbstractVector{AbstractVertex}` representing the output of `v` and returns an `AbstractVector{AbstractVertex}` which shall be reconnected to the vertex `v'` returned by `s`. Defaults to `identity` meaning all outputs of `v` are reconnected to `v'`.
 """
 struct AddVertexMutation{S<:AbstractArchSpace, F, WI<:AbstractWeightInit, RNG<:AbstractRNG} <:AbstractMutation{AbstractVertex}
-s::S
-outselect::F
-weightinit::WI
-rng::RNG
+    s::S
+    outselect::F
+    weightinit::WI
+    rng::RNG
 end
 AddVertexMutation(s, outselect::Function=identity) = AddVertexMutation(s, outselect, IdentityWeightInit(), rng_default)
 AddVertexMutation(s, rng::AbstractRNG) = AddVertexMutation(s, identity, IdentityWeightInit(), rng)
 AddVertexMutation(s, wi::AbstractWeightInit) = AddVertexMutation(s, identity, wi, rng_default)
 
 function (m::AddVertexMutation)(v::AbstractVertex)
-insert!(v, vi -> m.s(name(vi), vi, m.rng, outsize=nout(vi), wi=m.weightinit), m.outselect)
-return v
+    insert!(v, vi -> m.s(name(vi), vi, m.rng, outsize=nout(vi), wi=m.weightinit), m.outselect)
+    return v
 end
 
 """
@@ -114,16 +114,16 @@ Default reconnect strategy is `ConnectAll`.
 Note: High likelyhood of large accuracy degradation after applying this mutation.
 """
 struct RemoveVertexMutation{S<:RemoveStrategy} <:AbstractMutation{AbstractVertex}
-s::S
+    s::S
 end
 function RemoveVertexMutation() 
-alignstrat = IncreaseSmaller(fallback=DecreaseBigger(fallback=AlignSizeBoth(fallback=FailAlignSizeWarn(msgfun = (vin,vout) -> "Can not remove vertex $(name(vin))! Could not align sizes of neighbours!"))))
-return RemoveVertexMutation(RemoveStrategy(CheckAligned(CheckNoSizeCycle(alignstrat, FailAlignSizeWarn(msgfun = (vin,vout) -> "Can not remove vertex $(name(vin))! Size cycle detected!")))))
+    alignstrat = IncreaseSmaller(fallback=DecreaseBigger(fallback=AlignSizeBoth(fallback=FailAlignSizeWarn(msgfun = (vin,vout) -> "Can not remove vertex $(name(vin))! Could not align sizes of neighbours!"))))
+    return RemoveVertexMutation(RemoveStrategy(CheckAligned(CheckNoSizeCycle(alignstrat, FailAlignSizeWarn(msgfun = (vin,vout) -> "Can not remove vertex $(name(vin))! Size cycle detected!")))))
 end
 
 function (m::RemoveVertexMutation)(v::AbstractVertex)
-remove!(v, m.s)
-return v
+    remove!(v, m.s)
+    return v
 end
 
 default_neuronselect(args...) = NaiveNASlib.defaultutility(args...)
@@ -144,92 +144,92 @@ When selecting neurons/outputs after any eventual size change the output of `uti
 Note: High likelyhood of large accuracy degradation after applying this mutation.
 """
 struct AddEdgeMutation{F1, F2, F3, P<:Probability, RNG} <: AbstractMutation{AbstractVertex}
-mergefun::F1
-filtfun::F2
-utilityfun::F3
-p::P
-rng::RNG
+    mergefun::F1
+    filtfun::F2
+    utilityfun::F3
+    p::P
+    rng::RNG
 end
 AddEdgeMutation(p; rng=rng_default, mergefun=default_mergefun(rng=rng), filtfun=no_shapechange, utilityfun=default_neuronselect) = AddEdgeMutation(Probability(p, rng), rng=rng, mergefun=mergefun, filtfun=filtfun, utilityfun=utilityfun)
 AddEdgeMutation(p::Probability; rng=rng_default, mergefun=default_mergefun(rng=rng), filtfun=no_shapechange, utilityfun=default_neuronselect) = AddEdgeMutation(mergefun, filtfun, utilityfun, p, rng)
 
 default_mergefun(pconc = 0.5; rng=rng_default, traitfun = MutationShield ∘ RemoveIfSingleInput ∘ validated() ∘ default_logging(), layerfun = ActivationContribution) = function(vin)
-if rand(rng) > pconc
-    return invariantvertex(layerfun(+), vin, traitdecoration=traitfun ∘ named(name(vin) * ".add"))
-end
-return concat(vin, traitfun = traitfun ∘ named(name(vin) * ".cat"), layerfun=layerfun)
+    if rand(rng) > pconc
+        return invariantvertex(layerfun(+), vin, traitdecoration=traitfun ∘ named(name(vin) * ".add"))
+    end
+    return concat(vin, traitfun = traitfun ∘ named(name(vin) * ".cat"), layerfun=layerfun)
 end
 
 function no_shapechange(vi)
-# all_in_graph is not sorted, and we want some kind of topoligical order here so that earlier indices are closer to vi
-allsorted = mapreduce(ancestors, vcat, filter(v -> isempty(outputs(v)), all_in_graph(vi))) |> unique
+    # all_in_graph is not sorted, and we want some kind of topoligical order here so that earlier indices are closer to vi
+    allsorted = mapreduce(ancestors, vcat, filter(v -> isempty(outputs(v)), all_in_graph(vi))) |> unique
 
-# Vertices which have the same input as vi and are singleinput
-#   Reason is that this will cause a new vertex to be added between the target output vertex vo
-#   and the input vertex to vi (vii) and this is detected as a size cycle which causes 
-#   try_add_edge to fail.
-inouts = filter(singleinput, mapreduce(outputs, vcat, inputs(vi); init=[]))
-# All vertices which are after vi in the topology
-vsafter = setdiff(allsorted, ancestors(vi), outputs(vi), inouts)
+    # Vertices which have the same input as vi and are singleinput
+    #   Reason is that this will cause a new vertex to be added between the target output vertex vo
+    #   and the input vertex to vi (vii) and this is detected as a size cycle which causes 
+    #   try_add_edge to fail.
+    inouts = filter(singleinput, mapreduce(outputs, vcat, inputs(vi); init=[]))
+    # All vertices which are after vi in the topology
+    vsafter = setdiff(allsorted, ancestors(vi), outputs(vi), inouts)
 
-vitrace = shapetrace(vi) 
-viorder = allΔshapetypes(vitrace)
-viΔshape = squashshapes(vitrace; order=viorder)
+    vitrace = shapetrace(vi) 
+    viorder = allΔshapetypes(vitrace)
+    viΔshape = squashshapes(vitrace; order=viorder)
 
-return filter(vsafter) do vafter
-    all(inputs(vafter)) do v
-    t = shapetrace(v)
-    vΔshape = squashshapes(t; order=union(viorder, allΔshapetypes(t)))
-    return viΔshape == vΔshape
+    return filter(vsafter) do vafter
+        all(inputs(vafter)) do v
+        t = shapetrace(v)
+        vΔshape = squashshapes(t; order=union(viorder, allΔshapetypes(t)))
+        return viΔshape == vΔshape
+        end
     end
-end
 end
 
 function (m::AddEdgeMutation)(vi::AbstractVertex)
-# All vertices for which it is allowed to add vi as an input
-allverts = filter(allow_mutation, m.filtfun(vi))
-isempty(allverts) && return vi
+    # All vertices for which it is allowed to add vi as an input
+    allverts = filter(allow_mutation, m.filtfun(vi))
+    isempty(allverts) && return vi
 
-# Higher probability to select a vertex close to v is desired behaviour
-# One line less than a for loop => FP wins!!
-selfun(::Nothing, vc) = apply(m.p) ? vc : nothing
-selfun(vs, vd) = vs
-vo = foldl(selfun, allverts, init=nothing)
-vo = isnothing(vo) ? rand(m.rng, allverts) : vo
+    # Higher probability to select a vertex close to v is desired behaviour
+    # One line less than a for loop => FP wins!!
+    selfun(::Nothing, vc) = apply(m.p) ? vc : nothing
+    selfun(vs, vd) = vs
+    vo = foldl(selfun, allverts, init=nothing)
+    vo = isnothing(vo) ? rand(m.rng, allverts) : vo
 
-try_add_edge(vi, vo, m.mergefun, m.utilityfun)
-return vi
+    try_add_edge(vi, vo, m.mergefun, m.utilityfun)
+    return vi
 end
 
 function try_add_edge(vi, vo, mergefun, utilityfun=default_neuronselect)
 
-# Need to add a vertex which can handle multiple inputs if vo is single input only
-# For cleaning up added vertex if the whole operation fails
-cleanup_failed = () -> nothing
-if singleinput(vo)
-    voi = inputs(vo)[1]
-    # If the input to vo is capable of multi input we don't need to create a new vertex
-    # We must also check that this input does not happen to be an input to vi as this would create a cycle in the graph
-    if singleinput(voi) || voi in ancestors(vi)
-        vm = mergefun(voi)
-        # Insert vm between voi and vo, i.e voi -> vo turns into voi -> vm -> vo
-        # vs -> [vo] means only add the new vertex between voi and vo as voi could have other outputs
-        insert!(voi, vv -> vm, vs -> [vo])
-        cleanup_failed = function()
-            length(inputs(vm)) > 1 && return
-            remove!(vm, RemoveStrategy(NoSizeChange()))
+    # Need to add a vertex which can handle multiple inputs if vo is single input only
+    # For cleaning up added vertex if the whole operation fails
+    cleanup_failed = () -> nothing
+    if singleinput(vo)
+        voi = inputs(vo)[1]
+        # If the input to vo is capable of multi input we don't need to create a new vertex
+        # We must also check that this input does not happen to be an input to vi as this would create a cycle in the graph
+        if singleinput(voi) || voi in ancestors(vi)
+            vm = mergefun(voi)
+            # Insert vm between voi and vo, i.e voi -> vo turns into voi -> vm -> vo
+            # vs -> [vo] means only add the new vertex between voi and vo as voi could have other outputs
+            insert!(voi, vv -> vm, vs -> [vo])
+            cleanup_failed = function()
+                length(inputs(vm)) > 1 && return
+                remove!(vm, RemoveStrategy(NoSizeChange()))
+            end
+            vo = vm # vm is the one we shall add an edge to
+            @debug "Create new vertex for merging $(name(vo))"
+        else
+            vo = voi
         end
-        vo = vm # vm is the one we shall add an edge to
-        @debug "Create new vertex for merging $(name(vo))"
-    else
-        vo = voi
     end
-end
-# This is mainly because FailAlignSizeRevert does not work when the same vertex is input more than once, but it also seems kinda redundant.
-vi in inputs(vo) && return
-@debug "Create edge between $(name(vi)) and $(name(vo))"
-create_edge!(vi, vo, strategy = create_edge_strat(vo, utilityfun))
-cleanup_failed()
+    # This is mainly because FailAlignSizeRevert does not work when the same vertex is input more than once, but it also seems kinda redundant.
+    vi in inputs(vo) && return
+    @debug "Create edge between $(name(vi)) and $(name(vo))"
+    create_edge!(vi, vo, strategy = create_edge_strat(vo, utilityfun))
+    cleanup_failed()
 end
 # Need to override this one for strange types e.g. layers which support exactly 2 inputs or something.
 singleinput(v) = isempty(inputs(v)) || length(inputs(v)) == 1
@@ -237,19 +237,19 @@ singleinput(v) = isempty(inputs(v)) || length(inputs(v)) == 1
 create_edge_strat(v::AbstractVertex, utilityfun) = create_edge_strat(trait(v), utilityfun)
 create_edge_strat(d::DecoratingTrait, utilityfun) = create_edge_strat(base(d), utilityfun)
 function create_edge_strat(::SizeInvariant, utilityfun)
-warnfailalign = FailAlignSizeWarn(msgfun = (vin,vout) -> "Could not align sizes of $(name(vin)) and $(name(vout))!")
-alignstrat = AlignSizeBoth(;mapstrat=WithUtilityFun(utilityfun), fallback = warnfailalign)
-# Tricky failure case: It is possible that CheckCreateEdgeNoSizeCycle does not detect any size cycle until after the edge has been created?
-sizecyclewarn = FailAlignSizeWarn(msgfun = (vin,vout) -> "Could not align sizes of $(name(vin)) and $(name(vout))! Size cycle detected!") 
+    warnfailalign = FailAlignSizeWarn(msgfun = (vin,vout) -> "Could not align sizes of $(name(vin)) and $(name(vout))!")
+    alignstrat = AlignSizeBoth(;mapstrat=WithUtilityFun(utilityfun), fallback = warnfailalign)
+    # Tricky failure case: It is possible that CheckCreateEdgeNoSizeCycle does not detect any size cycle until after the edge has been created?
+    sizecyclewarn = FailAlignSizeWarn(msgfun = (vin,vout) -> "Could not align sizes of $(name(vin)) and $(name(vout))! Size cycle detected!") 
 
-return CheckCreateEdgeNoSizeCycle(ifok=alignstrat, ifnok=sizecyclewarn)
+    return CheckCreateEdgeNoSizeCycle(ifok=alignstrat, ifnok=sizecyclewarn)
 end
 function create_edge_strat(::SizeStack, utilityfun)
-warnfailalign = FailAlignSizeWarn(msgfun = (vin,vout) -> "Could not align sizes of $(name(vin)) and $(name(vout))!")
-alignstrat = PostAlign(TruncateInIndsToValid(WithUtilityFun(utilityfun, AlignNinToNout(;fallback=ΔSizeFailNoOp()))), fallback=warnfailalign)
+    warnfailalign = FailAlignSizeWarn(msgfun = (vin,vout) -> "Could not align sizes of $(name(vin)) and $(name(vout))!")
+    alignstrat = PostAlign(TruncateInIndsToValid(WithUtilityFun(utilityfun, AlignNinToNout(;fallback=ΔSizeFailNoOp()))), fallback=warnfailalign)
 
-sizecyclewarn = FailAlignSizeWarn(msgfun = (vin,vout) -> "Could not align sizes of $(name(vin)) and $(name(vout))! Size cycle detected!")
-return CheckCreateEdgeNoSizeCycle(ifok=alignstrat, ifnok=sizecyclewarn)
+    sizecyclewarn = FailAlignSizeWarn(msgfun = (vin,vout) -> "Could not align sizes of $(name(vin)) and $(name(vout))! Size cycle detected!")
+    return CheckCreateEdgeNoSizeCycle(ifok=alignstrat, ifnok=sizecyclewarn)
 end
 
 """
@@ -267,24 +267,24 @@ When selecting neurons/outputs after any eventual size change the output of `uti
 Note: High likelyhood of large accuracy degradation after applying this mutation.
 """
 struct RemoveEdgeMutation{F, RNG<:AbstractRNG} <: AbstractMutation{AbstractVertex}
-utilityfun::F
-rng::RNG
+    utilityfun::F
+    rng::RNG
 end
 RemoveEdgeMutation(;utilityfun=default_neuronselect, rng=rng_default) = RemoveEdgeMutation(utilityfun, rng)
 
 function (m::RemoveEdgeMutation)(vi::AbstractVertex)
-length(outputs(vi)) < 2 && return vi
+    length(outputs(vi)) < 2 && return vi
 
-allverts = filter(vo -> length(inputs(vo)) > 1, outputs(vi))
+    allverts = filter(vo -> length(inputs(vo)) > 1, outputs(vi))
 
-isempty(allverts) && return vi
+    isempty(allverts) && return vi
 
-vo = rand(m.rng, allverts)
-sum(inputs(vo) .== vi) > 1 && return vi# Not implemented in NaiveNASlib
+    vo = rand(m.rng, allverts)
+    sum(inputs(vo) .== vi) > 1 && return vi# Not implemented in NaiveNASlib
 
-@debug "Remove edge between $(name(vi)) and $(name(vo))"
-remove_edge!(vi, vo, strategy=remove_edge_strat(vo, m.utilityfun))
-return vi
+    @debug "Remove edge between $(name(vi)) and $(name(vo))"
+    remove_edge!(vi, vo, strategy=remove_edge_strat(vo, m.utilityfun))
+    return vi
 end
 
 remove_edge_strat(v::AbstractVertex, utilityfun) = remove_edge_strat(trait(v), utilityfun)
@@ -305,25 +305,25 @@ Note: High likelyhood of large accuracy degradation after applying this mutation
 `KernelSizeMutation2D` is a convenience constructor for `KernelSizeMutation(absΔ, absΔ;...)`.
 """
 struct KernelSizeMutation{N,F,P} <: AbstractMutation{AbstractVertex}
-Δsizespace::AbstractParSpace{N, Int}
-maxsize::F
-pad::P
-rng::AbstractRNG
+    Δsizespace::AbstractParSpace{N, Int}
+    maxsize::F
+    pad::P
+    rng::AbstractRNG
 end
 KernelSizeMutation(Δsizespace::AbstractParSpace{N, Int}; maxsize = v -> ntuple(i->Inf,N), pad=SamePad(), rng=rng_default) where N = KernelSizeMutation(Δsizespace, maxsize, pad, rng)
 KernelSizeMutation2D(absΔ::Integer;maxsize = v -> (Inf,Inf), pad=SamePad(), rng=rng_default) = KernelSizeMutation(absΔ, absΔ, maxsize = maxsize, pad=pad, rng=rng)
 KernelSizeMutation(absΔ::Integer...;maxsize = v -> ntuple(i->Inf, length(absΔ)), pad=SamePad(), rng=rng_default) = KernelSizeMutation(ParSpace(UnitRange.(.-absΔ, absΔ));maxsize = maxsize, pad=pad, rng=rng)
 
 function (m::KernelSizeMutation{N})(v::AbstractVertex) where N
-layertype(v) isa FluxConvolutional{N} || return
-l = layer(v)
+    layertype(v) isa FluxConvolutional{N} || return
+    l = layer(v)
 
-currsize = size(NaiveNASflux.weights(l))[1:N]
-Δsize = Int.(clamp.(m.Δsizespace(m.rng), 1 .- currsize, m.maxsize(v) .- currsize)) # ensure new size is > 0 and < maxsize
-# This will eventually boil down to Setfield doing its thing, and that won't be using any convenience constructors
-pad = Flux.calc_padding(typeof(l), m.pad, currsize .+ Δsize, dilation(l), stride(l))
-KernelSizeAligned(Δsize, pad)(v)
-return v
+    currsize = size(NaiveNASflux.weights(l))[1:N]
+    Δsize = Int.(clamp.(m.Δsizespace(m.rng), 1 .- currsize, m.maxsize(v) .- currsize)) # ensure new size is > 0 and < maxsize
+    # This will eventually boil down to Setfield doing its thing, and that won't be using any convenience constructors
+    pad = Flux.calc_padding(typeof(l), m.pad, currsize .+ Δsize, dilation(l), stride(l))
+    KernelSizeAligned(Δsize, pad)(v)
+    return v
 end
 dilation(l) = l.dilation
 stride(l) = l.stride
@@ -339,22 +339,22 @@ Mutate the activation function of layers which have an activation function.
 Note: High likelyhood of large accuracy degradation after applying this mutation.
 """
 struct ActivationFunctionMutation{T,RNG} <: AbstractMutation{AbstractVertex} where {T <: AbstractParSpace{1}, R <: AbstractRNG}
-actspace::T
-rng::RNG
+    actspace::T
+    rng::RNG
 end
 ActivationFunctionMutation(acts...;rng=rng_default) = ActivationFunctionMutation(collect(acts), rng=rng)
 ActivationFunctionMutation(acts::AbstractVector;rng=rng_default) = ActivationFunctionMutation(ParSpace(acts), rng)
 
 function (m::ActivationFunctionMutation)(v::AbstractVertex)
-m(layertype(v), v)
-return v
+    m(layertype(v), v)
+    return v
 end
 function (m::ActivationFunctionMutation)(t, v) end
 (m::ActivationFunctionMutation)(::Union{FluxDense, FluxConvolutional}, v) = NaiveNASflux.setlayer!(v, (σ = m.actspace(m.rng),))
 (m::ActivationFunctionMutation)(::FluxParNorm, v) = NaiveNASflux.setlayer!(v, (λ = m.actspace(m.rng),))
 function (m::ActivationFunctionMutation)(::FluxRnn, v)
-newcell = setproperties(layer(v).cell, (σ = m.actspace(m.rng),))
-NaiveNASflux.setlayer!(v, (cell = newcell,))
+    newcell = setproperties(layer(v).cell, (σ = m.actspace(m.rng),))
+    NaiveNASflux.setlayer!(v, (cell = newcell,))
 end
 
 
@@ -366,8 +366,8 @@ Search for vertices with zero output size and remove them and all of their input
 
 Removal is only possible if a vertex is inside a parallel path which will later be concatenated.
 """
-struct RemoveZeroNout
-    fallback
+struct RemoveZeroNout{F}
+    fallback::F
 end
 RemoveZeroNout() = RemoveZeroNout(IncreaseZeroNout())
 struct IncreaseZeroNout end
