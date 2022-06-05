@@ -117,7 +117,7 @@ end
 
     struct DummyFitness <: AbstractFitness end
     NaiveGAflux._fitness(::DummyFitness, f::AbstractCandidate) = 17
-    using NaiveGAflux: FileCandidate, AbstractWrappingCandidate, FittedCandidate, trainiterator, validationiterator, _evolvemodel
+    using NaiveGAflux: FileCandidate, AbstractWrappingCandidate, FittedCandidate, trainiterator, validationiterator
     using Functors: fmap
     import MemPool
 
@@ -151,7 +151,7 @@ end
 
                 graphmutation = VertexMutation(MutationFilter(v -> name(v)=="hlayer", AddVertexMutation(ArchSpace(DenseSpace([1], [relu])))))
                 optmutation = OptimizerMutation((Momentum, Nesterov, ADAM))
-                evofun = _evolvemodel(graphmutation, optmutation)
+                evofun = MapCandidate(graphmutation, optmutation)
                 newcand = evofun(cand)
 
                 @test NaiveGAflux.model(nvertices, newcand) == 4
@@ -182,7 +182,7 @@ end
                 teststrat() = NaiveGAflux.default_crossoverswap_strategy(v -> 1)
                 graphcrossover = VertexCrossover(CrossoverSwap(;pairgen = (v1,v2) -> (1,1), strategy=teststrat); pairgen = (v1,v2;ind1) -> ind1==1 ? (2,3) : nothing)
                 optcrossover = OptimizerCrossover()
-                crossfun = _evolvemodel(graphcrossover, optcrossover)
+                crossfun = MapCandidate(graphcrossover, optcrossover)
 
                 newcand1, newcand2 = crossfun((cand, newcand))
 

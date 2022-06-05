@@ -327,8 +327,8 @@ crossovermutate(;pcrossover=0.3, pmutate=0.9) = function(inshape)
     return EvolutionChain(crossoverevo, mutationevo)
 end
 
-candidatemutation(p, inshape) = evolvemodel(MutationProbability(graphmutation(inshape), p), optmutation())
-candidatecrossover(p) = evolvemodel(MutationProbability(graphcrossover(), p), optcrossover())
+candidatemutation(p, inshape) = MapCandidate(MutationProbability(graphmutation(inshape), p), optmutation())
+candidatecrossover(p) = MapCandidate(MutationProbability(graphcrossover(), p), optcrossover())
 
 function clear_redundant_vertices(pop)
     foreach(cand -> NaiveGAflux.model(check_apply, cand), pop)

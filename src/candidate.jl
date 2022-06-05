@@ -289,61 +289,14 @@ nparams(c::AbstractCandidate) = model(nparams, c)
 nparams(x) = mapreduce(prod ∘ size, +, params(x).order; init=0)
 
 """
-    evolvemodel(m::AbstractMutation{CompGraph}, mapothers=deepcopy)
-    evolvemodel(m::AbstractMutation{CompGraph}, om::AbstractMutation{FluxOptimizer}, mapothers=deepcopy)
+    MapType{T, F1, F2}
+    MapType{T}(match::F1, nomatch::F2)
 
-Return a function which maps a `AbstractCandidate c1` to a new `AbstractCandidate c2` where any `CompGraph`s `g` in `c1` will be m(deepcopy(g))` in `c2`. Same principle is applied to any optimisers if `om` is present.
+Callable struct which returns `match(x)` if `x isa T`, otherwise returns `nomatch(x)`.
 
-All other fields are mapped through the function `mapothers` (default `deepcopy`).
-
-Intended use is together with [`EvolveCandidates`](@ref).
+Main purpose is to ensure that an `AbstractMutation{T}` or `AbstractCrossover{T}` is
+applied to fields which are subtypes of `T` when creating new candidates.
 """
-function evolvemodel(m::AbstractMutation{CompGraph}, mapothers=deepcopy)
-    function copymutate(g::CompGraph)
-        ng = deepcopy(g)
-        m(ng)
-        return ng
-    end
-    mapcandidate(copymutate, mapothers)
-end
-evolvemodel(m::AbstractMutation{CompGraph}, om::AbstractMutation{FluxOptimizer}, mapothers=deepcopy) = evolvemodel(m, optmap(om, mapothers))
-
-"""
-    evolvemodel(m::AbstractCrossover{CompGraph}, mapothers1=deepcopy, mapothers2=deepcopy)
-    evolvemodel(m::AbstractCrossover{CompGraph}, om::AbstractCrossover{FluxOptimizer}, mapothers1=deepcopy, mapothers2=deepcopy)
-
-Return a function which maps a tuple of `AbstractCandidate`s `(c1,c2)` to two new candidates `c1', c2'` where any `CompGraph`s `g1` and `g2` in `c1` and `c2` respectively will be `g1', g2' = m((deepcopy(g1), deepcopy(g2)))` in `c1'` and `c2'` respectively. Same principle applies to any optimisers if `om` is present.
-
-All other fields in `c1` will be mapped through the function `mapothers1` and likewise for `c2` and `mapothers2`.
-
-Intended use is together with [`PairCandidates`](@ref) and [`EvolveCandidates`](@ref).
-"""
-evolvemodel(m::AbstractCrossover{CompGraph}, mapothers1=deepcopy, mapothers2=deepcopy) = (c1, c2)::Tuple -> begin
-    # This allows FileCandidate to write the graph back to disk as we don't want to mutate the orignal candidate.
-    # Perhaps align single individual mutation to this pattern for consistency?
-    g1 = model(c1)
-    g2 = model(c2)
-
-    release!(c1)
-    release!(c2)
-
-    g1, g2 = m((deepcopy(g1), deepcopy(g2)))
-
-    return mapcandidate(g -> g1, mapothers1)(c1), mapcandidate(g -> g2, mapothers2)(c2)
-end
-
-evolvemodel(m::AbstractCrossover{CompGraph}, om::AbstractCrossover{FluxOptimizer}, mapothers1=deepcopy, mapothers2=deepcopy) = (c1,c2)::Tuple -> begin
-    o1 = opt(c1)
-    o2 = opt(c2)
-
-    o1n, o2n = om((o1, o2))
-
-    return evolvemodel(m, optmap(o -> o1n, mapothers1), optmap(o -> o2n, mapothers2))((c1,c2))
-end
-
-_evolvemodel(ms::AbstractMutation...; mapothers=deepcopy) = MapCandidate(ms, mapothers)
-
-
 struct MapType{T, F1, F2}
     match::F1
     nomatch::F2
@@ -375,7 +328,6 @@ function MapType(c::AbstractCrossover{FluxOptimizer}, (c1, c2), (nomatch1, nomat
     return MapType{FluxOptimizer}(Returns(o1n), nomatch1), MapType{FluxOptimizer}(Returns(o2n), nomatch2)
 end
 
-# TODO: Needs a new name. MapCandidate?
 """
     MapCandidate{T, F} 
     MapCandidate(mutations, mapothers::F)
@@ -445,7 +397,13 @@ end
 function (e::MapCandidate{<:NTuple{N, AbstractCrossover}, F})((c1,c2)) where {N,F}
     # Bleh, CGA to avoid a closure here
     mapc1, mapc2 = let c1 = c1, c2 = c2
-         foldr(e.mutations; init=(e.mapothers, e.mapothers)) do match, nomatch
+        # Whats happening here is probably far from obvious, so here goes:
+        # MapType returns a Tuple of MapTypes when called with an AbstractCrossover
+        # This is because we create new models, optimisers etc from from both c1 
+        # and c2 simultaneously, but when creating candidates we create one new 
+        # candidate from another new candidate. 
+        foldr(e.mutations; init=(e.mapothers, e.mapothers)) do match, nomatch
+            # nomatch is always a Tuple while match is always an AbstractCrossover
             MapType(match, (c1,c2), nomatch)
         end
     end

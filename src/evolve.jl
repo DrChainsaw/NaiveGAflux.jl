@@ -185,7 +185,7 @@ _evolve(e::ShuffleCandidates, pop) = shuffle(e.rng, pop)
 
 Applies `fun(c)` for each candidate `c` in a given population.
 
-Useful with [`evolvemodel`](@ref).
+Useful with [`MapCandidate`](@ref).
 """
 struct EvolveCandidates{F} <: AbstractEvolution
     fun::F

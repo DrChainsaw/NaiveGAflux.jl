@@ -57,11 +57,15 @@ addlayer = mp(AddVertexMutation(layerspace), 0.4)
 remlayer = mp(RemoveVertexMutation(), 0.4)
 mutation = MutationChain(changesize, remlayer, addlayer)
 
+
 # Selection: The two best models are not changed, then create three new models by 
 # applying the mutations above to three of the five models with higher fitness 
 # giving higher probability of being selected. 
+#
+# [`MapCandidate^](@ref) helps with the plumbing of creating new `CandidateModel`s
+#  where `mutation` is applied to create a new model. 
 elites = EliteSelection(2)
-mutate = SusSelection(3, EvolveCandidates(evolvemodel(mutation)))
+mutate = SusSelection(3, EvolveCandidates(MapCandidate(mutation)))
 selection = CombinedEvolution(elites, mutate)
 
 # #### Step 4: Run evolution
