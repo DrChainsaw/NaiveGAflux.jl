@@ -215,25 +215,3 @@ function (m::MutationFilter{T})(e::T; next=m.m, noop=identity) where T
     m.predicate(e) && return next(e)
     return noop(e)
 end
-
-"""
-    PostMutation{T} <: DecoratingMutation{T}
-    PostMutation(actions, m::AbstractMutation{T})
-    PostMutation(m::AbstractMutation{T}, actions...)
-
-Performs a set of actions after a wrapped `AbstractMutation` is applied.
-
-Actions will be invoked with arguments (m::PostMutation{T}, e::T) where m is the enclosing `PostMutation` and `e` is the mutated entity of type `T`.
-"""
-struct PostMutation{T,A} <: DecoratingMutation{T}
-    actions::A
-    m::AbstractMutation{T}
-end
-PostMutation(m::AbstractMutation{T}, actions...) where T = PostMutation(actions, m)
-PostMutation(action::Function, m::AbstractMutation{T}) where T = PostMutation(m, action)
-function (m::PostMutation{T})(e::T; next=m.m, noop=identity) where T
-    eout = next(e)
-    foreach(a -> a(m, eout), m.actions)
-    return eout
-end
-

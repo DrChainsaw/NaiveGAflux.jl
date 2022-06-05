@@ -30,13 +30,15 @@ const rng_default = MersenneTwister(abs(rand(Int)))
 const modeldir = "models"
 
 # Fitness
-export fitness, AbstractFitness, LogFitness, GpuFitness, AccuracyFitness, TrainThenFitness, TrainAccuracyFitness, MapFitness, EwmaFitness, TimeFitness, SizeFitness, AggFitness
+export fitness, AbstractFitness, LogFitness, GpuFitness, AccuracyFitness, TrainThenFitness, TrainAccuracyFitness, MapFitness
+export EwmaFitness, TimeFitness, SizeFitness, AggFitness
 
 # Candidate
 export AbstractCandidate, CandidateModel, CandidateOptModel, CandidateDataIterMap, FittedCandidate, MapCandidate, model, opt, lossfun
 
 # Evolution
-export evolve, AbstractEvolution, NoOpEvolution, AfterEvolution, EliteSelection, SusSelection, TournamentSelection, CombinedEvolution, EvolutionChain, PairCandidates, ShuffleCandidates, EvolveCandidates
+export evolve, AbstractEvolution, NoOpEvolution, AfterEvolution, EliteSelection, SusSelection, TournamentSelection, CombinedEvolution
+export EvolutionChain, PairCandidates, ShuffleCandidates, EvolveCandidates
 
 # Population
 export Population, generation
@@ -48,7 +50,8 @@ export Probability, MutationShield, ApplyIf, RemoveIfSingleInput, PersistentArra
 export BatchSizeSelectionWithDefaultInShape, BatchSizeSelectionScaled, BatchSizeSelectionFromAlternatives, BatchSizeSelectionMaxSize, batchsizeselection
 
 # Iterators. These should preferably come from somewhere else, but I haven't found anything which fits the bill w.r.t repeatability over subsets
-export RepeatPartitionIterator, SeedIterator, MapIterator, GpuIterator, BatchIterator, ShuffleIterator, TimedIterator, TimedIteratorStop, StatefulGenerationIter
+export RepeatPartitionIterator, SeedIterator, MapIterator, GpuIterator, BatchIterator, ShuffleIterator, TimedIterator, TimedIteratorStop
+export StatefulGenerationIter
 
 # Iterator mapping types for evolving hyperparameters related to datasets, e.g. augmentation and batch size
 export BatchSizeIteratorMap, IteratorMaps
@@ -60,16 +63,21 @@ export persist
 export AbstractVertexSelection, AllVertices, FilterMutationAllowed
 
 # mutation types
-export AbstractMutation, MutationProbability, WeightedMutationProbability, HighUtilityMutationProbability, LowUtilityMutationProbability, MutationChain, RecordMutation, LogMutation, MutationFilter, PostMutation, VertexMutation, NoutMutation, AddVertexMutation, RemoveVertexMutation, AddEdgeMutation, RemoveEdgeMutation, KernelSizeMutation, KernelSizeMutation2D, ActivationFunctionMutation, PostMutation, OptimizerMutation, LearningRateMutation, AddOptimizerMutation
+export AbstractMutation, MutationProbability, WeightedMutationProbability, HighUtilityMutationProbability, LowUtilityMutationProbability 
+export MutationChain, RecordMutation, LogMutation, MutationFilter, VertexMutation, NoutMutation, AddVertexMutation, RemoveVertexMutation
+export AddEdgeMutation, RemoveEdgeMutation, KernelSizeMutation, KernelSizeMutation2D, ActivationFunctionMutation, OptimizerMutation
+export LearningRateMutation, AddOptimizerMutation
 
 # Crossover types
 export AbstractCrossover, VertexCrossover, CrossoverSwap, OptimizerCrossover, LearningRateCrossover
 
 # architecture spaces
-export AbstractArchSpace, LoggingArchSpace, VertexSpace, NoOpArchSpace, ArchSpace, ConditionalArchSpace, RepeatArchSpace, ArchSpaceChain, ForkArchSpace, ResidualArchSpace, FunctionSpace, GlobalPoolSpace
+export AbstractArchSpace, LoggingArchSpace, VertexSpace, NoOpArchSpace, ArchSpace, ConditionalArchSpace, RepeatArchSpace, ArchSpaceChain
+export ForkArchSpace, ResidualArchSpace, FunctionSpace, GlobalPoolSpace
 
 #  Other search space types
-export BaseLayerSpace, AbstractParSpace, SingletonParSpace, Singleton2DParSpace, ParSpace, ParSpace1D, ParSpace2D, CoupledParSpace, NamedLayerSpace, LoggingLayerSpace, DenseSpace, ConvSpace, BatchNormSpace, PoolSpace, LayerVertexConf, Shielded, ConcConf
+export BaseLayerSpace, AbstractParSpace, SingletonParSpace, Singleton2DParSpace, ParSpace, ParSpace1D, ParSpace2D, CoupledParSpace
+export NamedLayerSpace, LoggingLayerSpace, DenseSpace, ConvSpace, BatchNormSpace, PoolSpace, LayerVertexConf, Shielded, ConcConf
 
 #weight inits
 export AbstractWeightInit, DefaultWeightInit, IdentityWeightInit, PartialIdentityWeightInit, ZeroWeightInit

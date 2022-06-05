@@ -149,22 +149,4 @@
         @test m(1:5) == 1:5
         @test probe.mutated == [4,5]
     end
-
-    @testset "PostMutation" begin
-        probe = ProbeMutation(Int)
-
-        expect_m = nothing
-        expect_e = nothing
-        function action(m,e)
-            expect_m = m
-            expect_e = e
-        end
-
-        m = PostMutation(action, probe)
-        @test m(11) == 11
-
-        @test probe.mutated == [11]
-        @test expect_m == m
-        @test expect_e == 11
-    end
 end
