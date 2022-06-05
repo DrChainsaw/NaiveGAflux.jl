@@ -40,10 +40,13 @@ using NaiveNASlib.Advanced, NaiveNASlib.Extend
     include("archspace.jl")
 
     @info "Testing mutation"
-    include("mutation.jl")
+    include("mutation/generic.jl")
+    include("mutation/graph.jl")
+    include("mutation/optimizer.jl")
 
     @info "Testing crossover"
-    include("crossover.jl")
+    include("crossover/graph.jl")
+    include("crossover/optimizer.jl")
 
     @info "Testing fitness"
     include("fitness.jl")
