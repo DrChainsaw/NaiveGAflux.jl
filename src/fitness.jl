@@ -239,6 +239,8 @@ function lossfun(c::TrainAccuracyCandidate; default=nothing)
     end
 end
 
+@functor TrainAccuracyCandidate (c,)
+
 """
     TrainAccuracyFitnessInner <: AbstractFitness
 
