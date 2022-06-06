@@ -75,6 +75,18 @@
         @test limit_maxbatchsize(ValidationBatchSize(6), graph; inshape_nobatch=(5,), availablebytes=1000) == 6
         @test limit_maxbatchsize(ValidationBatchSize(8), graph; inshape_nobatch=(5,), availablebytes=1000) == 8
         @test limit_maxbatchsize(ValidationBatchSize(10), graph; inshape_nobatch=(5,), availablebytes=1000) == 8
+
+        @testset "Model without parameters" begin
+            graph = let iv = denseinputvertex("in", 3)
+                CompGraph(iv, iv)
+            end
+
+            @test limit_maxbatchsize(TrainBatchSize(1), graph; inshape_nobatch=(3,), availablebytes=10) == 1 
+            @test limit_maxbatchsize(TrainBatchSize(9), graph; inshape_nobatch=(3,), availablebytes=1000) == 9
+            
+            @test limit_maxbatchsize(ValidationBatchSize(1), graph; inshape_nobatch=(3,), availablebytes=10) == 1
+            @test limit_maxbatchsize(ValidationBatchSize(9), graph; inshape_nobatch=(3,), availablebytes=10) == 9
+        end
     end
 
     @testset "batchsizeselection" begin

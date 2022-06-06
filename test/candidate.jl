@@ -11,14 +11,20 @@
     end
 
     @testset "Crossover" begin
-        import NaiveGAflux: FluxOptimizer
+        import NaiveGAflux: FluxOptimizer, iteratormap, batchsize
 
         struct MapTypeTestCrossover{T} <: AbstractCrossover{T} end
         (::MapTypeTestCrossover)((c1, c2)) = c2,c1
 
 
-        c1 = CandidateOptModel(Descent(), CompGraph(inputvertex("c1", 1), AbstractVertex[]))
-        c2 = CandidateOptModel(Momentum(), CompGraph(inputvertex("c2", 1), AbstractVertex[]))
+        function testgraph(name)
+            iv = denseinputvertex(name, 1)
+            CompGraph(iv, iv)
+        end
+        bsgen(bs) = BatchSizeIteratorMap(bs, 2*bs, (bs, args...; kwargs...) -> batchsize(bs))
+
+        c1 = CandidateDataIterMap(bsgen(4), CandidateOptModel(Descent(), CandidateModel(testgraph("c1"))))
+        c2 = CandidateOptModel(Momentum(), CandidateDataIterMap(bsgen(8), CandidateModel(testgraph("c2"))))
         
         mt1, mt2 = MapType(MapTypeTestCrossover{CompGraph}(), (c1,c2), (identity, identity))
         @test name.(inputs(mt1(model(c1)))) == ["c2"]
@@ -29,6 +35,12 @@
         mt1, mt2 = MapType(MapTypeTestCrossover{FluxOptimizer}(), (c1,c2), (identity, identity))
         @test typeof(mt1(opt(c1))) == Momentum
         @test typeof(mt2(opt(c2))) == Descent 
+        @test mt1(3) == 3
+        @test mt2('c') == 'c'
+
+        mt1, mt2 = MapType(MapTypeTestCrossover{AbstractIteratorMap}(), (c1,c2), (identity, identity))
+        @test mt1(iteratormap(c1)).tbs == iteratormap(c2).tbs
+        @test mt2(iteratormap(c2)).tbs == iteratormap(c1).tbs
         @test mt1(3) == 3
         @test mt2('c') == 'c'
     end

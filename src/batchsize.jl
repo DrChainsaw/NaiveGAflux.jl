@@ -291,7 +291,8 @@ end
 # specialization for CompGraph needed to avoid ambiguity with method that just unwraps an AbstractCandidate :( 
 # Consider refactoring
 function limit_maxbatchsize(bs::TrainBatchSize, model::CompGraph; inshape_nobatch, availablebytes = _availablebytes())
-    min(batchsize(bs), maxtrainbatchsize(model, inshape_nobatch, availablebytes))
+    maxsize = maxtrainbatchsize(model, inshape_nobatch, availablebytes)
+    maxsize > -1 ? min(batchsize(bs), maxsize) : batchsize(bs)
 end
 
 # specialization for CompGraph needed to avoid ambiguity with method that just unwraps an AbstractCandidate :( 
@@ -301,22 +302,24 @@ function limit_maxbatchsize(bs::ValidationBatchSize,
                             inshape_nobatch,
                             availablebytes = _availablebytes()
                             )
-    min(batchsize(bs), maxvalidationbatchsize(model, inshape_nobatch, availablebytes))
+    maxsize = maxvalidationbatchsize(model, inshape_nobatch, availablebytes)
+    maxsize > -1 ? min(batchsize(bs), maxsize) : batchsize(bs)
 end
 
 function maxtrainbatchsize(model, inshape_nobatch, availablebytes=_availablebytes())
-    paramsize = mapreduce(ps -> length(ps) * sizeof(eltype(ps)), +, params(model))
+    paramsize = mapreduce(ps -> length(ps) * sizeof(eltype(ps)), +, params(model); init=0)
     actsize = activationsizes(model, inshape_nobatch) 
-    return fld(availablebytes - paramsize, paramsize + 2 * actsize)
+    den = paramsize + 2 * actsize
+    return den > 0 ? fld(availablebytes - paramsize, den) : -1
 end
 
 function maxvalidationbatchsize(model, inshape_nobatch, availablebytes=_availablebytes())
-    paramsize = mapreduce(ps -> length(ps) * sizeof(eltype(ps)), +, params(model))
+    paramsize = mapreduce(ps -> length(ps) * sizeof(eltype(ps)), +, params(model); init=0)
     actsize = activationsizes(model, inshape_nobatch)
-    return fld(availablebytes - paramsize, actsize)
+    return actsize > 0 ? fld(availablebytes - paramsize, actsize) : -1
 end
 
-function activationsizes(model::CompGraph, inshape_nobatch, elemsize = model |> params |> first |> eltype |> sizeof)
+function activationsizes(model::CompGraph, inshape_nobatch, elemsize = _model_parsize(model))
     model = cpu(model) # Flux.outputsize does not work for CuArrays
     activations = if length(inputs(model)) == 1
         Dict{AbstractVertex, Any}(v => Flux.nil_input(true, inshape_nobatch) for v in inputs(model))
@@ -328,6 +331,12 @@ function activationsizes(model::CompGraph, inshape_nobatch, elemsize = model |> 
     end
 
     mapreduce(act -> length(act) * elemsize, +, values(activations))
+end
+
+function _model_parsize(model)
+    ps = params(model)
+    isempty(ps) && return 0
+    return ps |> first |> eltype |> sizeof
 end
 
 # TODO: Take model as input and look at params to determine of cpu or gpu

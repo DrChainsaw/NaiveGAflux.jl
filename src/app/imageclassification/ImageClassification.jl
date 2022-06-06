@@ -131,12 +131,15 @@ function generate_persistent(nr, newpop, mdir, insize, outsize, cwrap=identity, 
     end
 
     iv(i) = conv2dinputvertex(join(["model", i, ".input"]), insize[3])
-    return Population(PersistentArray(mdir, nr, i -> create_model(join(["model", i]), archspace, iv(i), cwrap)))
+    return Population(PersistentArray(mdir, nr, i -> create_model(join(["model", i]), archspace, iv(i), cwrap, insize)))
 end
-function create_model(name, as, in, cwrap)
+function create_model(name, as, in, cwrap, insize)
     optselect = optmutation(1.0)
     opt = optselect(Descent(rand() * 0.099 + 0.01))
-    cwrap(CandidateOptModel(opt, CompGraph(in, as(name, in))))
+    bslimit = batchsizeselection(insize[1:end-1]; alternatives=ntuple(i->2^i, 10))
+    imstart = BatchSizeIteratorMap(64, 64, bslimit)
+    im = itermapmutation(1.0)(imstart)
+    cwrap(CandidateDataIterMap(im, CandidateOptModel(opt, CompGraph(in, as(name, in)))))
 end
 
 end

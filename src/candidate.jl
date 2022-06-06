@@ -48,6 +48,8 @@ lossfun(::AbstractCandidate; default=nothing) = default
 
 fitness(::AbstractCandidate; default=nothing) = default
 generation(::AbstractCandidate; default=nothing) = default
+
+iteratormap(::AbstractCandidate; default=nothing) = default
 trainiterator(::AbstractCandidate; default=nothing) = default
 validationiterator(::AbstractCandidate; default=nothing) = default
 
@@ -77,6 +79,7 @@ fitness(c::AbstractWrappingCandidate; kwargs...) = fitness(wrappedcand(c); kwarg
 generation(c::AbstractWrappingCandidate; kwargs...) = generation(wrappedcand(c); kwargs...)
 trainiterator(c::AbstractWrappingCandidate; kwargs...) = trainiterator(wrappedcand(c); kwargs...)
 validationiterator(c::AbstractWrappingCandidate; kwargs...) = validationiterator(wrappedcand(c); kwargs...)
+iteratormap(c::AbstractWrappingCandidate; kwargs...) = iteratormap(wrappedcand(c); kwargs...)
 
 """
     CandidateModel <: Candidate
@@ -145,6 +148,7 @@ end
 
 @functor CandidateDataIterMap
 
+iteratormap(c::CandidateDataIterMap; kwargs...) = c.map
 trainiterator(c::CandidateDataIterMap; kwargs...) = maptrain(c.map, trainiterator(wrappedcand(c); kwargs...))
 validationiterator(c::CandidateDataIterMap; kwargs...) = mapvalidation(c.map, validationiterator(wrappedcand(c); kwargs...))
 
@@ -326,6 +330,15 @@ function MapType(c::AbstractCrossover{FluxOptimizer}, (c1, c2), (nomatch1, nomat
 
     o1n, o2n = c((o1, o2))
     return MapType{FluxOptimizer}(Returns(o1n), nomatch1), MapType{FluxOptimizer}(Returns(o2n), nomatch2)
+end
+
+function MapType(c::AbstractCrossover{AbstractIteratorMap}, (c1, c2), (nomatch1, nomatch2))
+    im1 = iteratormap(c1)
+    im2 = iteratormap(c2)
+
+    im1n, im2n = c((im1, im2))
+
+    return MapType{AbstractIteratorMap}(Returns(im1n), nomatch1), MapType{AbstractIteratorMap}(Returns(im2n), nomatch2)
 end
 
 # Just because BatchSizeIteratorMap needs the model to limit the batch sizes :(
