@@ -151,7 +151,8 @@ end
 
                 graphmutation = VertexMutation(MutationFilter(v -> name(v)=="hlayer", AddVertexMutation(ArchSpace(DenseSpace([1], [relu])))))
                 optmutation = OptimizerMutation((Momentum, Nesterov, ADAM))
-                evofun = MapCandidate(graphmutation, optmutation)
+                bsmutation = TrainBatchSizeMutation(0, -1, MockRng([0.5]))
+                evofun = MapCandidate(graphmutation, optmutation, bsmutation)
                 newcand = evofun(cand)
 
                 @test NaiveGAflux.model(nvertices, newcand) == 4
@@ -169,10 +170,10 @@ end
                 end
 
                 if ctype == CandidateBatchIterMap
-                    @test length(first(trainiterator(cand; default=(1:100,)))) == 16  
+                    @test length(first(trainiterator(cand; default=(1:100,)))) == 16 
                     @test length(first(validationiterator(cand; default=(1:100,)))) == 32  
-                    # TODO Add mutation
-                    @test length(first(trainiterator(newcand; default=(1:100,)))) == 16  
+
+                    @test length(first(trainiterator(newcand; default=(1:100,)))) == 8
                     @test length(first(validationiterator(newcand; default=(1:100,)))) == 32  
                 else
                     @test length(first(trainiterator(cand; default=(1:100,)))) == 100  

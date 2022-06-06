@@ -62,11 +62,16 @@ export persist
 # Vertex selection types
 export AbstractVertexSelection, AllVertices, FilterMutationAllowed
 
-# mutation types
+# generic mutation types
 export AbstractMutation, MutationProbability, WeightedMutationProbability, HighUtilityMutationProbability, LowUtilityMutationProbability 
-export MutationChain, RecordMutation, LogMutation, MutationFilter, VertexMutation, NoutMutation, AddVertexMutation, RemoveVertexMutation
-export AddEdgeMutation, RemoveEdgeMutation, KernelSizeMutation, KernelSizeMutation2D, ActivationFunctionMutation, OptimizerMutation
-export LearningRateMutation, AddOptimizerMutation
+export MutationChain, RecordMutation, LogMutation, MutationFilter
+# graph mutation types
+export VertexMutation, NoutMutation, AddVertexMutation, RemoveVertexMutation, AddEdgeMutation, RemoveEdgeMutation, KernelSizeMutation
+export KernelSizeMutation2D, ActivationFunctionMutation
+# optimizer mutation types
+export OptimizerMutation, LearningRateMutation, AddOptimizerMutation
+# Iterator wrapping mutation types
+export TrainBatchSizeMutation
 
 # Crossover types
 export AbstractCrossover, VertexCrossover, CrossoverSwap, OptimizerCrossover, LearningRateCrossover
@@ -99,6 +104,7 @@ include("archspace.jl")
 include("mutation/generic.jl")
 include("mutation/graph.jl")
 include("mutation/optimizer.jl")
+include("mutation/iteratormaps.jl")
 include("crossover/graph.jl")
 include("crossover/optimizer.jl")
 include("candidate.jl")
