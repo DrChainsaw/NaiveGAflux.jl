@@ -81,6 +81,10 @@ end
 
 """
     IteratorMaps{T} <: AbstractIteratorMap 
+    IteratorMaps(maps...)
+    IteratorMaps(maps::Tuple) 
+
+Aggregates multiple `AbstractIteratorMap`s. `maptrain` and `mapvalidation` are applied sequentially starting with the first element of `maps`. 
 """
 struct IteratorMaps{T<:Tuple} <: AbstractIteratorMap
     maps::T
@@ -91,3 +95,20 @@ maptrain(iws::IteratorMaps, iter) = foldr(maptrain, iws.maps; init=iter)
 mapvalidation(iws::IteratorMaps, iter) = foldr(mapvalidation, iws.maps; init=iter)
 
 limit_maxbatchsize(ims::IteratorMaps, args...; kwargs...) = IteratorMaps(map(im -> limit_maxbatchsize(im, args...; kwargs...), ims.maps))
+
+"""
+    ShieldedIteratorMap{T}
+    ShieldedIteratorMap(map)
+
+Shields `map` from mutation and crossover.
+"""
+struct ShieldedIteratorMap{T} <: AbstractIteratorMap
+    map::T
+end
+
+maptrain(sim::ShieldedIteratorMap, args...) = maptrain(sim.map, args...)
+mapvalidation(sim::ShieldedIteratorMap, args...) = mapvalidation(sim.map, args...)
+
+function limit_maxbatchsize(sim::ShieldedIteratorMap, args...; kwargs...) 
+    ShieldedIteratorMap(limit_maxbatchsize(sim.map), args...; kwargs...)
+end

@@ -29,21 +29,14 @@ Does not do anything if any of the optimizers don't have a learning rate (e.g. W
 """
 LearningRateCrossover() = OptimizerCrossover(learningrateswap)
 
-EitherIs{T} = Union{Tuple{T, Any}, Tuple{Any,T}}
-
 (oc::OptimizerCrossover)(os) = oc.crossover(os)
 (oc::OptimizerCrossover)(os::EitherIs{ShieldedOpt}) = os
-function (oc::OptimizerCrossover)((o1,o2)::EitherIs{Flux.Optimiser})
-    os1,o1re = optiter(o1)
-    os2,o2re = optiter(o2)
-    res = oc.crossover.(zip(os1,os2))
-    os1n = (t[1] for t in res)
-    os2n = (t[2] for t in res)
-    return o1re(os1n..., os1[length(os2)+1:end]...), o2re(os2n..., os2[length(os1)+1:end]...)
-end
+(oc::OptimizerCrossover)(os::EitherIs{Flux.Optimiser}) = zipcrossover(reoptiter, os, oc.crossover)
+(oc::OptimizerCrossover)(os::MixTuple{ShieldedOpt, Flux.Optimiser}) = os
 
-optiter(o) = (o,), (os...) -> os[1]
-optiter(o::Flux.Optimiser) = Tuple(o.os), (os...) -> Flux.Optimiser(os...)
+
+reoptiter(o) = (o,), identity
+reoptiter(o::Flux.Optimiser) = Tuple(o.os), Flux.Optimiser
 
 optimizerswap((o1, o2)::Tuple) = o2,o1
 

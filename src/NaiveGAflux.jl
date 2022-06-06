@@ -54,7 +54,7 @@ export RepeatPartitionIterator, SeedIterator, MapIterator, GpuIterator, BatchIte
 export StatefulGenerationIter
 
 # Iterator mapping types for evolving hyperparameters related to datasets, e.g. augmentation and batch size
-export BatchSizeIteratorMap, IteratorMaps
+export BatchSizeIteratorMap, IteratorMaps, ShieldedIteratorMap
 
 # Persistence
 export persist
@@ -74,7 +74,7 @@ export OptimizerMutation, LearningRateMutation, AddOptimizerMutation
 export TrainBatchSizeMutation
 
 # Crossover types
-export AbstractCrossover, VertexCrossover, CrossoverSwap, OptimizerCrossover, LearningRateCrossover
+export AbstractCrossover, VertexCrossover, CrossoverSwap, OptimizerCrossover, LearningRateCrossover, IteratorMapCrossover
 
 # architecture spaces
 export AbstractArchSpace, LoggingArchSpace, VertexSpace, NoOpArchSpace, ArchSpace, ConditionalArchSpace, RepeatArchSpace, ArchSpaceChain
@@ -105,8 +105,10 @@ include("mutation/generic.jl")
 include("mutation/graph.jl")
 include("mutation/optimizer.jl")
 include("mutation/iteratormaps.jl")
+include("crossover/generic.jl")
 include("crossover/graph.jl")
 include("crossover/optimizer.jl")
+include("crossover/iteratormaps.jl")
 include("candidate.jl")
 include("fitness.jl")
 include("evolve.jl")

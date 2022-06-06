@@ -1,6 +1,3 @@
-
-(m::AbstractMutation{<:AbstractIteratorMap})(im::IteratorMaps) = IteratorMaps(m.(im.maps))
-
 newfrom(im::AbstractIteratorMap) = deepcopy(im)
 
 """
@@ -71,6 +68,8 @@ TrainBatchSizeMutation(l1, l2, rng::AbstractRNG=rng_default) = TrainBatchSizeMut
 TrainBatchSizeMutation(l1, l2, q) = TrainBatchSizeMutation(l1, l2, q, rng_default)
 
 (m::TrainBatchSizeMutation)(im::AbstractIteratorMap) = newfrom(im)
+(m::TrainBatchSizeMutation)(im::IteratorMaps) = IteratorMaps(m.(im.maps))
+
 function (m::TrainBatchSizeMutation)(im::BatchSizeIteratorMap) 
     newbs = max(1, mutate_batchsize(m.quantizeto, batchsize(im.tbs), m.minrel, m.maxrel, m.rng)) 
     @set im.tbs = TrainBatchSize(newbs)

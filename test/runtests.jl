@@ -43,10 +43,12 @@ using NaiveNASlib.Advanced, NaiveNASlib.Extend
     include("mutation/generic.jl")
     include("mutation/graph.jl")
     include("mutation/optimizer.jl")
+    include("mutation/iteratormaps.jl")
 
     @info "Testing crossover"
     include("crossover/graph.jl")
     include("crossover/optimizer.jl")
+    include("crossover/iteratormaps.jl")
 
     @info "Testing fitness"
     include("fitness.jl")

@@ -1,5 +1,6 @@
 @testset "TrainBatchSizeMutation" begin
     import NaiveGAflux: batchsize
+
     @testset "Quantize to Int" begin
 
         @testset "Forced to 10" begin
@@ -55,4 +56,16 @@
         end
     end
 
+    @testset "Shielded" begin
+        sim = ShieldedIteratorMap(BatchSizeIteratorMap(100, 200, batchsizeselection((3,))))
+        m = TrainBatchSizeMutation(0.1, 0.1)
+        @test batchsize(m(sim).map.tbs) == 100
+    end
+
+    @testset "IteratorMaps" begin
+        im = IteratorMaps(BatchSizeIteratorMap(100, 200, batchsizeselection((3,))), BatchSizeIteratorMap(100, 200, batchsizeselection((3,))))
+        m = TrainBatchSizeMutation(0.1, 0.1)
+        @test batchsize(m(im).maps[1].tbs) == 110
+        @test batchsize(m(im).maps[2].tbs) == 110
+    end
 end

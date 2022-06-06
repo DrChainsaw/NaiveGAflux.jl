@@ -303,7 +303,7 @@ struct MapType{T, F1, F2}
     MapType{T}(match::F1, nomatch::F2) where {T,F1, F2} = new{T,F1,F2}(match, nomatch)
 end
 
-(a::MapType{T1})(x::T2) where {T1, T2<:T1} = a.match(x)
+(a::MapType{T})(x::T) where T = a.match(x)
 (a::MapType)(x) = a.nomatch(x)
 
 MapType(match::AbstractMutation{T}, nomatch) where T = MapType{T}(match, nomatch)
