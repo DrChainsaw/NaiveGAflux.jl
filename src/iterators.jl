@@ -179,10 +179,6 @@ end
 shufflerng(b::Bool) = b ? rng_default : NoShuffle()
 shufflerng(rng) = rng
 
-ndata(itr::BatchIterator) = ndata(itr.data)
-ndata(data::Tuple) = length(data)
-ndata(data::AbstractArray) = 1 
-
 function Base.iterate(itr::BatchIterator, inds = shuffle(itr.rng, 1:itr.nobs))
     isempty(inds) && return nothing
     return batch(itr.data, @view(inds[1:min(end, itr.batchsize)])), @view(inds[itr.batchsize+1:end])
@@ -333,8 +329,7 @@ Base.IteratorSize(::Type{ReBatchingIterator{I}}) where I = Base.SizeUnknown()
 Base.IteratorEltype(::Type{ReBatchingIterator{I}}) where I = Base.IteratorEltype(I) 
 
 _rangetoarr(a) = a
-_rangetoarr(::Tuple{T1, T2}) where {T1, T2} = Tuple{_rangetoarr(T1), _rangetoarr(T2)}
-_rangetoarr(t::Type{<:Tuple}) = Tuple{_rangetoarr.(t.parameters)...}
+_rangetoarr(t::Type{<:Tuple}) = Tuple{map(_rangetoarr, t.parameters)...}
 _rangetoarr(a::Type{<:Array}) = a
 _rangetoarr(a::Type{<:CUDA.CuArray}) = a
 _rangetoarr(::Type{<:AbstractArray{T,N}}) where {T,N} = Array{T,N}

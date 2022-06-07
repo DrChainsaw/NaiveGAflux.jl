@@ -1,3 +1,12 @@
+@testset "Fallbacks" begin
+    import NaiveGAflux: maptrain, mapvalidation, limit_maxbatchsize
+    struct NoOpIterMapDummy <: AbstractIteratorMap end
+
+    @test maptrain(NoOpIterMapDummy(), 13) == 13
+    @test mapvalidation(NoOpIterMapDummy(), 17) == 17
+    @test limit_maxbatchsize(NoOpIterMapDummy(), :a, 13; bleh="aa") == NoOpIterMapDummy()
+end
+
 @testset "TrainBatchSizeMutation" begin
     import NaiveGAflux: batchsize
 

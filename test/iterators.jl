@@ -119,8 +119,14 @@ end
     @testset "BatchIterator shuffle basic" begin
         @test reduce(vcat, BatchIterator(1:20, 3; shuffle=true)) |> sort == 1:20
 
-        itr = BatchIterator(ones(2,3,4), 4; shuffle=MersenneTwister(2))
-        @test "siter: $itr" == "siter: BatchIterator(size=(2, 3, 4), batchsize=4, shuffle=true)"
+        @testset "Show array" begin
+            itr = BatchIterator(ones(2,3,4), 4; shuffle=MersenneTwister(2))
+            @test "siter: $itr" == "siter: BatchIterator(size=(2, 3, 4), batchsize=4, shuffle=true)"
+        end
+        @testset "Show tuple" begin
+            itr = BatchIterator((ones(2,3,4), ones(2,4)), 4; shuffle=MersenneTwister(2))
+            @test "siter: $itr" == "siter: BatchIterator(size=((2, 3, 4), (2, 4)), batchsize=4, shuffle=true)"
+        end
     end
 
     @testset "BatchIterator shuffle ndims $(length(dims))" for dims in ((5), (3,4), (2,3,4), (2,3,4,5), (2,3,4,5,6), (2,3,4,5,6,7))
@@ -187,6 +193,8 @@ end
         titer = TimedIterator(;timelimit=0.1, patience=2, timeoutaction = () -> timeoutcnt += 1, accumulate_timeouts=acc, base=1:10)
 
         @test collect(titer) == 1:10
+        @test length(titer) == 10
+        @test eltype(titer) == Int
         @test timeoutcnt === 0 # Or else we'll have flakey tests...
 
         for i in titer

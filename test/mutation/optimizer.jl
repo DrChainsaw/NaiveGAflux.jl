@@ -25,6 +25,7 @@
 
         @test typeof.(m(Descent(0.2)).os) == [Descent]
         @test typeof.(m(Momentum(0.2)).os) == [Momentum, Descent]
+        @test typeof(m(ShieldedOpt(Descent()))) == ShieldedOpt{Descent}
         @test typeof.(m(Flux.Optimiser(Nesterov(), Descent(), ShieldedOpt(Descent()))).os) == [Nesterov, ShieldedOpt{Descent}, Descent]
     end
 
