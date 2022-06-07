@@ -14,10 +14,34 @@
         @test prts.(oc((o2,o1))) == prts.(ooc((o2,o1))) == prts.((o1, o2))
     end
 
-    @testset "Don't swap shielded" begin
-        o1 = ShieldedOpt(Descent())
-        o2 = ShieldedOpt(Momentum())
-        @test OptimizerCrossover()((o1,o2)) == (o1,o2)
+    @testset "ShieldedOpt" begin
+
+        oc = OptimizerCrossover()
+        
+        @testset "$baseo1 and $baseo2" for (baseo1, baseo2) in (
+            (Descent(), Momentum()),
+            (Descent(), Flux.Optimiser(Momentum())),
+            (Flux.Optimiser(Descent()),Flux.Optimiser(Momentum()))
+        )
+            @testset "With Shielding $w1 and $w2" for (w1, w2) in (
+                (identity, ShieldedOpt),
+                (ShieldedOpt, identity)
+            )
+                o1 = w1(baseo1)
+                o2 = w2(baseo2)
+
+                @test oc((o1, o2)) == (o1, o2)
+                @test oc((o2, o1)) == (o2, o1)
+            end
+        end
+
+        @testset "Inner shielding$(wrap == identity ? "" : wrap)" for wrap in (identity, Flux.Optimiser)
+            o1 = Flux.Optimiser(ShieldedOpt(Descent()))
+            o2 = wrap(Momentum())
+
+            @test prts.(oc((o1, o2))) == prts.((o1, o2))
+            @test prts.(oc((o2, o1))) == prts.((o2, o1))
+        end
     end
 
     @testset "Cardinality difference" begin

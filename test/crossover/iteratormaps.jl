@@ -30,4 +30,34 @@
         @test ims1n == IteratorMaps(ImcTestDummy1(), ImcTestDummy1(), ImcTestDummy3())
         @test ims2n == IteratorMaps(ImcTestDummy3(), ImcTestDummy2(), ImcTestDummy2())
     end
+
+    @testset "ShieldedIteratorMap" begin
+
+        imc = IteratorMapCrossover()
+        
+        @testset "$baseim1 and $baseim2" for (baseim1, baseim2) in (
+            (ImcTestDummy1(), ImcTestDummy2()),
+            (ImcTestDummy1(), IteratorMaps(ImcTestDummy2())),
+            (IteratorMaps(ImcTestDummy1()),IteratorMaps(ImcTestDummy2()))
+        )
+            @testset "With Shielding $w1 and $w2" for (w1, w2) in (
+                (identity, ShieldedIteratorMap),
+                (ShieldedIteratorMap, identity)
+            )
+                im1 = w1(baseim1)
+                im2 = w2(baseim2)
+
+                @test imc((im1, im2)) == (im1, im2)
+                @test imc((im2, im1)) == (im2, im1)
+            end
+        end
+
+        @testset "Inner shielding$(wrap == identity ? "" : wrap)" for wrap in (identity, IteratorMaps)
+            im1 = IteratorMaps(ShieldedIteratorMap(ImcTestDummy1()))
+            im2 = wrap(ImcTestDummy2())
+
+            @test imc((im1, im2)) == (im1, im2)
+            @test imc((im2, im1)) == (im2, im1)
+        end
+    end
 end

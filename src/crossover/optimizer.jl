@@ -31,14 +31,15 @@ LearningRateCrossover() = OptimizerCrossover(learningrateswap)
 
 (oc::OptimizerCrossover)(os) = oc.crossover(os)
 (oc::OptimizerCrossover)(os::EitherIs{ShieldedOpt}) = os
-(oc::OptimizerCrossover)(os::EitherIs{Flux.Optimiser}) = zipcrossover(reoptiter, os, oc.crossover)
 (oc::OptimizerCrossover)(os::MixTuple{ShieldedOpt, Flux.Optimiser}) = os
+(oc::OptimizerCrossover)(os::EitherIs{Flux.Optimiser}) = zipcrossover(reoptiter, os, oc.crossover)
 
 
 reoptiter(o) = (o,), identity
 reoptiter(o::Flux.Optimiser) = Tuple(o.os), Flux.Optimiser
 
-optimizerswap((o1, o2)::Tuple) = o2,o1
+optimizerswap((o1, o2)) = o2,o1
+optimizerswap(os::EitherIs{ShieldedOpt}) = os
 
 learningrateswap((o1,o2)::Tuple) = (@set o1.eta = learningrate(o2)) , (@set o2.eta = learningrate(o1))
 learningrateswap(os::EitherIs{ShieldedOpt}) = os

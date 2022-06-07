@@ -24,8 +24,8 @@ IteratorMapCrossover() = IteratorMapCrossover(iteratormapswap)
 
 (ic::IteratorMapCrossover)(ims) = ic.crossover(ims)
 (ic::IteratorMapCrossover)(ims::EitherIs{ShieldedIteratorMap}) = ims
+(ic::IteratorMapCrossover)(ims::MixTuple{ShieldedIteratorMap, IteratorMaps}) = ims
 (ic::IteratorMapCrossover)(ims::EitherIs{IteratorMaps}) = zipcrossover(reimiter, ims, ic.crossover)
-(ic::IteratorMapCrossover)(ims::MixTuple{ShieldedIteratorMap, IteratorMaps}) = zipcrossover(reimiter, ims, ic.crossover)
 
 reimiter(im) = (im,), identity
 reimiter(im::IteratorMaps) = im.maps, IteratorMaps
