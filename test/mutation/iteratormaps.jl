@@ -1,5 +1,5 @@
 @testset "Fallbacks" begin
-    import NaiveGAflux: maptrain, mapvalidation, limit_maxbatchsize
+    import NaiveGAflux: AbstractIteratorMap, maptrain, mapvalidation, limit_maxbatchsize
     struct NoOpIterMapDummy <: AbstractIteratorMap end
 
     @test maptrain(NoOpIterMapDummy(), 13) == 13
