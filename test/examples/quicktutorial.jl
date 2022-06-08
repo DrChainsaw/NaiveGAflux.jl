@@ -62,7 +62,7 @@ mutation = MutationChain(changesize, remlayer, addlayer)
 # applying the mutations above to three of the five models with higher fitness 
 # giving higher probability of being selected. 
 #
-# [`MapCandidate^](@ref) helps with the plumbing of creating new `CandidateModel`s
+# [`MapCandidate`](@ref) helps with the plumbing of creating new `CandidateModel`s
 #  where `mutation` is applied to create a new model. 
 elites = EliteSelection(2)
 mutate = SusSelection(3, EvolveCandidates(MapCandidate(mutation)))

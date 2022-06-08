@@ -24,7 +24,8 @@ self-contained, allowing you to pick and choose the ones you like when building 
 4. [Fitness Functions](@ref)
 5. [Candidate Utilities](@ref)
 6. [Evolution Strategies](@ref)
-7. [Iterators](@ref)
+7. [Iterator Maps](@ref) 
+8. [Iterators](@ref)
 
 
 

@@ -10,6 +10,4 @@ Population
 model
 opt
 lossfun
-BatchSizeIteratorMap
-AbstractIteratorMap
 ```

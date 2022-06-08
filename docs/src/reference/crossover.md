@@ -14,6 +14,12 @@ CrossoverSwap
 OptimizerCrossover
 LearningRateCrossover
 ```
+
+## Core IteratorMap Crossover Operations
+```@docs
+IteratorMapCrossover
+```
+
 ## Functions
 ```@docs
 NaiveGAflux.crossover

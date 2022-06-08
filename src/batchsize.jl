@@ -288,17 +288,13 @@ function batchsizeselection(inshape_nobatch::Tuple;
     bs = isnothing(alternatives) ? bs : BatchSizeSelectionFromAlternatives(alternatives, bs)
 end
 
-# specialization for CompGraph needed to avoid ambiguity with method that just unwraps an AbstractCandidate :( 
-# Consider refactoring
-function limit_maxbatchsize(bs::TrainBatchSize, model::CompGraph; inshape_nobatch, availablebytes = _availablebytes())
+function limit_maxbatchsize(bs::TrainBatchSize, model; inshape_nobatch, availablebytes = _availablebytes())
     maxsize = maxtrainbatchsize(model, inshape_nobatch, availablebytes)
     maxsize > -1 ? min(batchsize(bs), maxsize) : batchsize(bs)
 end
 
-# specialization for CompGraph needed to avoid ambiguity with method that just unwraps an AbstractCandidate :( 
-# Consider refactoring
 function limit_maxbatchsize(bs::ValidationBatchSize,
-                            model::CompGraph; 
+                            model; 
                             inshape_nobatch,
                             availablebytes = _availablebytes()
                             )

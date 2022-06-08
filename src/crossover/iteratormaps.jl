@@ -1,9 +1,9 @@
 
 
 """
-IteratorMapCrossover{C} <: AbstractCrossover{AbstractIteratorMap}
-IteratorMapCrossover() 
-IteratorMapCrossover(crossover)
+    IteratorMapCrossover{C} <: AbstractCrossover{AbstractIteratorMap}
+    IteratorMapCrossover() 
+    IteratorMapCrossover(crossover)
 
 Apply crossover between `AbstractIteratorMap`s.
 

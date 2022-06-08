@@ -7,5 +7,6 @@
     include("examples/fitness.jl")
     include("examples/candidate.jl")
     include("examples/evolution.jl")
+    include("examples/iteratormaps.jl")
     include("examples/iterators.jl")
 end

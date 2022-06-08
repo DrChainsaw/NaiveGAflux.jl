@@ -19,7 +19,8 @@ If `quantizeto` is a `DataType` (e.g `Int`) then the largest possible increase i
 
 More precisely, the new size is `round(quantizeto, (x+1) * batchsize)` where `x` is drawn from `U(minrel, maxrel)`.
 
-If `quantizeto` is a an array or tuple of values then the new size is drawn from `quantizeto` with a maximum 
+If `quantizeto` is a an array or tuple of values then the new size is drawn from `quantizeto` with elements closer 
+to the current batch size being more likely.
 
 More precisely, the new size is `quantizeto[i]` where `i = j + round(Int, x * length(quantizeto))` where `x` is drawn from 
 `U(minrel, maxrel)` and `j` is the index for which `quantizeto[j]` is the closest to the current batch size.

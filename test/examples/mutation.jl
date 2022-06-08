@@ -5,15 +5,16 @@ Mutation is the way one candidate is transformed to a slightly different candida
 preserving parameters and alignment between layers, thus reducing the impact of mutating an already trained candidate.
 
 The following basic mutation operations are currently supported:
-1. Change the output size of vertices using [`NoutMutation`](@ref).
-2. Remove vertices using [`RemoveVertexMutation`](@ref).
-3. Add vertices using [`AddVertexMutation`](@ref).
-4. Remove edges between vertices using [`RemoveEdgeMutation`](@ref).
-5. Add edges between vertices using [`AddEdgeMutation`](@ref).
-6. Mutation of kernel size for conv layers using [`KernelSizeMutation`](@ref).
-7. Change of activation function using [`ActivationFunctionMutation`](@ref).
-8. Change the type of optimizer using [`OptimizerMutation`](@ref).
-9. Add an optimizer using [`AddOptimizerMutation`](@ref).
+1.  Change the output size of vertices using [`NoutMutation`](@ref).
+2.  Remove vertices using [`RemoveVertexMutation`](@ref).
+3.  Add vertices using [`AddVertexMutation`](@ref).
+4.  Remove edges between vertices using [`RemoveEdgeMutation`](@ref).
+5.  Add edges between vertices using [`AddEdgeMutation`](@ref).
+6.  Mutation of kernel size for conv layers using [`KernelSizeMutation`](@ref).
+7.  Change of activation function using [`ActivationFunctionMutation`](@ref).
+8.  Change the type of optimizer using [`OptimizerMutation`](@ref).
+9.  Add an optimizer using [`AddOptimizerMutation`](@ref).
+10. Change the batch size for training using [`TrainBatchSizeMutation`](@ref)
 
 Mutation operations are exported as structs rather than functions since they are designed to be composed with more generic utilities. Here are a few examples:
 """

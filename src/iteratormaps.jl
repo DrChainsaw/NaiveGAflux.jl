@@ -10,9 +10,25 @@ strategies for data augmentation and batch size selection can be evolved.
 """
 abstract type AbstractIteratorMap end
 
+"""
+    maptrain(im::AbstractIteratorMap, iter)
+
+Return an iterator (default `iter`) suitable for training.
+"""
 maptrain(::AbstractIteratorMap, iter) = iter
+
+"""
+    mapvalidation(im::AbstractIteratorMap, iter)
+
+Return an iterator (default `iter`) suitable for validation.
+"""
 mapvalidation(::AbstractIteratorMap, iter) = iter
 
+"""
+    limit_maxbatchsize(im::AbstractIteratorMap, args...; kwargs...)
+
+Return an `AbstractIteratorMap` which is capable of limiting the batch size if applicable to the type of `im` (e.g. if `im` is a `BatchSizeIteratorMap`), otherwise return `im`.
+"""
 limit_maxbatchsize(im::AbstractIteratorMap, args...; kwargs...) = im
  
 """
@@ -84,7 +100,7 @@ end
     IteratorMaps(maps...)
     IteratorMaps(maps::Tuple) 
 
-Aggregates multiple `AbstractIteratorMap`s. `maptrain` and `mapvalidation` are applied sequentially starting with the first element of `maps`. 
+Aggregates multiple `AbstractIteratorMap`s. `maptrain` and `mapvalidation` are applied sequentially starting with the first element of `maps`.
 """
 struct IteratorMaps{T<:Tuple} <: AbstractIteratorMap
     maps::T
