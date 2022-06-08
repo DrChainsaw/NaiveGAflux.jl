@@ -8,7 +8,7 @@ BatchSizeIteratorMap
 IteratorMaps
 ```
 
-## Interface functions (not exported)
+## [Interface functions (not exported)](@id IteratorMapInterfaceFunctionsAPI)
 ```@docs
 maptrain
 mapvalidation

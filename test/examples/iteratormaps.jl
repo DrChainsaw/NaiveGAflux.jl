@@ -9,7 +9,7 @@ cases for this are:
 3. Enabling search for the best data augmentation setting (not part of this package as of yet).
 
 Iterator maps are inteded to be used with [`CandidateDataIterMap`](@ref) and must extend [`AbstractIteratorMap`](@ref).
-See [`AbstractIteratorMap`](@ref) documentation for functions related to iterator maps.
+See [`API`](@ref IteratorMapInterfaceFunctionsAPI) documentation for functions related to iterator maps.
 
 In an attempt to hit two birds with one stone, here is an example of a custom iterator map which logs the sizes
 of what a wrapped iterator returns. This allows us to see the effects of [`BatchSizeIteratorMap`](@ref) without
