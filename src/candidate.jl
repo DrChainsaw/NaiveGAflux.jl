@@ -340,15 +340,7 @@ function MapType(c::AbstractCrossover{AbstractIteratorMap}, (c1, c2), (nomatch1,
 
     return MapType{AbstractIteratorMap}(Returns(im1n), nomatch1), MapType{AbstractIteratorMap}(Returns(im2n), nomatch2)
 end
-
-# Just because BatchSizeIteratorMap needs the model to limit the batch sizes :(
-# Try to come up with a cleaner design...
-apply_mapfield(f::MapType, x, args...) = (@info "apply $f to $x"; apply_mapfield(f.nomatch, x, args...))
-apply_mapfield(f::MapType{T1}, x::T2, args...) where {T1, T2<:T1} = apply_mapfield(f.match, x, args...)
-apply_mapfield(f::typeof(deepcopy), x, args...) = f(x)
-apply_mapfield(f, x, args...) = f(x, args...)
     
-
 """
     MapCandidate{T, F} 
     MapCandidate(mutations, mapothers::F)

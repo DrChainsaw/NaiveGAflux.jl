@@ -140,9 +140,8 @@ function _fitnessiterator(f, c::AbstractCandidate, iter)
 end
 
 matchdatatype(ps::Flux.Params, iter) = isempty(ps) ? iter : matchdatatype(first(ps), iter)
-# TODO: GpuGcIterator is a temporary workaround for what seems like a CUDA issue where memory allocation becomes very slow
-# after the number of reserved (but still available) bytes is close to the totol available GPU memory
-matchdatatype(::CUDA.CuArray, iter) = GpuGcIterator(GpuIterator(iter))
+
+matchdatatype(::CUDA.CuArray, iter) = GpuIterator(iter)
 matchdatatype(::AbstractArray, iter) = iter
 
 """

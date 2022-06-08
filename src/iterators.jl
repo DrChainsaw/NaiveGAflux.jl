@@ -375,34 +375,3 @@ _collectbatch(b) = b
 
 _innerbatchsize(t::Tuple) = _innerbatchsize(first(t))
 _innerbatchsize(a::AbstractArray) = size(a, ndims(a))
-
-
-## Temp workaround for CUDA memory issue where it for some reason takes very long time to make use of available memory
-struct GpuGcIterator{I}
-    base::I
-end
-
-function Base.iterate(itr::GpuGcIterator) 
-    valstate = iterate(itr.base)
-    valstate === nothing && return nothing
-    val, state = valstate
-    return val, (2, state)
-end
-
-function Base.iterate(itr::GpuGcIterator, (cnt, state)) 
-    meminfo = CUDA.MemoryInfo()
-    if meminfo.total_bytes - meminfo.pool_reserved_bytes < 2e9
-        NaiveGAflux.gpu_gc()
-    end
-    valstate = iterate(itr.base, state)
-    valstate === nothing && return nothing
-    val, state = valstate
-    return val, (cnt+1, state)
-end
-
-Base.IteratorSize(::Type{GpuGcIterator{I}}) where I = Base.IteratorSize(I)
-Base.IteratorEltype(::Type{GpuGcIterator{I}}) where I = Base.IteratorEltype(I)
-
-Base.length(itr::GpuGcIterator) = length(itr.base)
-Base.size(itr::GpuGcIterator) = size(itr.base)
-Base.eltype(::Type{GpuGcIterator{I}}) where I = eltype(I)
