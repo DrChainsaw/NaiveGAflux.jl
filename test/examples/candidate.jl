@@ -7,7 +7,7 @@ an `AbstractCandidate` needs to
 2. Be able to create a new version of itself given a function which maps its fields to new fields.
 
 Capability 1. is generally performed through functions of the format `someproperty(candidate; default)` where in general 
-`someproperty(::AbstractCandidate; default=nothing) = default`. The following such functions are currently implemented by NaiveGAflux:
+`someproperty(::AbstractCandidate; default=nothing) = default`. Examples of such functions are:
 
 * [`model(c; default)`](@ref model)  : Return a model
 * [`opt(c; default)`](@ref opt)    : Return an optimizer
