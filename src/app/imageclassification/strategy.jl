@@ -61,7 +61,7 @@ function TrainSplitAccuracy(;split=0.1,
             accuracyconfig=BatchedIterConfig(),
             accuracyfitness=AccuracyVsSize,
             trainconfig=TrainIterConfig(),
-            trainfitness=(iter, accf) -> GpuFitness(TrainThenFitness(StatefulGenerationIter(iter), Flux.Losses.logitcrossentropy, ADAM(), accf, 0.0)))
+            trainfitness=(iter, accf) -> GpuFitness(TrainThenFitness(StatefulGenerationIter(iter), Flux.Losses.logitcrossentropy, Adam(), accf, 0.0)))
 
     return TrainSplitAccuracy(split, accuracyconfig, accuracyfitness, trainconfig, trainfitness)
 end
@@ -123,7 +123,7 @@ function TrainAccuracyVsSize(;
                         trainconfig=TrainIterConfig(),
                         trainfitness = dataiter -> sizevs(GpuFitness(TrainAccuracyFitness(
                                                                             dataiter=StatefulGenerationIter(dataiter), 
-                                                                            defaultloss=Flux.Losses.logitcrossentropy, defaultopt = ADAM())))) 
+                                                                            defaultloss=Flux.Losses.logitcrossentropy, defaultopt = Adam())))) 
         return TrainAccuracyVsSize(trainconfig, trainfitness)
 end
 function fitnessfun(s::TrainAccuracyVsSize, x, y) 
@@ -374,7 +374,7 @@ end
 
 function optmutation(p=0.1)
     lrm = LearningRateMutation()
-    om = MutationProbability(OptimizerMutation([Descent, Momentum, Nesterov, ADAM, NADAM, ADAGrad]), p)
+    om = MutationProbability(OptimizerMutation([Descent, Momentum, Nesterov, Adam, NAdam, AdaGrad]), p)
     return MutationChain(lrm, om)
 end
 

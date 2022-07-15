@@ -9,7 +9,7 @@ using NaiveNASlib.Advanced, NaiveNASlib.Extend
 import Flux
 using Flux: Dense, Conv, ConvTranspose, DepthwiseConv, CrossCor, LayerNorm, BatchNorm, InstanceNorm, GroupNorm, 
             MaxPool, MeanPool, Dropout, AlphaDropout, GlobalMaxPool, GlobalMeanPool, cpu, gpu
-using Flux: Descent, Momentum, Nesterov, ADAM, NADAM, ADAGrad, WeightDecay
+using Flux: Descent, Momentum, Nesterov, Adam, NAdam, AdaGrad, WeightDecay
 import Functors
 using Functors: fmap
 using Random

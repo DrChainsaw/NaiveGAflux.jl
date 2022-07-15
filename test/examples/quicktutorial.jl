@@ -39,7 +39,7 @@ datasetvalidate = [(randn(ninputs, batchsize), onehot(rand(1:nlabels, batchsize)
 fitnessfunction = TrainThenFitness(;
     dataiter = datasettrain,
     defaultloss = Flux.logitcrossentropy, # Will be used if not provided by the candidate
-    defaultopt = ADAM(), # Same as above. State is wiped after training to prevent memory leaks
+    defaultopt = Adam(), # Same as above. State is wiped after training to prevent memory leaks
     fitstrat = AccuracyFitness(datasetvalidate) # This is what creates our fitness value after training
 )
 

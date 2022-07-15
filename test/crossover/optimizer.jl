@@ -5,7 +5,7 @@
     prts(o::Optimiser) = "$(typeof(o))$(prts.(Tuple(o.os)))"
 
     @testset "Swap optimizers $(prts(o1)) and $(prts(o2))" for (o1, o2) in (
-        (ADAM(), Momentum()),
+        (Adam(), Momentum()),
         (Optimiser(Descent(), WeightDecay()), Optimiser(Momentum(), Nesterov())),
         )
         oc = OptimizerCrossover()
@@ -54,12 +54,12 @@
         @testset "Different size Optimisers" begin
             oc = OptimizerCrossover()
             o1 = Optimiser(Descent(), WeightDecay(), Momentum())
-            o2 = Optimiser(ADAM(), ADAMW(), NADAM(), RADAM())
+            o2 = Optimiser(Adam(), AdamW(), NAdam(), RAdam())
 
             o1n,o2n = oc((o1,o2))
 
-            @test prts(o1n) == prts(Optimiser(ADAM(), ADAMW(), NADAM()))
-            @test prts(o2n) == prts(Optimiser(Descent(), WeightDecay(), Momentum(), RADAM()))
+            @test prts(o1n) == prts(Optimiser(Adam(), AdamW(), NAdam()))
+            @test prts(o2n) == prts(Optimiser(Descent(), WeightDecay(), Momentum(), RAdam()))
         end
     end
 
@@ -68,12 +68,12 @@
         oc = OptimizerCrossover() |> mplm |> OptimizerCrossover
 
         o1 = Optimiser(Descent(), WeightDecay(), Momentum())
-        o2 = Optimiser(ADAM(), ADAGrad(), AdaMax())
+        o2 = Optimiser(Adam(), AdaGrad(), AdaMax())
 
-        o1n,o2n = @test_logs (:info, "Crossover between WeightDecay and ADAGrad") oc((o1,o2))
+        o1n,o2n = @test_logs (:info, "Crossover between WeightDecay and AdaGrad") oc((o1,o2))
 
-        @test typeof.(o1n.os) == [Descent, ADAGrad, Momentum]
-        @test typeof.(o2n.os) == [ADAM, WeightDecay, AdaMax]
+        @test typeof.(o1n.os) == [Descent, AdaGrad, Momentum]
+        @test typeof.(o2n.os) == [Adam, WeightDecay, AdaMax]
     end
 
     @testset "Learningrate crossover" begin
@@ -103,7 +103,7 @@
         @testset "Optimiser" begin
             oc = LearningRateCrossover()
             o1 = Optimiser(Descent(0.1), Momentum(0.2), WeightDecay(0.1))
-            o2 = Optimiser(ADAM(0.3), RADAM(0.4), NADAM(0.5), Nesterov(0.6))
+            o2 = Optimiser(Adam(0.3), RAdam(0.4), NAdam(0.5), Nesterov(0.6))
 
             o1n,o2n = oc((o1,o2))
 

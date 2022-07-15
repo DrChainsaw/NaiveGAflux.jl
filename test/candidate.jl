@@ -162,7 +162,7 @@ end
                 @test fitness(SizeFitness(), cand) == nparams(graph)
 
                 graphmutation = VertexMutation(MutationFilter(v -> name(v)=="hlayer", AddVertexMutation(ArchSpace(DenseSpace([1], [relu])))))
-                optmutation = OptimizerMutation((Momentum, Nesterov, ADAM))
+                optmutation = OptimizerMutation((Momentum, Nesterov, Adam))
                 bsmutation = TrainBatchSizeMutation(0, -1, MockRng([0.5]))
                 evofun = MapCandidate(graphmutation, optmutation, bsmutation)
                 newcand = evofun(cand)
@@ -407,7 +407,7 @@ end
             om1 = omf()
             @test learningrate(om1(Descent(0.1))) ≈ learningrate(om1(Momentum(0.1)))
 
-            opt = Optimiser(so(Descent(0.1)), Momentum(0.1), so(Descent(1.0)), ADAM(1.0), Descent(1.0))
+            opt = Optimiser(so(Descent(0.1)), Momentum(0.1), so(Descent(1.0)), Adam(1.0), Descent(1.0))
             @test length(om1(opt).os) == 4
             @test learningrate(om1(opt)) ≈ learningrate(om1(Descent(0.01)))
 

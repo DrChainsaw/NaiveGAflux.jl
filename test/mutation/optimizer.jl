@@ -7,7 +7,7 @@
 
         @test learningrate(m(Descent(0.1))) == 1.0
         @test learningrate(m(ShieldedOpt(Momentum(0.1)))) == 0.1
-        @test learningrate(m(Optimiser(Nesterov(0.1), ShieldedOpt(ADAM(0.1))))) == 0.1
+        @test learningrate(m(Optimiser(Nesterov(0.1), ShieldedOpt(Adam(0.1))))) == 0.1
 
         @test learningrate(LearningRateMutation(MockRng([0.0]))(Descent(0.1))) == 0.085
     end
@@ -17,7 +17,7 @@
 
         @test typeof(m(Descent())) == Momentum
         @test typeof(m(ShieldedOpt(Descent()))) == ShieldedOpt{Descent}
-        @test typeof.(m(Optimiser(Nesterov(), ShieldedOpt(ADAM()))).os) == [Momentum, ShieldedOpt{ADAM}]
+        @test typeof.(m(Optimiser(Nesterov(), ShieldedOpt(Adam()))).os) == [Momentum, ShieldedOpt{Adam}]
     end
 
     @testset "Add optimizer" begin
@@ -33,6 +33,6 @@
         m = MutationChain(LogMutation(o -> "First", OptimizerMutation((Momentum, ))), LogMutation(o -> "Second", AddOptimizerMutation(o -> Descent())))
 
         @test_logs (:info, "First") (:info, "Second") typeof.(m(Nesterov()).os) == [Momentum, Descent]
-        @test_logs (:info, "First") (:info, "First") (:info, "Second") (:info, "Second") m([Nesterov(), ADAM()])
+        @test_logs (:info, "First") (:info, "First") (:info, "Second") (:info, "Second") m([Nesterov(), Adam()])
     end
 end
