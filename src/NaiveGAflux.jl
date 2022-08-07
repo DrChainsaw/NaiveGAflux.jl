@@ -94,7 +94,7 @@ export nparams
 export AutoFlux
 
 # Visulization
-export PlotFitness, ScatterPop, ScatterOpt, MultiPlot, CbAll
+export PlotFitness, ScatterPop, ScatterOpt, ScatterBatchSize, MultiPlot, CbAll
 
 include("util.jl")
 include("shape.jl")

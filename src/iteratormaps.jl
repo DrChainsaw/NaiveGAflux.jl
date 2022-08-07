@@ -126,5 +126,5 @@ maptrain(sim::ShieldedIteratorMap, args...) = maptrain(sim.map, args...)
 mapvalidation(sim::ShieldedIteratorMap, args...) = mapvalidation(sim.map, args...)
 
 function limit_maxbatchsize(sim::ShieldedIteratorMap, args...; kwargs...) 
-    ShieldedIteratorMap(limit_maxbatchsize(sim.map), args...; kwargs...)
+    ShieldedIteratorMap(limit_maxbatchsize(sim.map, args...; kwargs...))
 end

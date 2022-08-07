@@ -49,12 +49,12 @@
     @testset "ShieldedIteratorMap" begin
         NaiveGAflux.maptrain(::Val{:TestDummy1}, itr) = Iterators.map(x -> 2x, itr)
         NaiveGAflux.mapvalidation(::Val{:TestDummy1}, itr) = Iterators.map(x -> 5x, itr)
-        NaiveGAflux.limit_maxbatchsize(::Val{:TestDummy1}) = Val(:TestDummy2)
+        NaiveGAflux.limit_maxbatchsize(::Val{:TestDummy1}, args...; kwargs...) = Val(:TestDummy2)
 
         sim = ShieldedIteratorMap(Val(:TestDummy1))
 
         @test collect(maptrain(sim, 1:3)) == 2:2:6
         @test collect(mapvalidation(sim, 1:3)) == 5:5:15
-        @test limit_maxbatchsize(sim) == ShieldedIteratorMap(Val(:TestDummy2))
+        @test limit_maxbatchsize(sim, 13; blah=14) == ShieldedIteratorMap(Val(:TestDummy2))
     end
 end
