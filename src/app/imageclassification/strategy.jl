@@ -61,7 +61,7 @@ function TrainSplitAccuracy(;split=0.1,
             accuracyconfig=BatchedIterConfig(),
             accuracyfitness=AccuracyVsSize,
             trainconfig=TrainIterConfig(),
-            trainfitness=(iter, accf) -> GpuFitness(TrainThenFitness(StatefulGenerationIter(iter), Flux.Losses.logitcrossentropy, ADAM(), accf, 0.0)))
+            trainfitness=(iter, accf) -> GpuFitness(TrainThenFitness(StatefulGenerationIter(iter), Flux.Losses.logitcrossentropy, Adam(), accf, 0.0)))
 
     return TrainSplitAccuracy(split, accuracyconfig, accuracyfitness, trainconfig, trainfitness)
 end
@@ -123,7 +123,7 @@ function TrainAccuracyVsSize(;
                         trainconfig=TrainIterConfig(),
                         trainfitness = dataiter -> sizevs(GpuFitness(TrainAccuracyFitness(
                                                                             dataiter=StatefulGenerationIter(dataiter), 
-                                                                            defaultloss=Flux.Losses.logitcrossentropy, defaultopt = ADAM())))) 
+                                                                            defaultloss=Flux.Losses.logitcrossentropy, defaultopt = Adam())))) 
         return TrainAccuracyVsSize(trainconfig, trainfitness)
 end
 function fitnessfun(s::TrainAccuracyVsSize, x, y) 
@@ -133,7 +133,7 @@ end
 
 """
     struct BatchedIterConfig{T, V}
-    BatchedIterConfig(;batchsize=32, dataaug=identity, iterwrap=GpuIterator) 
+    BatchedIterConfig(;batchsize=32, dataaug=identity, iterwrap=identity) 
 
 Configuration for creating batch iterators from array data.
 
@@ -146,12 +146,12 @@ struct BatchedIterConfig{T, V}
     dataaug::T
     iterwrap::V
 end
-BatchedIterConfig(;batchsize=32, dataaug=identity, iterwrap=GpuIterator) = BatchedIterConfig(batchsize, dataaug, iterwrap)
+BatchedIterConfig(;batchsize=1024, dataaug=identity, iterwrap=identity) = BatchedIterConfig(batchsize, dataaug, iterwrap)
 dataiter(s::BatchedIterConfig, x, y) = dataiter(x, y, s.batchsize, s.dataaug) |> s.iterwrap
 
 """
     struct ShuffleIterConfig{T, V}
-    ShuffleIterConfig(;batchsize=32, seed=123, dataaug=identity, iterwrap=GpuIterator) 
+    ShuffleIterConfig(;batchsize=32, seed=123, dataaug=identity, iterwrap=identity) 
 
 Configuration for creating shuffled batch iterators from array data. Data will be re-shuffled every time the iterator restarts.
 
@@ -168,7 +168,7 @@ struct ShuffleIterConfig{T, V}
     dataaug::T
     iterwrap::V
 end
-ShuffleIterConfig(;batchsize=32, seed=123, dataaug=identity, iterwrap=GpuIterator) = ShuffleIterConfig(batchsize, seed, dataaug, iterwrap)
+ShuffleIterConfig(;batchsize=1024, seed=123, dataaug=identity, iterwrap=identity) = ShuffleIterConfig(batchsize, seed, dataaug, iterwrap)
 dataiter(s::ShuffleIterConfig, x, y) = dataiter(x, y, s.batchsize, s.seed, s.dataaug) |> s.iterwrap
 
 
@@ -317,7 +317,7 @@ Crossover is done using [`CrossoverSwap`](@ref) for models and [`LearningRateCro
 
 Mutation is applied both to the model itself (change sizes, add/remove vertices/edges) as well as to the optimizer (change learning rate and optimizer algorithm).
 """
-crossovermutate(;pcrossover=0.3, pmutate=0.9) = function(inshape)
+crossovermutate(;pcrossover=0.3, pmutate=0.8) = function(inshape)
     cross = candidatecrossover(pcrossover)
     crossoverevo = AfterEvolution(PairCandidates(EvolveCandidates(cross)), align_vertex_names)
 
@@ -327,8 +327,8 @@ crossovermutate(;pcrossover=0.3, pmutate=0.9) = function(inshape)
     return EvolutionChain(crossoverevo, mutationevo)
 end
 
-candidatemutation(p, inshape) = evolvemodel(MutationProbability(graphmutation(inshape), p), optmutation())
-candidatecrossover(p) = evolvemodel(MutationProbability(graphcrossover(), p), optcrossover())
+candidatemutation(p, inshape) = MapCandidate(MutationProbability(graphmutation(inshape), p), optmutation(), itermapmutation())
+candidatecrossover(p) = MapCandidate(MutationProbability(graphcrossover(), p), optcrossover(), itermapcrossover())
 
 function clear_redundant_vertices(pop)
     foreach(cand -> NaiveGAflux.model(check_apply, cand), pop)
@@ -359,6 +359,13 @@ function rename_model(i, cand)
     end
 end
 
+itermapcrossover(p= 0.2) = MutationProbability(IteratorMapCrossover(), p) |> IteratorMapCrossover
+
+function itermapmutation(p=0.1)
+    m = TrainBatchSizeMutation(-0.2, 0.2, ntuple(i -> 2^(i+2), 8))
+    return MutationProbability(m, p)
+end
+
 function optcrossover(poptswap=0.3, plrswap=0.4)
     lrc = MutationProbability(LearningRateCrossover(), plrswap) |> OptimizerCrossover
     oc = MutationProbability(OptimizerCrossover(), poptswap) |> OptimizerCrossover
@@ -367,7 +374,7 @@ end
 
 function optmutation(p=0.1)
     lrm = LearningRateMutation()
-    om = MutationProbability(OptimizerMutation([Descent, Momentum, Nesterov, ADAM, NADAM, ADAGrad]), p)
+    om = MutationProbability(OptimizerMutation([Descent, Momentum, Nesterov, Adam, NAdam, AdaGrad]), p)
     return MutationChain(lrm, om)
 end
 

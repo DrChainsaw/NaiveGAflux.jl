@@ -202,7 +202,7 @@ julia> extrema(cumsum([brw() for i in 1:10000]))
 struct BoundedRandomWalk{T <: Real, R <: Function}
     lb::T
     ub::T
-    state::Ref{T}
+    state::Base.RefValue{T}
     rfun::R
 end
 BoundedRandomWalk(lb::T,ub::T, rfun = (x...) -> 0.2randn(rng_default)) where T = BoundedRandomWalk(lb,ub, Ref(zero(ub)), rfun)
@@ -346,3 +346,5 @@ NaiveNASflux.layer(gp::GlobalPool) = gp
 Return the number of model inputs.
 """
 ninputs(cg::CompGraph) = length(cg.inputs)
+# I guess this is not good practice, but I'll fix it the first time someone posts an issue about it :)
+ninputs(m) = 1 

@@ -61,22 +61,22 @@
             end
 
             @testset "ScatterOpt" begin
-                NaiveGAflux.opt(c::PlotTestCand) = fitness(c) > 2 ? ADAM(nparams(c) - fitness(c)) : Flux.Optimiser([ShieldedOpt(Descent(nparams(c) - fitness(c)))])
+                NaiveGAflux.opt(c::PlotTestCand) = fitness(c) > 2 ? Adam(nparams(c) - fitness(c)) : Flux.Optimiser([ShieldedOpt(Descent(nparams(c) - fitness(c)))])
 
                 p = ScatterOpt((args...;kwargs...) -> true, testdir)
                 @test !isdir(p.basedir)
 
                 @test p(PlotTestCand.(1:3, [10, 20, 30], [100, 200, 300]))
-                @test p.data ==  [[1 99.0 Descent; 2 198.0 Descent; 3 297.0 ADAM]]
+                @test p.data ==  [[1 99 Descent; 2 198 Descent; 3 297 Adam]]
 
                 @test p(PlotTestCand.(2:4, [20, 30, 40], [200, 300, 400]))
-                @test p.data ==  [[1 99 Descent; 2 198 Descent; 3 297 ADAM], [2 198 Descent; 3 297 ADAM; 4 396 ADAM]]
+                @test p.data ==  [[1 99 Descent; 2 198 Descent; 3 297 Adam], [2 198 Descent; 3 297 Adam; 4 396 Adam]]
 
                 p2 = ScatterOpt((args...;kwargs...) -> true, testdir)
                 @test p2.data == p.data
 
                 @test p2(PlotTestCand.(3:5, [30, 40, 50], [300, 400, 500]))
-                @test p2.data ==  [[1 99 Descent; 2 198 Descent; 3 297 ADAM], [2 198 Descent; 3 297 ADAM; 4 396 ADAM],[3 297 ADAM; 4 396 ADAM; 5 495 ADAM]]
+                @test p2.data ==  [[1 99 Descent; 2 198 Descent; 3 297 Adam], [2 198 Descent; 3 297 Adam; 4 396 Adam],[3 297 Adam; 4 396 Adam; 5 495 Adam]]
 
                 p3 = ScatterOpt((args...;kwargs...) -> true, testdir)
                 @test p3(PlotTestCand.(3:5, [30, 40, 50], [300, 400, 500]))
@@ -84,7 +84,49 @@
                 @test length(p3.data) == 1 + length(p2.data)
                 # What was added is just a copy paste of the last thing inserted to p2 so this lazy check works
                 @test p3.data[end] == p2.data[end]
+            end
 
+            @testset "findtrainbatchsize" begin
+                import NaiveGAflux: findtrainbatchsize
+
+                @test findtrainbatchsize(nothing; default=13) == 13
+                @test findtrainbatchsize("Aaa"; default=17) == 17
+                
+                @testset "Candidate with $ic" for (ic, exp) in (
+                    (BatchSizeIteratorMap(13, 74, (m, args...;kwargs...) -> m), 13),        
+                    (IteratorMaps(), nothing),
+                    (IteratorMaps(BatchSizeIteratorMap(13, 74, (m, args...;kwargs...) -> m)), 13),
+                    (IteratorMaps(ShieldedIteratorMap(BatchSizeIteratorMap(13, 74, (m, args...;kwargs...) -> m))), 13),
+                )
+                    c = CandidateDataIterMap(ic, PlotTestCand(11,1,1))
+                    @test findtrainbatchsize(ic; default=nothing) == exp
+                end
+            end
+
+            @testset "ScatterBatchSize" begin
+                NaiveGAflux.findtrainbatchsize(c::PlotTestCand; kwargs...) = 2 * fitness(c)
+
+                p = ScatterBatchSize((args...;kwargs...) -> true, testdir)
+                @test !isdir(p.basedir)
+
+                @test p(PlotTestCand.(1:3, [10, 20, 30], [100, 200, 300]))
+                @test p.data ==  [[2 1 100; 4 2 200; 6 3 300]]
+
+                @test p(PlotTestCand.(2:4, [20, 30, 40], [200, 300, 400]))
+                @test p.data ==  [[2 1 100; 4 2 200; 6 3 300], [4 2 200; 6 3 300;8 4 400]]
+
+                p2 = ScatterBatchSize((args...;kwargs...) -> true, testdir)
+                @test p2.data == p.data
+
+                @test p2(PlotTestCand.(3:5, [30, 40, 50], [300, 400, 500]))
+                @test p2.data ==  [[2 1 100; 4 2 200; 6 3 300], [4 2 200; 6 3 300;8 4 400] ,[6 3 300;8 4 400;10 5 500]]
+
+                p3 = ScatterBatchSize((args...;kwargs...) -> true, testdir)
+                @test p3(PlotTestCand.(3:5, [30, 40, 50], [300, 400, 500]))
+                # Test that something was added
+                @test length(p3.data) == 1 + length(p2.data)
+                # What was added is just a copy paste of the last thing inserted to p2 so this lazy check works
+                @test p3.data[end] == p2.data[end]
             end
 
         finally

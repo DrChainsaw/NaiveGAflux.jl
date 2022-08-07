@@ -45,8 +45,13 @@ opt(::AbstractCandidate; default=nothing) = default
 Return the loss function of candidate `c` if `c` has a lossfunction, `default` (which defaults to `nothing`) otherwise.
 """
 lossfun(::AbstractCandidate; default=nothing) = default
+
 fitness(::AbstractCandidate; default=nothing) = default
 generation(::AbstractCandidate; default=nothing) = default
+
+iteratormap(::AbstractCandidate; default=nothing) = default
+trainiterator(::AbstractCandidate; default=nothing) = default
+validationiterator(::AbstractCandidate; default=nothing) = default
 
 
 wrappedcand(::T) where T <: AbstractCandidate = error("$T does not wrap any candidate! Check your base case!")
@@ -72,7 +77,9 @@ opt(c::AbstractWrappingCandidate; kwargs...) = opt(wrappedcand(c); kwargs...)
 lossfun(c::AbstractWrappingCandidate; kwargs...) = lossfun(wrappedcand(c); kwargs...)
 fitness(c::AbstractWrappingCandidate; kwargs...) = fitness(wrappedcand(c); kwargs...)
 generation(c::AbstractWrappingCandidate; kwargs...) = generation(wrappedcand(c); kwargs...)
-
+trainiterator(c::AbstractWrappingCandidate; kwargs...) = trainiterator(wrappedcand(c); kwargs...)
+validationiterator(c::AbstractWrappingCandidate; kwargs...) = validationiterator(wrappedcand(c); kwargs...)
+iteratormap(c::AbstractWrappingCandidate; kwargs...) = iteratormap(wrappedcand(c); kwargs...)
 
 """
     CandidateModel <: Candidate
@@ -88,11 +95,11 @@ end
 
 model(c::CandidateModel; kwargs...) = c.model
 
-newcand(c::CandidateModel, mapfield) = CandidateModel(map(mapfield, getproperty.(c, fieldnames(CandidateModel)))...)
+newcand(c::CandidateModel, mapfield) = CandidateModel(mapfield(c.model))
 
 """
     CandidateOptModel <: AbstractCandidate
-    CandidateOptModel(candidate::AbstractCandidate, optimizer)
+    CandidateOptModel(optimizer, candidate)
 
 A candidate adding an optimizer to another candidate. The optimizer is accessed by [`opt(c)`] for `CandidateOptModel c`.
 """
@@ -117,6 +124,36 @@ end
 opt(c::CandidateOptModel; kwargs...) = c.opt 
 
 newcand(c::CandidateOptModel, mapfield) = CandidateOptModel(mapfield(c.opt), newcand(wrappedcand(c), mapfield))
+
+"""
+    CandidateDataIterMap{T<:AbstractIteratorMap, C<:AbstractCandidate}     
+    CandidateDataIterMap(itermap::AbstractIteratorMap, c::AbstractCandidate)
+
+Maps training and validation data iterators using `iteratormap` for the wrapped candidate `c`.
+    
+Useful for searching for hyperparameters related to training and validation data, such as augmentation and batch size.
+
+While one generally don't want to augment the validation data, it is useful to select the largest possible batch size
+for validation for speed reasons.
+"""
+struct CandidateDataIterMap{T<:AbstractIteratorMap, C<:AbstractCandidate} <: AbstractWrappingCandidate
+    map::T
+    c::C   
+    
+    CandidateDataIterMap(map, c::C) where C<:AbstractCandidate = model(c) do m
+        lmap = limit_maxbatchsize(map, m)
+        new{typeof(lmap), C}(lmap, c)
+    end
+end
+
+@functor CandidateDataIterMap
+
+iteratormap(c::CandidateDataIterMap; kwargs...) = c.map
+trainiterator(c::CandidateDataIterMap; kwargs...) = maptrain(c.map, trainiterator(wrappedcand(c); kwargs...))
+validationiterator(c::CandidateDataIterMap; kwargs...) = mapvalidation(c.map, validationiterator(wrappedcand(c); kwargs...))
+
+newcand(c::CandidateDataIterMap, mapfield) = CandidateDataIterMap(mapfield(c.map), newcand(wrappedcand(c), mapfield))
+
 
 """
     FileCandidate <: AbstractWrappingCandidate
@@ -253,67 +290,138 @@ generation(c::FittedCandidate; default=nothing) = c.gen
 newcand(c::FittedCandidate, mapfield) = FittedCandidate(c.gen, c.fitness, newcand(wrappedcand(c), mapfield))
 
 nparams(c::AbstractCandidate) = model(nparams, c)
-nparams(x) = mapreduce(prod ∘ size, +, params(x).order; init=0)
+nparams(x) = mapreduce(length, +, params(x).order; init=0)
 
 """
-    evolvemodel(m::AbstractMutation{CompGraph}, mapothers=deepcopy)
-    evolvemodel(m::AbstractMutation{CompGraph}, om::AbstractMutation{FluxOptimizer}, mapothers=deepcopy)
+    MapType{T, F1, F2}
+    MapType{T}(match::F1, nomatch::F2)
 
-Return a function which maps a `AbstractCandidate c1` to a new `AbstractCandidate c2` where any `CompGraph`s `g` in `c1` will be m(deepcopy(g))` in `c2`. Same principle is applied to any optimisers if `om` is present.
+Callable struct which returns `match(x)` if `x isa T`, otherwise returns `nomatch(x)`.
 
-All other fields are mapped through the function `mapothers` (default `deepcopy`).
-
-Intended use is together with [`EvolveCandidates`](@ref).
+Main purpose is to ensure that an `AbstractMutation{T}` or `AbstractCrossover{T}` is
+applied to fields which are subtypes of `T` when creating new candidates.
 """
-function evolvemodel(m::AbstractMutation{CompGraph}, mapothers=deepcopy)
-    function copymutate(g::CompGraph)
-        ng = deepcopy(g)
-        m(ng)
-        return ng
-    end
-    mapcandidate(copymutate, mapothers)
+struct MapType{T, F1, F2}
+    match::F1
+    nomatch::F2
+    MapType{T}(match::F1, nomatch::F2) where {T,F1, F2} = new{T,F1,F2}(match, nomatch)
 end
-evolvemodel(m::AbstractMutation{CompGraph}, om::AbstractMutation{FluxOptimizer}, mapothers=deepcopy) = evolvemodel(m, optmap(om, mapothers))
 
-"""
-    evolvemodel(m::AbstractCrossover{CompGraph}, mapothers1=deepcopy, mapothers2=deepcopy)
-    evolvemodel(m::AbstractCrossover{CompGraph}, om::AbstractCrossover{FluxOptimizer}, mapothers1=deepcopy, mapothers2=deepcopy)
+(a::MapType{T})(x::T) where T = a.match(x)
+(a::MapType)(x) = a.nomatch(x)
 
-Return a function which maps a tuple of `AbstractCandidate`s `(c1,c2)` to two new candidates `c1', c2'` where any `CompGraph`s `g1` and `g2` in `c1` and `c2` respectively will be `g1', g2' = m((deepcopy(g1), deepcopy(g2)))` in `c1'` and `c2'` respectively. Same principle applies to any optimisers if `om` is present.
+MapType(match::AbstractMutation{T}, nomatch) where T = MapType{T}(match, nomatch)
+MapType(match::AbstractMutation{CompGraph}, nomatch) = MapType{CompGraph}(match ∘ deepcopy, nomatch) 
 
-All other fields in `c1` will be mapped through the function `mapothers1` and likewise for `c2` and `mapothers2`.
-
-Intended use is together with [`PairCandidates`](@ref) and [`EvolveCandidates`](@ref).
-"""
-evolvemodel(m::AbstractCrossover{CompGraph}, mapothers1=deepcopy, mapothers2=deepcopy) = (c1, c2)::Tuple -> begin
-    # This allows FileCandidate to write the graph back to disk as we don't want to mutate the orignal candidate.
-    # Perhaps align single individual mutation to this pattern for consistency?
+function MapType(c::AbstractCrossover{CompGraph}, (c1, c2), (nomatch1, nomatch2))
     g1 = model(c1)
     g2 = model(c2)
 
     release!(c1)
     release!(c2)
 
-    g1, g2 = m((deepcopy(g1), deepcopy(g2)))
-
-    return mapcandidate(g -> g1, mapothers1)(c1), mapcandidate(g -> g2, mapothers2)(c2)
+    g1, g2 = c((deepcopy(g1), deepcopy(g2)))
+    return MapType{CompGraph}(Returns(g1), nomatch1), MapType{CompGraph}(Returns(g2), nomatch2)
 end
 
-evolvemodel(m::AbstractCrossover{CompGraph}, om::AbstractCrossover{FluxOptimizer}, mapothers1=deepcopy, mapothers2=deepcopy) = (c1,c2)::Tuple -> begin
+function MapType(c::AbstractCrossover{FluxOptimizer}, (c1, c2), (nomatch1, nomatch2))
     o1 = opt(c1)
     o2 = opt(c2)
 
-    o1n, o2n = om((o1, o2))
-
-    return evolvemodel(m, optmap(o -> o1n, mapothers1), optmap(o -> o2n, mapothers2))((c1,c2))
+    o1n, o2n = c((o1, o2))
+    return MapType{FluxOptimizer}(Returns(o1n), nomatch1), MapType{FluxOptimizer}(Returns(o2n), nomatch2)
 end
 
+function MapType(c::AbstractCrossover{AbstractIteratorMap}, (c1, c2), (nomatch1, nomatch2))
+    im1 = iteratormap(c1)
+    im2 = iteratormap(c2)
 
-function mapcandidate(mapgraph, mapothers=deepcopy)
-    mapfield(g::CompGraph) = mapgraph(g)
-    mapfield(f) = mapothers(f)
-    # TODO: Replace with fmap now that we fully support Functors?
-    return c -> newcand(c, mapfield)
+    im1n, im2n = c((im1, im2))
+
+    return MapType{AbstractIteratorMap}(Returns(im1n), nomatch1), MapType{AbstractIteratorMap}(Returns(im2n), nomatch2)
+end
+    
+"""
+    MapCandidate{T, F} 
+    MapCandidate(mutations, mapothers::F)
+
+Return a callable struct which maps `AbstractCandidate`s to new `AbstractCandidate`s through `mutations` which is a tuple of 
+`AbstractMutation`s or `AbstractCrossover`s. 
+
+Basic purpose is to combine multiple mutations operating on different types into a single mapping function which creates new 
+candidates from existing candidates. 
+
+When called as a function with an `AbstractCandidate c` as input, it will map fields `f` in `c` (recursively through any 
+wrapped candidates of `c`) satisfying `typeof(f) <: MT` through `m(f)` where `m <: AbstractMutation{MT}` in `mutations`.
+
+All other fields are mapped through the function `mapothers` (default `deepcopy`).
+
+For instance, if `e = MapCandidate(m1, m2)` where `m1 isa AbstractMutation{CompGraph}` and `m2 isa 
+AbstractMutation{FluxOptimizer}` then `e(c)` where `c` is a `CandidateOptModel` will create a new `CandidateOptModel`where 
+the new model is `m1(model(c))` and the new optimizer is `m2(opt(c))`  
+
+When called as a function with a tuple of two `AbstractCandidate`s as input it will similarly apply crossover between the 
+two candidates, returning two new candidates.
+
+Note that all `mutations` must be either `AbstractMutation`s or `AbstractCrossover`s as the resulting function either works
+on a single candidate or a pair of candidates.
+
+Furthermore, all `mutations` must operate on different types, i.e there must not be two `AbstractMutation{T}` (or `
+AbstractCrossover{T}`) for any type `T`.
+
+Intended use is together with [`EvolveCandidates`](@ref).
+"""
+struct MapCandidate{T, F}
+    mutations::T
+    mapothers::F
+end
+
+MapCandidate(mutations::AbstractMutation...; mapothers=deepcopy) = MapCandidate(mutations, mapothers)
+MapCandidate(mutation::AbstractMutation, mapothers) = MapCandidate(tuple(mutation), mapothers)
+
+function MapCandidate(crossovers::NTuple{N, AbstractCrossover}, mapothers::F) where {N, F} 
+    _validate_mutations(crossovers)
+    MapCandidate{typeof(crossovers), F}(crossovers, mapothers)
+end
+function MapCandidate(mutations::NTuple{N, AbstractMutation}, mapothers) where N
+    _validate_mutations(mutations)
+    mapc = foldr(mutations; init=mapothers) do match, nomatch
+        MapType(match, nomatch)
+    end
+    MapCandidate(mapc, mapothers)
+end
+
+function _validate_mutations(mutations)
+    seentypes = Set()
+    iscrossover = first(mutations) isa AbstractCrossover
+    for m in mutations
+        _validate_unique_type!(seentypes, m)
+        (iscrossover == (m isa AbstractCrossover)) || throw(ArgumentError("Can't mix crossover and mutation in same function! Use different functions instead"))
+    end
+end
+
+function _validate_unique_type!(seen, ::AbstractMutation{T}) where T
+    T in seen && throw(ArgumentError("Got mutation of duplicate type $(T)!"))
+    push!(seen, T)
+end
+
+(e::MapCandidate{<:MapType})(c) = newcand(c, e.mutations)
+
+function (e::MapCandidate{<:NTuple{N, AbstractCrossover}, F})((c1,c2)) where {N,F}
+    # Bleh, CGA to avoid a closure here
+    mapc1, mapc2 = let c1 = c1, c2 = c2
+        # Whats happening here is probably far from obvious, so here goes:
+        # MapType returns a Tuple of MapTypes when called with an AbstractCrossover
+        # This is because we create new models, optimisers etc from from both c1 
+        # and c2 simultaneously, but when creating candidates we create one new 
+        # candidate from another new candidate. 
+        foldr(e.mutations; init=(e.mapothers, e.mapothers)) do match, nomatch
+            # nomatch is always a Tuple while match is always an AbstractCrossover
+            MapType(match, (c1,c2), nomatch)
+        end
+    end
+
+    return newcand(c1, mapc1), newcand(c2, mapc2)
 end
 
 """
@@ -340,6 +448,7 @@ Intended to be used with `AfterEvolution` to create things like global learning 
 See `https://github.com/DrChainsaw/NaiveGAExperiments/blob/master/lamarckism/experiments.ipynb` for some hints as to why this might be needed.
 """
 function global_optimizer_mutation(pop, optfun)
-    om = optfun(pop)
-    map(c -> newcand(c, optmap(om)), pop)
+    mt = MapType{FluxOptimizer}(optfun(pop), identity)
+    mc = MapCandidate(mt, identity)
+    map(mc, pop)
 end

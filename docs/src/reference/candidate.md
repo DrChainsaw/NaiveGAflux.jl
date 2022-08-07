@@ -3,8 +3,9 @@
 ```@docs
 CandidateModel 
 CandidateOptModel
+CandidateDataIterMap
 FittedCandidate
-evolvemodel
+MapCandidate
 Population
 model
 opt

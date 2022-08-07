@@ -25,8 +25,8 @@ end
 ```
 
 """
-struct RepeatPartitionIterator{T, VS}
-    base::Iterators.Stateful{T, VS}
+struct RepeatPartitionIterator{I <: Iterators.Stateful}
+    base::I
     ntake::Int
 end
 RepeatPartitionIterator(base, nrep) = RepeatPartitionIterator(Iterators.Stateful(base), nrep)
@@ -41,16 +41,16 @@ function Base.iterate(itr::RepeatPartitionIterator, reset=true)
 end
 
 Base.length(itr::RepeatPartitionIterator) = cld(length(itr.base), itr.ntake)
-Base.eltype(itr::RepeatPartitionIterator) = eltype(itr.base)
-Base.size(itr::RepeatPartitionIterator) = size(itr.base.itr)
+Base.eltype(::Type{RepeatPartitionIterator{I}}) where {I} = eltype(I)
+Base.size(itr::RepeatPartitionIterator) = tuple(length(itr))
 
 
-Base.IteratorSize(itr::RepeatPartitionIterator) = Base.IteratorSize(itr.base.itr)
-Base.IteratorEltype(itr::RepeatPartitionIterator) = Base.IteratorEltype(itr.base.itr)
+Base.IteratorSize(::Type{RepeatPartitionIterator{I}}) where {I} = Base.IteratorSize(I)
+Base.IteratorEltype(::Type{RepeatPartitionIterator{I}}) where {I} = Base.IteratorEltype(I)
 
 
-struct RepeatStatefulIterator{T, VS}
-    base::Iterators.Stateful{T, VS}
+struct RepeatStatefulIterator{I <: Iterators.Stateful, VS}
+    base::I
     start::VS
     taken::Int
 end
@@ -66,21 +66,21 @@ function Base.iterate(itr::RepeatStatefulIterator, reset=true)
 end
 
 Base.length(itr::RepeatStatefulIterator) = length(itr.base.itr) - itr.taken
-Base.eltype(itr::RepeatStatefulIterator) = eltype(itr.base)
+Base.eltype(::Type{RepeatStatefulIterator{I,VS}}) where {I,VS} = eltype(I)
 Base.size(itr::RepeatStatefulIterator) = size(itr.base.itr)
 
-Base.IteratorSize(::Type{RepeatStatefulIterator{T,VS}}) where {T, VS} = Base.IteratorSize(Iterators.Stateful{T,VS})
-Base.IteratorEltype(::Type{RepeatStatefulIterator{T,VS}}) where {T, VS} = Base.IteratorEltype(Iterators.Stateful{T,VS})
+Base.IteratorSize(::Type{RepeatStatefulIterator{I,VS}}) where {I,VS} = Base.IteratorSize(I)
+Base.IteratorEltype(::Type{RepeatStatefulIterator{I,VS}}) where {I,VS} = Base.IteratorEltype(I)
 
 """
     StatefulGenerationIter{T, VS}
 
 Uses a `RepeatPartitionIterator` to ensure that the same iterator is returned for the same generation number.
 """
-struct StatefulGenerationIter{I, T, VS}
-    currgen::Ref{Int}
-    curriter::Ref{I}
-    iter::RepeatPartitionIterator{T, VS}
+struct StatefulGenerationIter{I, R}
+    currgen::Base.RefValue{Int}
+    curriter::Base.RefValue{I}
+    iter::RepeatPartitionIterator{R}
 end
 # TODO : This is a bit of cludge-on-cludge. Try to refactor someday to a more straighforward design, perhaps use LearnBase.getobs
 StatefulGenerationIter(iter::RepeatPartitionIterator, gen=0) = StatefulGenerationIter(Ref(gen), Ref(first(iterate(iter))), iter)
@@ -108,7 +108,7 @@ Calls `Random.seed!(rng, seed)` every iteration so that wrapped iterators which 
 
 Useful in conjunction with [`RepeatPartitionIterator`](@ref) and [`BatchIterator`](@ref) and/or random data augmentation so that all candidates in a generation are trained with identical data.
 """
-struct SeedIterator{R <: AbstractRNG,T}
+struct SeedIterator{R <: AbstractRNG, T}
     rng::R
     seed::UInt32
     base::T
@@ -129,7 +129,7 @@ function Base.iterate(itr::SeedIterator, state)
 end
 
 Base.length(itr::SeedIterator) = length(itr.base)
-Base.eltype(itr::SeedIterator) = eltype(itr.base)
+Base.eltype(::Type{SeedIterator{R,T}}) where {R,T} = eltype(T)
 Base.size(itr::SeedIterator) = size(itr.base)
 
 Base.IteratorSize(::Type{SeedIterator{R, T}}) where {R,T}= Base.IteratorSize(T)
@@ -140,7 +140,7 @@ Base.IteratorEltype(::Type{SeedIterator{R, T}}) where {R,T} = Base.IteratorEltyp
 
 Return an iterator which sends values from `itr` to the GPU.
 """
-GpuIterator(itr) = Iterators.map(gpuitr, itr)
+GpuIterator(itr) = Iterators.map(gpuitr, itr) # Iterator.map can't infer eltypes, but we can't either as we don't know for sure what Flux.gpu will do
 gpuitr(a) = Flux.gpu(a)
 gpuitr(a::SubArray) = gpuitr(collect(a))
 gpuitr(a::Tuple) = gpuitr.(a)
@@ -163,6 +163,10 @@ struct BatchIterator{R, D}
     batchsize::Int
     rng::R
     data::D
+    function BatchIterator(nobs::Int, batchsize::Int, rng::R, data::D) where {R,D}
+        batchsize > 0 || throw(ArgumentError("Batch size must be > 0. Got $(batchsize)!"))
+        new{R,D}(nobs, batchsize, rng, data)
+    end
 end
 BatchIterator(data::Union{AbstractArray, Singleton}, bs::Int; kwargs...) = BatchIterator(size(data)[end], bs, data; kwargs...)
 function BatchIterator(data::Tuple, bs; kwargs...) 
@@ -175,19 +179,20 @@ end
 shufflerng(b::Bool) = b ? rng_default : NoShuffle()
 shufflerng(rng) = rng
 
-ndata(itr::BatchIterator) = ndata(itr.data)
-ndata(data::Tuple) = length(data)
-ndata(data::AbstractArray) = 1 
-
 function Base.iterate(itr::BatchIterator, inds = shuffle(itr.rng, 1:itr.nobs))
     isempty(inds) && return nothing
     return batch(itr.data, @view(inds[1:min(end, itr.batchsize)])), @view(inds[itr.batchsize+1:end])
 end
 
 Base.length(itr::BatchIterator) = cld(itr.nobs, itr.batchsize)
+Base.eltype(::Type{BatchIterator{R,D}}) where {R,D} = D
+Base.eltype(::Type{BatchIterator{R,Singleton{D}}}) where {R,D} = D
+Base.eltype(::Type{BatchIterator{R, D}}) where {R <: AbstractRNG, D <: AbstractRange} = Array{eltype(D), ndims(D)}
 Base.size(itr::BatchIterator) = tuple(length(itr))
 
-Base.IteratorEltype(::Type{BatchIterator{R,D}}) where {R, D} = Base.IteratorEltype(D)
+Base.IteratorEltype(::Type{BatchIterator{R,D}}) where {R,D} = Base.IteratorEltype(D)
+Base.IteratorEltype(::Type{BatchIterator{R,Singleton{D}}}) where {R,D} = Base.IteratorEltype(D)
+
 
 batch(s::Singleton, inds) = batch(val(s), inds)
 batch(b::Tuple, inds) = batch.(b, Ref(inds))
@@ -227,6 +232,7 @@ struct TimedIteratorStop
 end
 
 Base.length(itr::TimedIterator) = length(itr.base)
+Base.eltype(::Type{TimedIterator{F,A,I}}) where {F,A,I} = eltype(I)
 Base.size(itr::TimedIterator) = size(itr.base)
 
 Base.IteratorSize(::Type{TimedIterator{F,A,I}}) where {F,A,I} = Base.IteratorSize(I)
@@ -260,3 +266,112 @@ end
 
 # itergeneration on timeoutaction just in case user e.g. wants to deepcopy it to avoid some shared state.
 itergeneration(itr::TimedIterator, gen) = TimedIterator(itr.timelimit, itr.patience, itergeneration(itr.timeoutaction, gen), itr.accumulate_timeouts, itergeneration(itr.base, gen))
+
+setbatchsize(itr::TimedIterator, batchsize) = TimedIterator(itr.timelimit, itr.patience, itr.timeoutaction, itr.accumulate_timeouts, setbatchsize(itr.base, batchsize))
+
+"""
+    ReBatchingIterator{I}
+    ReBatchingIterator(base, batchsize)
+
+Return and iterator which iterates `batchsize` samples from `base` where `base` is in itself assumed to provide batches of another batchsize.
+
+Reason for this convoluted construct is to provide a way to use different batch sizes for different models while still allowing all models to see the same samples (including data augmentation) in the same order. As we don't want to make assumption about what `base` is, this iterator is used by default. 
+    
+Implement `setbatchsize(itr::T, batchsize::Int)` for iterator types `T` where it is possible to set the batch size (or create a new iterator).
+# Examples
+```jldoctest
+julia> using NaiveGAflux
+
+julia> itr = ReBatchingIterator(BatchIterator(1:20, 8), 4); # Batch size 8 rebatched to 4
+
+julia> collect(itr)
+5-element Vector{Array{Int64}}:
+ [1, 2, 3, 4]
+ [5, 6, 7, 8]
+ [9, 10, 11, 12]
+ [13, 14, 15, 16]
+ [17, 18, 19, 20]
+
+julia> itr = ReBatchingIterator(BatchIterator((1:20, 21:40), 4), 8); # Batch size 4 rebatched to 8
+
+julia> map(x -> Pair(x...), itr) # Pair to make results a bit easier on the eyes
+3-element Vector{Pair{SubArray{Int64, 1, Vector{Int64}, Tuple{UnitRange{Int64}}, true}, SubArray{Int64, 1, Vector{Int64}, Tuple{UnitRange{Int64}}, true}}}:
+        [1, 2, 3, 4, 5, 6, 7, 8] => [21, 22, 23, 24, 25, 26, 27, 28]
+ [9, 10, 11, 12, 13, 14, 15, 16] => [29, 30, 31, 32, 33, 34, 35, 36]
+                [17, 18, 19, 20] => [37, 38, 39, 40]
+"""
+struct ReBatchingIterator{I}
+    batchsize::Int
+    base::I
+
+    function ReBatchingIterator(batchsize::Int, base::I) where I
+        batchsize > 0 || throw(ArgumentError("Batch size must be > 0. Got $(batchsize)!"))
+        new{I}(batchsize, base)
+    end
+end
+function ReBatchingIterator(base, batchsize::Int) 
+    ReBatchingIterator(batchsize, base)
+end
+
+"""
+    setbatchsize(itr, batchsize) 
+
+Return an iterator which iterates over the same data in the same order as `itr` with batch size `batchsize`.
+
+Defaults to [`ReBatchingIterator`](@ref) for iterators which don't have a specialized method. 
+"""
+setbatchsize(itr, batchsize) = ReBatchingIterator(itr, batchsize)
+
+Base.eltype(::Type{ReBatchingIterator{I}}) where I = _rangetoarr(eltype(I))
+
+# We can only know the size if the underlying iterator does not produce partial batches (i.e smaller than the batch size)
+Base.IteratorSize(::Type{ReBatchingIterator{I}}) where I = Base.SizeUnknown()
+Base.IteratorEltype(::Type{ReBatchingIterator{I}}) where I = Base.IteratorEltype(I) 
+
+_rangetoarr(a) = a
+_rangetoarr(t::Type{<:Tuple}) = Tuple{map(_rangetoarr, t.parameters)...}
+_rangetoarr(a::Type{<:Array}) = a
+_rangetoarr(a::Type{<:CUDA.CuArray}) = a
+_rangetoarr(::Type{<:AbstractArray{T,N}}) where {T,N} = Array{T,N}
+
+function Base.iterate(itr::ReBatchingIterator)
+    innerval, innerstate = IterTools.@ifsomething iterate(itr.base)
+    innerval, innerstate = _concat_inner(itr.base, itr.batchsize, _collectbatch(innerval), innerstate)
+    bitr = BatchIterator(innerval, itr.batchsize)
+    outerval, outerstate = IterTools.@ifsomething iterate(bitr)
+    return outerval, (bitr, outerstate, innerstate)
+end
+
+
+function Base.iterate(itr::ReBatchingIterator, (bitr, outerstate, innerstate))
+    outervalstate = iterate(bitr, outerstate)
+    if outervalstate === nothing
+        innerval, innerstate = IterTools.@ifsomething iterate(itr.base, innerstate)
+        innerval, innerstate = _concat_inner(itr.base, itr.batchsize, _collectbatch(innerval), innerstate)
+        bitr = BatchIterator(innerval, itr.batchsize)
+        outerval, outerstate = IterTools.@ifsomething iterate(bitr)
+        return outerval, (bitr, outerstate, innerstate)
+    end
+    outerval, outerstate = outervalstate
+    return outerval, (bitr, outerstate, innerstate)
+end
+
+function _concat_inner(inneritr, batchsize, innerval, innerstate)
+    while _innerbatchsize(innerval) < batchsize
+        innervalstate = iterate(inneritr, innerstate)
+        innervalstate === nothing && break
+        innerval, innerstate = _catbatch(innerval, first(innervalstate)), last(innervalstate)
+    end
+    return innerval, innerstate
+end
+
+_catbatch(b1::Tuple, b2::Tuple) = _catbatch.(b1, b2)
+_catbatch(b1::AbstractArray{T, N}, b2::AbstractArray{T, N}) where {T,N} = cat(b1, b2; dims=ndims(b1))
+_catbatch(::T1, ::T2) where {T1, T2}= throw(DimensionMismatch("Tried to cat incompatible types when rebatching: $T1 vs $T2"))
+
+_collectbatch(b::Tuple) = _collectbatch.(b)
+_collectbatch(b::AbstractRange) = collect(b)
+_collectbatch(b) = b
+
+_innerbatchsize(t::Tuple) = _innerbatchsize(first(t))
+_innerbatchsize(a::AbstractArray) = size(a, ndims(a))

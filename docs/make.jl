@@ -1,5 +1,7 @@
 using Documenter, Literate, NaiveGAflux, NaiveGAflux.AutoFlux, NaiveGAflux.AutoFlux.ImageClassification
 
+import NaiveGAflux: AbstractIteratorMap, maptrain, mapvalidation, limit_maxbatchsize
+
 const nndir = joinpath(dirname(pathof(NaiveGAflux)), "..")
 
 function literate_example(sourcefile; rootdir=nndir, sourcedir = "test/examples", destdir="docs/src/examples")
@@ -16,6 +18,7 @@ crossover_ex = literate_example("crossover.jl")
 fitness_ex = literate_example("fitness.jl")
 candidate_ex = literate_example("candidate.jl")
 evolution_ex = literate_example("evolution.jl")
+iteratormaps_ex = literate_example("iteratormaps.jl")
 iterators_ex = literate_example("iterators.jl")
 
 makedocs(   sitename="NaiveGAflux",
@@ -37,6 +40,7 @@ makedocs(   sitename="NaiveGAflux",
                     fitness_ex,
                     candidate_ex,
                     evolution_ex,
+                    iteratormaps_ex,
                     iterators_ex
                 ],
                 "API Reference" => [
@@ -46,6 +50,8 @@ makedocs(   sitename="NaiveGAflux",
                     "reference/fitness.md",
                     "reference/candidate.md",
                     "reference/evolution.md",
+                    "reference/batchsize.md",
+                    "reference/iteratormaps.md",
                     "reference/iterators.md",
                     "reference/utils.md",
                 ]

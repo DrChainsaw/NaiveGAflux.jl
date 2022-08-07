@@ -39,7 +39,7 @@ datasetvalidate = [(randn(ninputs, batchsize), onehot(rand(1:nlabels, batchsize)
 fitnessfunction = TrainThenFitness(;
     dataiter = datasettrain,
     defaultloss = Flux.logitcrossentropy, # Will be used if not provided by the candidate
-    defaultopt = ADAM(), # Same as above. State is wiped after training to prevent memory leaks
+    defaultopt = Adam(), # Same as above. State is wiped after training to prevent memory leaks
     fitstrat = AccuracyFitness(datasetvalidate) # This is what creates our fitness value after training
 )
 
@@ -57,11 +57,15 @@ addlayer = mp(AddVertexMutation(layerspace), 0.4)
 remlayer = mp(RemoveVertexMutation(), 0.4)
 mutation = MutationChain(changesize, remlayer, addlayer)
 
+
 # Selection: The two best models are not changed, then create three new models by 
 # applying the mutations above to three of the five models with higher fitness 
 # giving higher probability of being selected. 
+#
+# [`MapCandidate`](@ref) helps with the plumbing of creating new `CandidateModel`s
+#  where `mutation` is applied to create a new model. 
 elites = EliteSelection(2)
-mutate = SusSelection(3, EvolveCandidates(evolvemodel(mutation)))
+mutate = SusSelection(3, EvolveCandidates(MapCandidate(mutation)))
 selection = CombinedEvolution(elites, mutate)
 
 # #### Step 4: Run evolution

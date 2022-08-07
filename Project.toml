@@ -1,7 +1,7 @@
 name = "NaiveGAflux"
 uuid = "81ede08e-ab29-11e9-16d3-79edd30a1d76"
 authors = ["DrChainsaw"]
-version = "0.9.1"
+version = "0.10.0"
 
 [deps]
 CUDA = "052768ef-5323-5732-b1bb-66c8b64840ba"
@@ -23,12 +23,12 @@ Test = "8dfed614-e22c-5e08-85e1-65c5234f0b40"
 
 [compat]
 CUDA = "3"
-Flux = "0.13"
+Flux = "0.13.4"
 Functors = "0.2"
 IterTools = "1"
 MemPool = "0.3"
 NaiveNASflux = "2"
-NaiveNASlib = "2"
+NaiveNASlib = "2.0.6"
 Reexport = "0.2.0, 1"
 Setfield = "0.3.4, 0.5, 0.6, 0.7, 0.8"
-julia = "1"
+julia = "1.7"

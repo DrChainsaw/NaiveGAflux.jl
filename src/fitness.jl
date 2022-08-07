@@ -115,15 +115,34 @@ struct AccuracyFitness{D} <: AbstractFitness
     dataset::D
 end
 function _fitness(s::AccuracyFitness, c::AbstractCandidate)
-    acc,cnt = 0, 0
+
     m = model(c)
-    for (x,y) in s.dataset
-        correct = Flux.onecold(cpu(m(x))) .== Flux.onecold(cpu(y))
+    ninput = ninputs(m)
+
+    iter = _fitnessiterator(validationiterator, c, s.dataset)
+
+    acc,cnt = 0.0, 0
+    for (data) in iter
+        xs = data[1:ninput]
+        ys = data[ninput+1:end]
+
+        correct = Flux.onecold(cpu(m(xs...))) .== Flux.onecold(cpu(ys)...)
         acc += sum(correct)
         cnt += length(correct)
     end
-    return acc / cnt
+    return cnt == 0 ? acc : acc / cnt
 end
+
+function _fitnessiterator(f, c::AbstractCandidate, iter)
+    geniter = itergeneration(iter, generation(c; default=0))
+    canditer = f(c; default=geniter)
+    matchdatatype(params(c), canditer)
+end
+
+matchdatatype(ps::Flux.Params, iter) = isempty(ps) ? iter : matchdatatype(first(ps), iter)
+
+matchdatatype(::CUDA.CuArray, iter) = GpuIterator(iter)
+matchdatatype(::AbstractArray, iter) = iter
 
 """
     TrainThenFitness{I,L,O,F} <: AbstractFitness
@@ -158,7 +177,6 @@ function _fitness(s::TrainThenFitness, c::AbstractCandidate)
     m = model(c)
     o = opt(c; default=s.defaultopt)
     ninput = ninputs(m)
-    gen = generation(c; default=0)
 
     valid = let valid = true
         nanguard = function(data...)
@@ -178,7 +196,8 @@ function _fitness(s::TrainThenFitness, c::AbstractCandidate)
             end
             return l
         end
-        iter = itergeneration(s.dataiter, gen)
+        iter = _fitnessiterator(trainiterator, c, s.dataiter)
+    
         Flux.train!(nanguard, params(m), iter, o)
         cleanopt!(o)
         valid
@@ -197,6 +216,7 @@ function checkvalid(ifnot, x)
     end
     return true
 end
+
 
 """
     TrainAccuracyCandidate{C} <: AbstractWrappingCandidate
@@ -217,6 +237,8 @@ function lossfun(c::TrainAccuracyCandidate; default=nothing)
         return actualloss(ŷ, y)
     end
 end
+
+@functor TrainAccuracyCandidate (c,)
 
 """
     TrainAccuracyFitnessInner <: AbstractFitness

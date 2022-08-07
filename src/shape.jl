@@ -1,7 +1,6 @@
 # General disclaimer: This whole little mini-lib feels like a poor mans implementation of basic symbolic arithmetics and therefore it is hidden in here so I can just delete it silently when I finally realize how this should really be handled.
 # It probably looks like it is capable of much more than it actually can do so if you stumble upon this, use with care. Any bug report are of course still extremely welcome, especially the kind which would motivate scrapping the whole thing in favour of a real solution.
 
-
 """
     ΔShape{N,M}
 
@@ -94,10 +93,11 @@ end
 
 fshape(::Tuple{}, shape) = shape
 fshape(s::Tuple{ΔShape{N}, Vararg{ΔShape}}, shape::NTuple{N, Integer}) where N = foldr(fshape, reverse(s); init=shape)
+fshape(s::AbstractVector{<:ΔShape}, shape::NTuple{N, Integer}) where N = foldr(fshape, reverse(s); init=shape)
 
 """
     revert(s::ΔShape)
-    revert(s::Tuple{Vararg{ΔShape}})
+    revert(s::AbstractVector{<:ΔShape}) 
 
 Return a `ΔShape` or tuple of `ΔShape`s which reverts the shape change of `s`, i.e `fshape((s..., revert(s)...), x) == x`.
 
@@ -109,6 +109,7 @@ revert(s::ShapeAdd) = ShapeAdd(.-shapeΔ(s))
 revert(s::ShapeMul) = ShapeDiv(shapeΔ(s))
 revert(s::ShapeDiv) = ShapeMul(shapeΔ(s))
 revert(s::Tuple{Vararg{ΔShape}}) = reverse(revert.(s))
+revert(s::AbstractVector{<:ΔShape}) = reverse(revert.(s))
 
 """
     combine(s1::ΔShape,s2::ΔShape)
@@ -116,8 +117,10 @@ revert(s::Tuple{Vararg{ΔShape}}) = reverse(revert.(s))
 Return a `ΔShape` or tuple of `ΔShape`s which combines `s1` and `s2`, i.e `fshape((s1,s2), x) == fshape(combine(s1,s2), x)`
 """
 combine(s1::ΔShape,s2::ΔShape) = s1,s2
-combine(s1::Tuple{Vararg{ΔShape}}, s2::ΔShape) = (s1[1:end-1]..., combine(last(s1), s2)...)
-combine(s1::ΔShape, s2::Tuple{Vararg{ΔShape}}) = (combine(s1, first(s2))..., s2[2:end]...)
+combine(s1::Tuple{Vararg{ΔShape}}, s2::ΔShape) = vcat(collect(s1[1:end-1]), combine(last(s1), s2)...)
+combine(s1::ΔShape, s2::Tuple{Vararg{ΔShape}}) = vcat(combine(s1, first(s2))..., collect(s2[2:end]))
+combine(s1::AbstractVector{<:ΔShape}, s2::ΔShape) = vcat(s1[1:end-1], combine(last(s1), s2)...)
+combine(s1::ΔShape, s2::AbstractVector{<:ΔShape}) = vcat(combine(s1, first(s2))..., s2[2:end])
 combine(s1::ShapeAdd{N}, s2::ShapeAdd{N}) where N = tuple(ShapeAdd(shapeΔ(s1) .+ shapeΔ(s2)))
 combine(s1::T, s2::T) where T <: Union{ShapeDiv{N}, ShapeMul{N}} where N = tuple(T(shapeΔ(s1) .* shapeΔ(s2)))
 # Note: Combining ShapeDiv and ShapeMul not generally safe due to rounding when dividing
@@ -145,11 +148,12 @@ swapΔshape(s1::ShapeDiv{N}, s2::ShapeAdd{N}) where N = ShapeAdd(shapeΔ(s1) .* 
     filter_noops(s::ΔShape)
     filter_noops(s::ΔShape...)
     filter_noops(s::Tuple{Vararg{ΔShape}})
+    filter_noops(s::AbstractVector{<:ΔShape}) 
     filter_noops(s::ΔShape)
 
 Return a tuple of `ΔShape`s where all identity mappings (e.g things like `ShapeAdd(0)`) are removed.
 
-If called with a single identity mapping and empty tuple is returned.
+If called with a single identity mapping an empty tuple is returned.
 """
 filter_noops(s::ΔShape) = tuple(s)
 filter_noops(s::ΔShape...) = filter_noops(s)
@@ -158,7 +162,16 @@ filter_noops(s::Union{ShapeMul, ShapeDiv}) = all(x -> x == 1, shapeΔ(s)) ? tupl
 filter_noops(s::ShapeAdd) = all(x -> x == 0, shapeΔ(s)) ? tuple() : tuple(s)
 
 """
-    orderΔshapes(s::Tuple{Vararg{ΔShape}}; order=allΔshapetypes(s))
+    filter_noops(s::AbstractVector{<:ΔShape}) 
+
+Return an array of `ΔShape`s where all identity mappings (e.g things like `ShapeAdd(0)`) are removed.
+
+If called with a single identity mapping an empty array is returned.
+"""
+filter_noops(s::AbstractVector{<:ΔShape}) = mapreduce(filter_noops, (s1,s2) -> vcat(s1...,s2...), s; init=similar(s, 0))
+
+"""
+    orderΔshapes(s::AbstractVector{<:ΔShape}; order=allΔshapetypes(s))
 
 Return a tuple of `ΔShape`s which has the same shape mapping as `s` (i.e `fshape(s, x) == fshape(orderΔshapes(s), x)`) but where `ΔShape`s to the extent possible are ordered according to `order`.
 
@@ -166,67 +179,72 @@ Useful to determine whether two arbitrary sequences of `ΔShape`s result in the 
 
 Warning: Sort is not stable due to lazy implementation, i.e `orderΔshapes(orderΔshapes(s; order=someorder);order=someorder)` is not guaranteed to return the same thing as `orderΔshapes(s; order=someorder)`.
 """
-function orderΔshapes(s::Tuple{Vararg{ΔShape}}; order=allΔshapetypes(s))
+orderΔshapes(s::AbstractVector{<:ΔShape}; order=allΔshapetypes(s)) = orderΔshapes!(copy(s); order)
+function orderΔshapes!(s::AbstractVector{<:ΔShape}; order=allΔshapetypes(s))
     # Yeah, this is bubble sort :/ Given the constraint that ΔShapes can't always swap places along with the fact that swapping generally changes the swapped elements I couldn't think up and other sorting algo that works
-    sprev = tuple()
-    snew = s
     nlook = length(s)
-    # I'm a little worried that lack of stability guarantee will cause this to loop forever, but I have not been able to trigger it despite trying.
-    while sprev != snew
-        sprev = snew
+
+    atleastoneswap = true
+
+    while atleastoneswap
         nlook -= 1
+        atleastoneswap = false
         for i in 1:nlook
-            s1,s2 = snew[i], snew[i+1]
+            s1,s2 = s[i], s[i+1]
             # Check if s1 shall be before s2 in the ordering
             # Note: We need to "bubble" on equality because s1 might be prevented from bubbling up while s2 isn't.
             if findfirst(st -> s1 isa st, order) >= findfirst(st -> s2 isa st, order)
-                snew = (snew[1:i-1]..., swapΔshape(s1,s2)..., snew[i+2:end]...)
+                s1n, s2n = swapΔshape(s1, s2)
+                atleastoneswap |= s1n != s1 
+                s[i] = s1n
+                s[i+1] = s2n
             end
         end
     end
-    return snew
+    return s
 end
 
-allΔshapetypes(s::T) where T <: ΔShape = T
+allΔshapetypes(::T) where T <: ΔShape = T
 allΔshapetypes(s::Tuple{Vararg{ΔShape}}) = unique(allΔshapetypes.(s))
+allΔshapetypes(s::AbstractVector{<:ΔShape}) = unique(allΔshapetypes.(s))
 
 """
     squashshapes(s::ΔShape...; order=allΔshapetypes(s))
-    squashshapes(s::Tuple{Vararg{ΔShape}}; order=allΔshapetypes(s))
+    squashshapes(s::AbstractVector{<:ΔShape}; order=allΔshapetypes(s))
 
-Return a tuple of `ΔShape`s with the same shape mapping as `s` (i.e `fshape(s, x) == fshape(squashshapes(s), x)`) with as few `ΔShape`s as possible for the given `order`.
+Return an array of `ΔShape`s with the same shape mapping as `s` (i.e `fshape(s, x) == fshape(squashshapes(s), x)`) with as few `ΔShape`s as possible for the given `order`.
 
 Useful to determine whether two arbitrary sequences of `ΔShape`s result in the same shape mapping for all shapes.
 """
-squashshapes(s::Tuple{}; order=nothing) = s
-squashshapes(s::ΔShape; order=nothing) = tuple(s)
-squashshapes(s::ΔShape...; order=allΔshapetypes(s)) = squashshapes(s; order = order)
-squashshapes(s::Tuple{Vararg{ΔShape}}; order=allΔshapetypes(s)) = _squashshapes(orderΔshapes(s; order=order))
+squashshapes(s::ΔShape; kwargs...) = [s]
+squashshapes(s::ΔShape...; order=allΔshapetypes(s)) = squashshapes(s; order)
+squashshapes(s::Tuple{ΔShape, Vararg{ΔShape}}; order=allΔshapetypes(s)) = squashshapes(collect(s); order)
+squashshapes(s::AbstractVector{<:ΔShape}; order=allΔshapetypes(s)) = _squashshapes(orderΔshapes(s; order=order))
 
-_squashshapes(s::ΔShape) = tuple(s)
-_squashshapes(s::Tuple{ΔShape}) = s
-function _squashshapes(s::Tuple{Vararg{ΔShape}})
-    squashed = filter_noops(foldr(combine, s)...)
+_squashshapes(s::ΔShape) = [s]
+function _squashshapes(s::AbstractVector{<:ΔShape})
+    isempty(s) && return s
+    squashed = collect(filter_noops(foldr(combine, s)))
     squashed == s && return s
-    isempty(squashed) && return squashed
+    isempty(squashed) && return similar(s, 0)
     return _squashshapes(squashed)
 end
 
 Δshapediff(s1,s2) = filter_noops(squashshapes(_Δshapediff(s1,s2)))
-_Δshapediff(s1::ΔShape{N}, s2::ΔShape{M}) where {N,M} = N == M ? (revert(s2), s1) : (s1,s2)
-_Δshapediff(s1::ΔShape{N}, s2::ΔShape{N}) where N = s1 == s2 ? tuple() : (revert(s2), s1)
-function _Δshapediff(s1::Tuple{Vararg{ΔShape}}, s2::Tuple{Vararg{ΔShape}})
+_Δshapediff(s1::ΔShape{N}, s2::ΔShape{M}) where {N,M} = N == M ? [revert(s2), s1] : [s1,s2]
+_Δshapediff(s1::ΔShape{N}, s2::ΔShape{N}) where N = s1 == s2 ? typeof(s1)[] : [revert(s2), s1]
+function _Δshapediff(s1::AbstractVector{<:ΔShape}, s2::AbstractVector{<:ΔShape})
     # Pretty crappy heurisic tbh, but I couldn't think of anything better:
     # Step 1: Remove all identical ΔShapes
     # Step 2: Squash shapes and try again
     # Step 3: revert s2 and concat s1
 
-    firstdiff = findfirst(((ss1,ss2)::Tuple) -> ss1 != ss2, collect(zip(s1,s2)))
+    firstdiff = findfirst(((ss1,ss2),) -> ss1 != ss2, collect(zip(s1,s2)))
     firstdiff = isnothing(firstdiff) ? min(length(s1), length(s2))+1 : firstdiff
     sd1 = s1[firstdiff:end]
     sd2 = s2[firstdiff:end]
 
-    isempty(sd1) && isempty(sd2) && return tuple()
+    isempty(sd1) && isempty(sd2) && return similar(s1, 0)
 
     ts1 = allΔshapetypes(sd1)
     ts2 = allΔshapetypes(sd2)
@@ -237,7 +255,7 @@ function _Δshapediff(s1::Tuple{Vararg{ΔShape}}, s2::Tuple{Vararg{ΔShape}})
     so2 = squashshapes(sd2; order=vcat(front, back))
 
     (so1 != s1 || so2 != s2) && return _Δshapediff(so1, so2)
-    return (revert(so2)..., so1...)
+    return vcat(revert(so2), so1)
 end
 
 """
@@ -259,29 +277,29 @@ struct ShapeTrace{T,V1,V2} <: AbstractShapeTrace
     dest::V2
     trace::T
 end
-ShapeTrace(v) = ShapeTrace(v, v, Δshapes(v))
+ShapeTrace(v) = ShapeTrace(v, v, collect(Δshapes(v)))
 
 allΔshapetypes(t::ShapeTrace) = allΔshapetypes(t.trace)
-allΔshapetypes(t::Tuple) = unique(mapreduce(allΔshapetypes, vcat, t))
+allΔshapetypes(t::Union{Tuple, <:AbstractArray}) = unique(mapreduce(allΔshapetypes, vcat, t))
 
 squashshapes(t::ShapeTrace; order=allΔshapetypes(t)) = squashshapes(t.trace;order=order)
 # TODO: One can probably do better here when parallel paths can't be squashed
 # Now the first instance of such a path will basically prevent squashing of any subsequent paths, even if they are not parallel
-squashshapes(t::Tuple; order=allΔshapetypes(t)) = mapfoldr(tt -> squashshapes(tt;order=order), (t1,t2) -> squashshapes(t1,t2; order=order), t)
-function squashshapes(t::Tuple{Vararg{ShapeTrace}}; order=allΔshapetypes(t))
+squashshapes(t::AbstractArray; order=allΔshapetypes(t)) = mapfoldr(tt -> squashshapes(tt;order=order), (t1,t2) -> squashshapes(t1,t2; order=order), t)
+function squashshapes(t::AbstractArray{<:ShapeTrace}; order=allΔshapetypes(t))
      squashed = unique(map(tt -> squashshapes(tt;order=order), t))
-     length(squashed) == 1 && return first(squashed)
-     return Tuple(squashed) # Danger danger! Graph probably only works for one single input shape
+     length(squashed) == 1 && return only(squashed)
+     return squashed # Danger danger! Graph probably only works for one single input shape
 end
 # This is the reason for "TODO: One can probably do better here when parallel paths can't be squashed" above
-squashshapes(s1, s2; order=missing) = s1, s2
-squashshapes(s1::Tuple{Vararg{ΔShape}}, s2::Tuple{Vararg{ΔShape}}; order=allΔshapetypes((s1,s2))) = squashshapes((s1...,s2...); order=order)
+squashshapes(s1, s2; order=missing) = [s1, s2]
+squashshapes(s1::AbstractVector{<:ΔShape}, s2::AbstractVector{<:ΔShape}; order=allΔshapetypes((s1,s2))) = squashshapes(vcat(s1,s2); order=order)
 
 
-visitvertex(tr::ShapeTrace, v) = ShapeTrace(tr.origin, v, (tr.trace..., Δshapes(v)...))
+visitvertex(tr::ShapeTrace, v) = ShapeTrace(tr.origin, v, vcat(tr.trace, Δshapes(v)...))
 
 Base.merge(::AbstractVertex, tr::ShapeTrace) = tr
-Base.merge(v::AbstractVertex, trs::ShapeTrace...) = ShapeTrace(v, v, tuple(tuple((ShapeTrace(t.origin, v, (t.trace..., Δshapes(v)...)) for t in trs)...)))
+Base.merge(v::AbstractVertex, trs::ShapeTrace...) = ShapeTrace(v, v, [[(ShapeTrace(t.origin, v, vcat(t.trace, Δshapes(v)...)) for t in trs)...]])
 
 """
     shapetrace(v::AbstractVertex, vs::AbstractVertex...; trfun = v -> ShapeTrace(v))
@@ -310,12 +328,12 @@ Return a tuple of `ΔShape`s describing the shape mapping of `v`.
 More concretely, if `xs = size(x)[sdims]` then `size(v(x))[sdims] == fshape(Δshapes(v), xs)` where `sdims` are the shape dimensions of `x`, e.g. the height and width in case of 2D convolutions.
 """
 Δshapes(v::AbstractVertex) = Δshapes(base(v))
-Δshapes(::InputVertex) = tuple()
+Δshapes(::InputVertex) = ΔShape[]
 Δshapes(v::MutationVertex) = Δshapes(trait(v), v)
 Δshapes(t::DecoratingTrait, v) = Δshapes(base(t), v)
 Δshapes(::MutationSizeTrait, v) = _Δshapes(layertype(v), v)
 
-_Δshapes(t::Any, v) = tuple()
+_Δshapes(t::Any, v) = ΔShape[]
 
 function _Δshapes(::FluxConv{N}, v) where N
     c = layer(v)

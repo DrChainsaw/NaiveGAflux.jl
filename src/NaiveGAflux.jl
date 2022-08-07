@@ -3,6 +3,7 @@ module NaiveGAflux
 using Base: release
 using Reexport
 @reexport using NaiveNASflux
+using NaiveNASlib: name
 using NaiveNASflux: FluxDense, FluxConv, FluxConvolutional, FluxNoParLayer, FluxParNorm, FluxRnn, FluxBatchNorm
 using NaiveNASflux: nograd, layertype
 using NaiveNASlib.Advanced, NaiveNASlib.Extend
@@ -29,13 +30,15 @@ const rng_default = MersenneTwister(abs(rand(Int)))
 const modeldir = "models"
 
 # Fitness
-export fitness, AbstractFitness, LogFitness, GpuFitness, AccuracyFitness, TrainThenFitness, TrainAccuracyFitness, MapFitness, EwmaFitness, TimeFitness, SizeFitness, AggFitness
+export fitness, AbstractFitness, LogFitness, GpuFitness, AccuracyFitness, TrainThenFitness, TrainAccuracyFitness, MapFitness
+export EwmaFitness, TimeFitness, SizeFitness, AggFitness
 
 # Candidate
-export evolvemodel, AbstractCandidate, CandidateModel, CandidateOptModel, FittedCandidate, model, opt, lossfun
+export AbstractCandidate, CandidateModel, CandidateOptModel, CandidateDataIterMap, FittedCandidate, MapCandidate, model, opt, lossfun
 
 # Evolution
-export evolve, AbstractEvolution, NoOpEvolution, AfterEvolution, EliteSelection, SusSelection, TournamentSelection, CombinedEvolution, EvolutionChain, PairCandidates, ShuffleCandidates, EvolveCandidates
+export evolve, AbstractEvolution, NoOpEvolution, AfterEvolution, EliteSelection, SusSelection, TournamentSelection, CombinedEvolution
+export EvolutionChain, PairCandidates, ShuffleCandidates, EvolveCandidates
 
 # Population
 export Population, generation
@@ -43,8 +46,15 @@ export Population, generation
 # misc types
 export Probability, MutationShield, ApplyIf, RemoveIfSingleInput, PersistentArray, ShieldedOpt
 
+# Batch size selection
+export BatchSizeSelectionWithDefaultInShape, BatchSizeSelectionScaled, BatchSizeSelectionFromAlternatives, BatchSizeSelectionMaxSize, batchsizeselection
+
 # Iterators. These should preferably come from somewhere else, but I haven't found anything which fits the bill w.r.t repeatability over subsets
-export RepeatPartitionIterator, SeedIterator, MapIterator, GpuIterator, BatchIterator, ShuffleIterator, TimedIterator, TimedIteratorStop, StatefulGenerationIter
+export RepeatPartitionIterator, SeedIterator, MapIterator, GpuIterator, BatchIterator, ShuffleIterator, TimedIterator, TimedIteratorStop
+export StatefulGenerationIter
+
+# Iterator mapping types for evolving hyperparameters related to datasets, e.g. augmentation and batch size
+export BatchSizeIteratorMap, IteratorMaps, ShieldedIteratorMap
 
 # Persistence
 export persist
@@ -52,17 +62,27 @@ export persist
 # Vertex selection types
 export AbstractVertexSelection, AllVertices, FilterMutationAllowed
 
-# mutation types
-export AbstractMutation, MutationProbability, WeightedMutationProbability, HighUtilityMutationProbability, LowUtilityMutationProbability, MutationChain, RecordMutation, LogMutation, MutationFilter, PostMutation, VertexMutation, NoutMutation, AddVertexMutation, RemoveVertexMutation, AddEdgeMutation, RemoveEdgeMutation, KernelSizeMutation, KernelSizeMutation2D, ActivationFunctionMutation, PostMutation, OptimizerMutation, LearningRateMutation, AddOptimizerMutation
+# generic mutation types
+export AbstractMutation, MutationProbability, WeightedMutationProbability, HighUtilityMutationProbability, LowUtilityMutationProbability 
+export MutationChain, RecordMutation, LogMutation, MutationFilter
+# graph mutation types
+export VertexMutation, NoutMutation, AddVertexMutation, RemoveVertexMutation, AddEdgeMutation, RemoveEdgeMutation, KernelSizeMutation
+export KernelSizeMutation2D, ActivationFunctionMutation
+# optimizer mutation types
+export OptimizerMutation, LearningRateMutation, AddOptimizerMutation
+# Iterator wrapping mutation types
+export TrainBatchSizeMutation
 
 # Crossover types
-export AbstractCrossover, VertexCrossover, CrossoverSwap, OptimizerCrossover, LearningRateCrossover
+export AbstractCrossover, VertexCrossover, CrossoverSwap, OptimizerCrossover, LearningRateCrossover, IteratorMapCrossover
 
 # architecture spaces
-export AbstractArchSpace, LoggingArchSpace, VertexSpace, NoOpArchSpace, ArchSpace, ConditionalArchSpace, RepeatArchSpace, ArchSpaceChain, ForkArchSpace, ResidualArchSpace, FunctionSpace, GlobalPoolSpace
+export AbstractArchSpace, LoggingArchSpace, VertexSpace, NoOpArchSpace, ArchSpace, ConditionalArchSpace, RepeatArchSpace, ArchSpaceChain
+export ForkArchSpace, ResidualArchSpace, FunctionSpace, GlobalPoolSpace
 
 #  Other search space types
-export BaseLayerSpace, AbstractParSpace, SingletonParSpace, Singleton2DParSpace, ParSpace, ParSpace1D, ParSpace2D, CoupledParSpace, NamedLayerSpace, LoggingLayerSpace, DenseSpace, ConvSpace, BatchNormSpace, PoolSpace, LayerVertexConf, Shielded, ConcConf
+export BaseLayerSpace, AbstractParSpace, SingletonParSpace, Singleton2DParSpace, ParSpace, ParSpace1D, ParSpace2D, CoupledParSpace
+export NamedLayerSpace, LoggingLayerSpace, DenseSpace, ConvSpace, BatchNormSpace, PoolSpace, LayerVertexConf, Shielded, ConcConf
 
 #weight inits
 export AbstractWeightInit, DefaultWeightInit, IdentityWeightInit, PartialIdentityWeightInit, ZeroWeightInit
@@ -74,13 +94,21 @@ export nparams
 export AutoFlux
 
 # Visulization
-export PlotFitness, ScatterPop, ScatterOpt, MultiPlot, CbAll
+export PlotFitness, ScatterPop, ScatterOpt, ScatterBatchSize, MultiPlot, CbAll
 
 include("util.jl")
 include("shape.jl")
+include("batchsize.jl")
+include("iteratormaps.jl")
 include("archspace.jl")
-include("mutation.jl")
-include("crossover.jl")
+include("mutation/generic.jl")
+include("mutation/graph.jl")
+include("mutation/optimizer.jl")
+include("mutation/iteratormaps.jl")
+include("crossover/generic.jl")
+include("crossover/graph.jl")
+include("crossover/optimizer.jl")
+include("crossover/iteratormaps.jl")
 include("candidate.jl")
 include("fitness.jl")
 include("evolve.jl")

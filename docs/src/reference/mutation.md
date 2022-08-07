@@ -18,6 +18,11 @@ LearningRateMutation
 AddOptimizerMutation
 ```
 
+## Core IteratorMap Mutation Operations
+```@docs
+TrainBatchSizeMutation
+```
+
 ## Wrapping Mutation Operations
 
 ```@docs

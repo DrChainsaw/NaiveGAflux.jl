@@ -96,14 +96,14 @@
         end
 
         @testset "Order shapes" begin
-            @test orderΔshapes(tuple(ShapeAdd(1,2))) == tuple(ShapeAdd(1,2))
-            @test orderΔshapes((ShapeAdd(1,2), ShapeMul(2,3), ShapeAdd(4,6))) == (ShapeAdd(2,2), ShapeAdd(1,2), ShapeMul(2,3))
-            @test orderΔshapes((ShapeAdd(1,2), ShapeMul(2,3), ShapeAdd(4,6), ShapeFlatten())) == (ShapeAdd(1,2), ShapeAdd(2,2), ShapeMul(2,3), ShapeFlatten())
+            @test orderΔshapes([ShapeAdd(1,2)]) == [ShapeAdd(1,2)]
+            @test orderΔshapes([ShapeAdd(1,2), ShapeMul(2,3), ShapeAdd(4,6)]) == [ShapeAdd(2,2), ShapeAdd(1,2), ShapeMul(2,3)]
+            @test orderΔshapes([ShapeAdd(1,2), ShapeMul(2,3), ShapeAdd(4,6), ShapeFlatten()]) == [ShapeAdd(1,2), ShapeAdd(2,2), ShapeMul(2,3), ShapeFlatten()]
 
             @testset "Mixed ShapeAdds" begin
-                s = (ShapeAdd(1,2), ShapeDiv(2,3), ShapeMul(2,2), ShapeAdd(4,4), ShapeAdd(3,5), ShapeAdd(6,8), ShapeMul(2,3), ShapeMul(1,1), ShapeAdd(3,7))
+                s = [ShapeAdd(1,2), ShapeDiv(2,3), ShapeMul(2,2), ShapeAdd(4,4), ShapeAdd(3,5), ShapeAdd(6,8), ShapeMul(2,3), ShapeMul(1,1), ShapeAdd(3,7)]
                 os =  orderΔshapes(s)
-                @test os == (ShapeAdd{2}((6, 12)), ShapeAdd{2}((1, 2)), ShapeAdd{2}((4, 6)), ShapeDiv{2}((2, 3)), ShapeMul{2}((2, 2)), ShapeAdd{2}((3, 5)), ShapeMul{2}((2, 3)), ShapeMul{2}((1, 1)), ShapeAdd{2}((3, 7)))
+                @test os == [ShapeAdd{2}((6, 12)), ShapeAdd{2}((1, 2)), ShapeAdd{2}((4, 6)), ShapeDiv{2}((2, 3)), ShapeMul{2}((2, 2)), ShapeAdd{2}((3, 5)), ShapeMul{2}((2, 3)), ShapeMul{2}((1, 1)), ShapeAdd{2}((3, 7))]
 
                 @testset "same shape with input size $insize" for insize in 1:10
                     @test fshape(s, (insize,insize)) == fshape(os, (insize,insize))
@@ -111,9 +111,9 @@
             end
 
             @testset "Single ShapeAdd with ShapeMul and ShapeDiv" begin
-                s = (ShapeMul(2,2), ShapeDiv(12,12), ShapeAdd(2,3), ShapeMul(2,2), ShapeMul(3,3))
+                s = [ShapeMul(2,2), ShapeDiv(12,12), ShapeAdd(2,3), ShapeMul(2,2), ShapeMul(3,3)]
                 os = orderΔshapes(s)
-                @test os == (ShapeMul(2,2), ShapeDiv(12,12), ShapeMul(3,3), ShapeMul(2,2), ShapeAdd(12,18))
+                @test os == [ShapeMul(2,2), ShapeDiv(12,12), ShapeMul(3,3), ShapeMul(2,2), ShapeAdd(12,18)]
                 @testset "same shape with input size $insize" for insize in 1:5:100
                     @test fshape(s, (insize,insize)) == fshape(os, (insize,insize))
                 end
@@ -121,49 +121,53 @@
         end
 
         @testset "squash shapes" begin
-            @test squashshapes(ShapeAdd(1,2)) == tuple(ShapeAdd(1,2))
-            @test squashshapes(ShapeAdd(1,2), ShapeAdd(3,4)) == tuple(ShapeAdd(4,6))
-            @test squashshapes(ShapeAdd(1,2), ShapeAdd(3,4), ShapeAdd(5,6)) == tuple(ShapeAdd(9,12))
-            @test squashshapes(ShapeAdd(1,2), ShapeAdd(3,4), ShapeAdd(-4,-6)) == tuple()
-            @test squashshapes(ShapeAdd(1,2), ShapeMul(3,4)) == (ShapeAdd(1,2), ShapeMul(3,4))
-            @test squashshapes(ShapeAdd(1,2), ShapeAdd(-1,1), ShapeFlatten()) == (ShapeAdd(0, 3), ShapeFlatten())
+            @test squashshapes(ShapeAdd(1,2)) == [ShapeAdd(1,2)]
+            @test squashshapes(ShapeAdd(1,2), ShapeAdd(3,4)) == [ShapeAdd(4,6)]
+            @test squashshapes(ShapeAdd(1,2), ShapeAdd(3,4), ShapeAdd(5,6)) == [ShapeAdd(9,12)]
+            @testset "Empty result" begin
+                ss = squashshapes(ShapeAdd(1,2), ShapeAdd(3,4), ShapeAdd(-4,-6)) 
+                @test isempty(ss)
+                @test eltype(ss) == ShapeAdd{2}
+            end
+            @test squashshapes(ShapeAdd(1,2), ShapeMul(3,4)) == [ShapeAdd(1,2), ShapeMul(3,4)]
+            @test squashshapes(ShapeAdd(1,2), ShapeAdd(-1,1), ShapeFlatten()) == [ShapeAdd(0, 3), ShapeFlatten()]
 
-            as = (ShapeAdd(1,2), ShapeMul(3,4))
+            as = [ShapeAdd(1,2), ShapeMul(3,4)]
             sa = revert(as)
-            @test squashshapes((as..., sa...)) == tuple()
-            @test squashshapes(ShapeAdd(4,2), ShapeDiv(2,2), ShapeMul(2,2), ShapeAdd(-4,-2)) == (ShapeDiv(2,2), ShapeMul(2,2))
+            @test squashshapes(vcat(as, sa)) == []
+            @test squashshapes(ShapeAdd(4,2), ShapeDiv(2,2), ShapeMul(2,2), ShapeAdd(-4,-2)) == [ShapeDiv(2,2), ShapeMul(2,2)]
 
             @testset "Squash mix add first" begin
-                s = (ShapeAdd(2,3), ShapeMul(2,2), ShapeMul(2,2), ShapeMul(3,3), ShapeDiv(12,12))
+                s = [ShapeAdd(2,3), ShapeMul(2,2), ShapeMul(2,2), ShapeMul(3,3), ShapeDiv(12,12)]
                 sq = squashshapes(s)
-                @test sq == tuple(ShapeAdd(2,3))
+                @test sq == [ShapeAdd(2,3)]
                 @testset "squashed shape with input size $insize" for insize in 1:5:100
                     @test fshape(s, (insize, insize)) == fshape(sq, (insize,insize))
                 end
             end
 
             @testset "Squash mix add last" begin
-                s = (ShapeMul(2,2), ShapeMul(2,2), ShapeMul(3,3), ShapeDiv(12,12), ShapeAdd(2,3))
+                s = [ShapeMul(2,2), ShapeMul(2,2), ShapeMul(3,3), ShapeDiv(12,12), ShapeAdd(2,3)]
                 sq = squashshapes(s)
-                @test sq == tuple(ShapeAdd(2,3))
+                @test sq == [ShapeAdd(2,3)]
                 @testset "squashed shape with input size $insize" for insize in 1:5:100
                     @test fshape(s, (insize, insize)) == fshape(sq, (insize,insize))
                 end
             end
 
             @testset "Squash mix add mid" begin
-                s = (ShapeMul(2,2), ShapeMul(2,2), ShapeAdd(2,3), ShapeMul(3,3), ShapeDiv(12,12))
+                s = [ShapeMul(2,2), ShapeMul(2,2), ShapeAdd(2,3), ShapeMul(3,3), ShapeDiv(12,12)]
                 sq = squashshapes(s)
-                @test sq == (ShapeMul(12, 12), ShapeAdd(6, 9), ShapeDiv(12, 12))
+                @test sq == [ShapeMul(12, 12), ShapeAdd(6, 9), ShapeDiv(12, 12)]
                 @testset "squashed shape with input size $insize" for insize in 1:5:100
                     @test fshape(s, (insize, insize)) == fshape(sq, (insize,insize))
                 end
             end
 
             @testset "Squash mix add and div mid" begin
-                s = (ShapeMul(2,2), ShapeMul(2,2), ShapeDiv(12,12), ShapeAdd(2,3), ShapeMul(3,3))
+                s = [ShapeMul(2,2), ShapeMul(2,2), ShapeDiv(12,12), ShapeAdd(2,3), ShapeMul(3,3)]
                 sq = squashshapes(s)
-                @test sq == (ShapeMul(4, 4), ShapeDiv(12,12), ShapeMul(3,3), ShapeAdd(6, 9))
+                @test sq == [ShapeMul(4, 4), ShapeDiv(12,12), ShapeMul(3,3), ShapeAdd(6, 9)]
                 @testset "squashed shape with input size $insize" for insize in 1:5:100
                     @test fshape(s, (insize, insize)) == fshape(sq, (insize,insize))
                 end
@@ -174,35 +178,35 @@
             import NaiveGAflux: Δshapediff
 
             @testset "Primitives" begin
-                @test Δshapediff(ShapeAdd(2,2), ShapeAdd(2,2)) == tuple()
-                @test Δshapediff(ShapeAdd(2,3), ShapeAdd(3,4)) == tuple(ShapeAdd(-1,-1))
+                @test Δshapediff(ShapeAdd(2,2), ShapeAdd(2,2)) == []
+                @test Δshapediff(ShapeAdd(2,3), ShapeAdd(3,4)) == [ShapeAdd(-1,-1)]
 
-                @test Δshapediff(ShapeMul(2,2), ShapeMul(2,2)) == tuple()
-                @test Δshapediff(ShapeMul(2,3), ShapeMul(3,4)) == (ShapeDiv(3,4), ShapeMul(2,3))
+                @test Δshapediff(ShapeMul(2,2), ShapeMul(2,2)) == []
+                @test Δshapediff(ShapeMul(2,3), ShapeMul(3,4)) == [ShapeDiv(3,4), ShapeMul(2,3)]
 
-                @test Δshapediff(ShapeDiv(2,2), ShapeDiv(2,2)) == tuple()
-                @test Δshapediff(ShapeDiv(2,3), ShapeDiv(3,4)) == (ShapeMul(3,4), ShapeDiv(2,3))
-                @test Δshapediff(ShapeDiv(2,3), ShapeDiv(4,6)) == tuple(ShapeMul(2,2))
+                @test Δshapediff(ShapeDiv(2,2), ShapeDiv(2,2)) == []
+                @test Δshapediff(ShapeDiv(2,3), ShapeDiv(3,4)) == [ShapeMul(3,4), ShapeDiv(2,3)]
+                @test Δshapediff(ShapeDiv(2,3), ShapeDiv(4,6)) == [ShapeMul(2,2)]
 
-                @test Δshapediff(ShapeFlatten(), ShapeFlatten()) == tuple()
-                @test Δshapediff(ShapeFlatten{2}(), ShapeFlatten{3}()) == tuple(ShapeFlatten{2}(), ShapeFlatten{3}())
+                @test Δshapediff(ShapeFlatten(), ShapeFlatten()) == []
+                @test Δshapediff(ShapeFlatten{2}(), ShapeFlatten{3}()) == [ShapeFlatten{2}(), ShapeFlatten{3}()]
             end
 
-            @testset "Tuples" begin
+            @testset "Arrays" begin
                 @testset "Basic" begin
-                    s1 = (ShapeAdd(2,2), ShapeDiv(2,2), ShapeMul(4,2))
-                    @test Δshapediff(s1, s1) == tuple()
+                    s1 = [ShapeAdd(2,2), ShapeDiv(2,2), ShapeMul(4,2)]
+                    @test Δshapediff(s1, s1) == []
 
-                    @test Δshapediff(s1, s1[1:2]) == tuple(ShapeMul(4,2))
-                    @test Δshapediff(s1, s1[2:3]) == tuple(ShapeAdd(4,2))
-                    @test Δshapediff(s1, s1[[1,3]]) == (ShapeDiv(8, 4), ShapeMul(4, 2))
+                    @test Δshapediff(s1, s1[1:2]) == [ShapeMul(4,2)]
+                    @test Δshapediff(s1, s1[2:3]) == [ShapeAdd(4,2)]
+                    @test Δshapediff(s1, s1[[1,3]]) == [ShapeDiv(8, 4), ShapeMul(4, 2)]
 
-                    @test Δshapediff(s1[1:2], s1) == tuple(ShapeDiv(4,2))
-                    @test Δshapediff(s1[2:3], s1) == tuple(ShapeAdd(-4,-2))
-                    @test Δshapediff(s1[[1,3]], s1) == (ShapeDiv(4, 2), ShapeMul(8, 4))
+                    @test Δshapediff(s1[1:2], s1) == [ShapeDiv(4,2)]
+                    @test Δshapediff(s1[2:3], s1) == [ShapeAdd(-4,-2)]
+                    @test Δshapediff(s1[[1,3]], s1) == [ShapeDiv(4, 2), ShapeMul(8, 4)]
 
-                    s2 = (ShapeDiv(4,4), ShapeAdd(3,5), ShapeMul(8,4), ShapeDiv(2,2))
-                    @test Δshapediff(s1,s2) == (ShapeDiv(4, 2), ShapeMul(8, 4), ShapeAdd(-20, -18))
+                    s2 = [ShapeDiv(4,4), ShapeAdd(3,5), ShapeMul(8,4), ShapeDiv(2,2)]
+                    @test Δshapediff(s1,s2) == [ShapeDiv(4, 2), ShapeMul(8, 4), ShapeAdd(-20, -18)]
                 end
             end
         end
@@ -271,7 +275,9 @@
                 g = CompGraph(vi, v4)
                 sg = g(ShapeTrace(vi)).trace
                 sv = shapetrace(v4; trfun = v -> ShapeTrace(v)).trace
+                @test squashshapes(sg) == squashshapes(sv) == [ShapeAdd{2}((1, -3)), ShapeDiv{2}((6, 7))]
                 @test fshape(sg, (30,31)) == fshape(sv, (30,31))== size(g(ones(Float32, 30,31, nout(vi), 1)))[1:2]
+                @test fshape(squashshapes(sg), (30,31)) == fshape(sg, (30,31)) 
             end
         end
 
@@ -338,7 +344,7 @@
 
             @test sv2[1][1] == sva2
             @test sv2[1][2] == svb3
-            @test sv2[2] == filter_noops(Δshapes(v2))
+            @test tuple(sv2[2][]) == filter_noops(Δshapes(v2))
 
             @test fshape((sva2...,sv2[2]...), (13,14)) == (3,3)
             @test fshape((svb3...,sv2[2]...), (13,14)) == (3,3)
@@ -371,7 +377,7 @@
             mv1 = "mv1" >> va3 + vb4
             v2 = pv(mv1, "v2"; ks=(3,3))
 
-            @test squashshapes(shapetrace(v2)) == squashshapes(shapetrace(v2, v1)) == (ShapeAdd(-59, -59), ShapeDiv(6, 6))
+            @test squashshapes(shapetrace(v2)) == squashshapes(shapetrace(v2, v1)) == [ShapeAdd(-59, -59), ShapeDiv(6, 6)]
         end
 
         @testset "Squash with different start types" begin
@@ -391,7 +397,7 @@
 
             @test allΔshapetypes(st) == [ShapeDiv{2}, ShapeAdd{2}]
 
-            @test squashshapes(st) == (ShapeDiv(2, 2), ShapeAdd(-2,-2))
+            @test squashshapes(st) == [ShapeDiv(2, 2), ShapeAdd(-2,-2)]
         end
     end
 end

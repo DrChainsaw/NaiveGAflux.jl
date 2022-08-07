@@ -30,14 +30,25 @@ using NaiveNASlib.Advanced, NaiveNASlib.Extend
     @info "Testing shape"
     include("shape.jl")
 
+    @info "Testing batch size utils"
+    include("batchsize.jl")
+
+    @info "Testing iterator mapping"
+    include("iteratormaps.jl")
+
     @info "Testing archspace"
     include("archspace.jl")
 
     @info "Testing mutation"
-    include("mutation.jl")
+    include("mutation/generic.jl")
+    include("mutation/graph.jl")
+    include("mutation/optimizer.jl")
+    include("mutation/iteratormaps.jl")
 
     @info "Testing crossover"
-    include("crossover.jl")
+    include("crossover/graph.jl")
+    include("crossover/optimizer.jl")
+    include("crossover/iteratormaps.jl")
 
     @info "Testing fitness"
     include("fitness.jl")
@@ -57,13 +68,17 @@ using NaiveNASlib.Advanced, NaiveNASlib.Extend
     @info "Testing visualization"
     include("visualization/callbacks.jl")
 
-    if VERSION === v"1.7.2"
+    if VERSION === v"1.7.3"
         @info "Testing README examples"
         include("examples.jl")
     else
-        @warn "README examples will only be tested in julia version 1.7.2 due to rng dependency. Skipping..."
+        @warn "README examples will only be tested in julia version 1.7.3 due to rng dependency. Skipping..."
     end
 
     @info "Testing AutoFlux"
     include("app/autoflux.jl")
+
+    @info "Testing documentation"
+    import Documenter
+    Documenter.doctest(NaiveGAflux)
 end

@@ -7,6 +7,10 @@ done in a train-validate-select-evolve loop where the validation metric serves a
 There is however absolutely no enforcement of this structure and the parts are designed to work standalone
 and in a composable manner to support a wide variety of search strategies.
 
+It is also not limited to model architecture related hyperparameters. Support for inclusion of optimizers,
+learningrates and batchsizes into the search space is built in and the framework supports adding any 
+hyperparameter (e.g data augmentation strategies and loss functions) through simple interfaces.
+
 ## Readers Guideline
 
 The [Quick Tutorial](@ref) serves as a starting point to get an idea of the syntax and type of capabilities of NaiveGAflux.
@@ -24,7 +28,8 @@ self-contained, allowing you to pick and choose the ones you like when building 
 4. [Fitness Functions](@ref)
 5. [Candidate Utilities](@ref)
 6. [Evolution Strategies](@ref)
-7. [Iterators](@ref)
+7. [Iterator Maps](@ref) 
+8. [Iterators](@ref)
 
 
 
