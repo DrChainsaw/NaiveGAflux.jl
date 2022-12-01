@@ -174,45 +174,36 @@ TrainThenFitness(;dataiter, defaultloss, defaultopt, fitstrat, invalidfitness=0.
 
 function _fitness(s::TrainThenFitness, c::AbstractCandidate)
     loss = lossfun(c; default=s.defaultloss)
-    m = model(c)
     o = opt(c; default=s.defaultopt)
-    ninput = ninputs(m)
 
-    valid = let valid = true
-        nanguard = function(data...)
-            inputs = data[1:ninput]
-            ŷ = m(inputs...)
+    iter = _fitnessiterator(trainiterator, c, s.dataiter)
 
-            y = data[ninput+1:end]
-            l = loss(ŷ, y...)   
-            
-            nograd() do 
-                checkvalid(l) do badval
-                    @warn "$badval loss detected when training!"
-                    # Flux.stop will exit this function immediately before we have a chance to return valid
-                    valid = false
-                    Flux.stop()
-                end
-            end
-            return l
-        end
-        iter = _fitnessiterator(trainiterator, c, s.dataiter)
-    
-        Flux.train!(nanguard, params(m), iter, o)
-        cleanopt!(o)
-        valid
-    end
+    valid = trainmodel!(loss, model(c), o, iter)
+    cleanopt!(o)
     return valid ? _fitness(s.fitstrat, c) : s.invalidfitness
 end
 
-function checkvalid(ifnot, x)
-    anynan = any(isnan, x)
-    anyinf = any(isinf, x)
-    
-    if anynan || anyinf
-        badval = anynan ? "NaN" : "Inf"
-        ifnot(badval)
-        return false
+# For legacy Flux optimizers we'll use implicit gradients
+# Will implement explicit for new Optimisers.jl after I get around to test it out thoroughly
+function trainmodel!(lossfun, model, opt::FluxOptimizer, dataiter)
+    ninput = ninputs(model)
+    ps = params(model)
+    for data in dataiter
+
+        l, gs = Flux.withgradient(ps) do
+            inputs = data[1:ninput]
+            ŷ = model(inputs...)
+
+            y = data[ninput+1:end]
+            lossfun(ŷ, y...)  
+        end 
+        
+        if isnan(l) || isinf(l)
+            badval = isnan(l) ? "NaN" : "Inf"
+            @warn "$badval loss detected when training!"
+            return false
+        end
+        Flux.update!(opt, ps, gs)
     end
     return true
 end
