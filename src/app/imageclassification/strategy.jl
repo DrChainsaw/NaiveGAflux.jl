@@ -353,8 +353,9 @@ function rename_models(pop)
  end
 
 function rename_model(i, cand)
-    # No need to copy layers now
-    return fmap(cand; walk=(f, x) -> x isa NaiveNASflux.AbstractMutableComp ? x : Functors._default_walk(f, x)) do x
+    # No need to copy layers now, so we exclude all AbstractMutableComp and just return them without copying
+    walk=Functors.ExcludeWalk(Functors.DefaultWalk(), identity, x -> x isa NaiveNASflux.AbstractMutableComp)
+    return fmap(cand; walk) do x
         x isa String ? replace(x, r"^model\d+\.*" => "model$i.") : x
     end
 end
