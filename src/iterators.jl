@@ -59,7 +59,7 @@ RepeatStatefulIterator(base) = RepeatStatefulIterator(base, statevars(base))
 # One of these days I'm gonna rewrite this completely. It seems there should be a 
 # much simpler solution to the reapeat partitions of an iterator problem, but everytime 
 # I spend 5 minutes thinking about it the new design just reimplements Iterators.Stateful
-if VERSION <= v"1.8"
+if VERSION <= v"1.8.99"
     statevars(itr::Iterators.Stateful) = itr.nextvalstate, itr.taken
     function setstate!(itr::Iterators.Stateful, nextvalstate, taken) 
         itr.nextvalstate = nextvalstate
