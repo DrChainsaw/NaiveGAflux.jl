@@ -49,23 +49,45 @@ Base.IteratorSize(::Type{RepeatPartitionIterator{I}}) where {I} = Base.IteratorS
 Base.IteratorEltype(::Type{RepeatPartitionIterator{I}}) where {I} = Base.IteratorEltype(I)
 
 
-struct RepeatStatefulIterator{I <: Iterators.Stateful, VS}
+struct RepeatStatefulIterator{I <: Iterators.Stateful, S}
     base::I
-    start::VS
-    taken::Int
+    initialstate::S
 end
-RepeatStatefulIterator(base) = RepeatStatefulIterator(base, base.nextvalstate, base.taken)
+RepeatStatefulIterator(base) = RepeatStatefulIterator(base, statevars(base))
+
+# This is my punishment for accessing internals :(
+# One of these days I'm gonna rewrite this completely. It seems there should be a 
+# much simpler solution to the reapeat partitions of an iterator problem, but everytime 
+# I spend 5 minutes thinking about it the new design just reimplements Iterators.Stateful
+if VERSION <= v"1.8.99"
+    statevars(itr::Iterators.Stateful) = itr.nextvalstate, itr.taken
+    function setstate!(itr::Iterators.Stateful, nextvalstate, taken) 
+        itr.nextvalstate = nextvalstate
+        itr.taken = taken
+    end
+    # Note: We can't use length(itr.base) since we reset it every time we start iterating
+    Base.length(itr::RepeatStatefulIterator) = length(itr.base.itr) - itr.initialstate[2]
+else
+    statevars(itr::Iterators.Stateful) = itr.nextvalstate, itr.remaining
+    function setstate!(itr::Iterators.Stateful, nextvalstate, remaining) 
+        itr.nextvalstate = nextvalstate
+        itr.remaining = remaining
+    end
+    # Note: We can't use length(itr.base) since we reset it every time we start iterating
+    function Base.length(itr::RepeatStatefulIterator)
+        rem = itr.initialstate[2]
+        rem >= 0 ? rem : length(itr.base.itr) - (typeof(rem)(1) - rem)
+    end
+end
 
 function Base.iterate(itr::RepeatStatefulIterator, reset=true)
     if reset
-        itr.base.nextvalstate = itr.start
-        itr.base.taken = itr.taken
+        setstate!(itr.base, itr.initialstate...)
     end
     val, state = IterTools.@ifsomething iterate(itr.base)
     return val, false
 end
 
-Base.length(itr::RepeatStatefulIterator) = length(itr.base.itr) - itr.taken
 Base.eltype(::Type{RepeatStatefulIterator{I,VS}}) where {I,VS} = eltype(I)
 Base.size(itr::RepeatStatefulIterator) = size(itr.base.itr)
 
