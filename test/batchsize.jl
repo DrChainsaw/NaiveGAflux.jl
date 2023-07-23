@@ -19,8 +19,8 @@
 
     @testset "BatchSizeSelectionFromAlternatives" begin
         bs = BatchSizeSelectionFromAlternatives([2, 3, 7], identity)
-        @test bs(0) === 0
-        @test bs(1) === 0
+        @test bs(0) === 2
+        @test bs(1) === 2
         @test bs(2) === 2
         @test bs(3) === 3
         @test bs(4) === 3

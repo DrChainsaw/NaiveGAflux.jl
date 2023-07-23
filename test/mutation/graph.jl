@@ -229,7 +229,7 @@
                     v5 = fluxvertex("v5", Dense(nout(v4), 5), v4)
 
                     g = deepcopy(CompGraph(inpt, v5))
-                    @test size(g(ones(4,2))) == (5,2)
+                    @test size(g(ones(Float32, 4,2))) == (5,2)
 
                     to_remove = vert(to_rm, g)
                     NaiveNASlib.applyΔsize!(NaiveNASlib.NeuronIndices(), to_remove, [missing],  Int[])
@@ -238,7 +238,7 @@
                     Δsize!(AlignNinToNout(), vertices(g))
 
                     @test !in(to_remove, vertices(g))
-                    @test size(g(ones(4,2))) == (5,2)
+                    @test size(g(ones(Float32, 4,2))) == (5,2)
                 end
             end
         end

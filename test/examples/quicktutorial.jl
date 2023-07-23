@@ -33,8 +33,8 @@ population = Population(CandidateModel.(models))
 # We use dummy data here just to make stuff run.
 onehot(y) = Flux.onehotbatch(y, 1:nlabels)
 batchsize = 4
-datasettrain    = [(randn(ninputs, batchsize), onehot(rand(1:nlabels, batchsize)))]
-datasetvalidate = [(randn(ninputs, batchsize), onehot(rand(1:nlabels, batchsize)))]
+datasettrain    = [(randn(Float32, ninputs, batchsize), onehot(rand(1:nlabels, batchsize)))]
+datasetvalidate = [(randn(Float32, ninputs, batchsize), onehot(rand(1:nlabels, batchsize)))]
 
 fitnessfunction = TrainThenFitness(;
     dataiter = datasettrain,

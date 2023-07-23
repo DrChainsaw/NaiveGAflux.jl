@@ -175,7 +175,7 @@ end
 
 function select_bestfit_smaller(bs::Integer, alts)
     validalts = filter(<=(bs), alts)
-    isempty(validalts) && return 0
+    isempty(validalts) && return minimum(alts)
     argmin(x -> bs - x, validalts)
 end
 

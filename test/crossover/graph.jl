@@ -34,8 +34,8 @@
                 @test nout.(vertices(ga)) == [3,4,2,6]
                 @test nout.(vertices(gb)) == [3,1,5,3]
 
-                @test size(ga(ones(3, 2))) == (6, 2)
-                @test size(gb(ones(3, 2))) == (3, 2)
+                @test size(ga(ones(Float32, 3, 2))) == (6, 2)
+                @test size(gb(ones(Float32, 3, 2))) == (3, 2)
             end
 
             @testset "Path swap" begin
@@ -47,8 +47,8 @@
                 @test nout.(vertices(ga)) == [3,2,3,8]
                 @test nout.(vertices(gb)) == [3,1,4,5,6,7,4,5]
 
-                @test size(ga(ones(3, 2))) == (8, 2)
-                @test size(gb(ones(3, 2))) == (5, 2)
+                @test size(ga(ones(Float32, 3, 2))) == (8, 2)
+                @test size(gb(ones(Float32, 3, 2))) == (5, 2)
             end
 
             @testset "Swap same graph is noop" begin
@@ -87,8 +87,8 @@
             @test nout.(vertices(ga)) == [3, 6, 6, 6, 6, 6, 7]
             @test nout.(vertices(gb)) == [3, 3, 3, 3, 9, 3]
 
-            @test size(ga(ones(3, 2))) == (7, 2)
-            @test size(gb(ones(3, 2))) == (3, 2)
+            @test size(ga(ones(Float32, 3, 2))) == (7, 2)
+            @test size(gb(ones(Float32, 3, 2))) == (3, 2)
         end
 
         @testset "Swap add and conc with add larger" begin
@@ -107,8 +107,8 @@
             @test nout.(vertices(ga)) == [3, 5, 5, 5, 5, 6]
             @test nout.(vertices(gb)) == [3, 3, 3, 3, 3, 3, 15, 3]
 
-            @test size(ga(ones(3, 2))) == (6, 2)
-            @test size(gb(ones(3, 2))) == (3, 2)
+            @test size(ga(ones(Float32, 3, 2))) == (6, 2)
+            @test size(gb(ones(Float32, 3, 2))) == (3, 2)
         end
 
         @testset "Swap conc and dense" begin
@@ -132,8 +132,8 @@
             @test nout.(vertices(ga)) == [3, 2, 3, 4, 9, 9, 4]
             @test nout.(vertices(gb)) == [3, 2, 3, 4, 9, 2, 2, 4]
 
-            @test size(ga(ones(3, 2))) == (4, 2)
-            @test size(gb(ones(3, 2))) == (4, 2)
+            @test size(ga(ones(Float32, 3, 2))) == (4, 2)
+            @test size(gb(ones(Float32, 3, 2))) == (4, 2)
         end
 
         @testset "Swap residual" begin
@@ -261,10 +261,10 @@
                 @test crossoverswap!(aswap[end], aswap[1], bswap[end], bswap[1]; strategy=teststrat) == (true, true)
 
                 @test name.(vertices(ga)) == ["a.in", "a.dv1", "b.dvbb1", "a.dvb1", "a.dvba1", "a.dvbb1", "a.conc_ba_bb", "a.conc_a_b", "a.out"]
-                @test size(ga(ones(3,2))) == (4, 2)
+                @test size(ga(ones(Float32, 3,2))) == (4, 2)
 
                 @test name.(vertices(gb)) == ["b.in", "b.dv1", "b.dva1", "b.dvaa1", "b.dvaa2", "b.dvab1", "b.dvab2", "b.add_aa_bb", "b.dvb1", "b.conc_dvb1_dvab2", "a.dva1", "a.dvaa1", "a.dvaa2", "a.dvab1", "a.dvab2", "a.add_aa_bb", "b.conc_ba_bb", "b.conc_a_b", "b.out"]
-                @test size(gb(ones(3,2))) == (4, 2)
+                @test size(gb(ones(Float32, 3,2))) == (4, 2)
             end
         end
 
@@ -370,7 +370,7 @@
                 @test @test_logs (:warn, "Failed to align sizes for vertices a.dv2 and b.dv2.dummy for crossover. Attempt aborted!") crossoverswap!(vertices(ga)[end-1], vertices(gb)[end-1]; strategy=teststrat) == (false, true)
 
                 @test name.(vertices(gb)) == ["b.in", "b.dv1", "b.dv2", "a.m1", "b.dv3"]
-                @test size(gb(ones(3,2))) == (5,2)
+                @test size(gb(ones(Float32, 3,2))) == (5,2)
             end
 
             @testset "Fail second" begin
@@ -380,7 +380,7 @@
                 @test @test_logs (:warn, "Failed to align sizes for vertices b.dv2 and a.dv2.dummy for crossover. Attempt aborted!") crossoverswap!(vertices(ga)[end-1], vertices(gb)[end-1]; strategy=teststrat) == (true, false)
 
                 @test name.(vertices(ga)) == ["a.in", "a.dv1", "a.dv2", "b.m1", "a.dv3"]
-                @test size(ga(ones(3,2))) == (5,2)
+                @test size(ga(ones(Float32, 3,2))) == (5,2)
             end
         end
 
