@@ -18,7 +18,7 @@ digging too much into the internals.
 
 @testset "Spy on the size" begin #src
 
-using NaiveGAflux, Flux
+using NaiveGAflux, Optimisers, Flux
 import NaiveGAflux: AbstractIteratorMap
 
 struct SizeSpyingIteratorMap <: AbstractIteratorMap end
@@ -41,14 +41,15 @@ cand = CandidateDataIterMap(iteratormap, CandidateModel(sum))
 fitstrat = TrainThenFitness(
                             dataiter = ((randn(32, 32, 3, 20), randn(1, 20)),),
                             defaultloss = (x, y) -> sum(x .+ y),
-                            defaultopt = Flux.Optimise.Descent(),
+                            defaultopt = Optimisers.Descent(),
                             fitstrat = SizeFitness()
                             )
 
 # When the model is trained it will wrap the iterator accoring to our `iteratormap`.
 @test_logs((:info, "The sizes are ((32, 32, 3, 8), (1, 8))"),
            (:info, "The sizes are ((32, 32, 3, 8), (1, 8))"),
-           (:info, "The sizes are ((32, 32, 3, 4), (1, 4))"), 
+           (:info, "The sizes are ((32, 32, 3, 4), (1, 4))"),
+           match_mode=:any, 
            fitness(fitstrat, cand))
 
 # Lets mutate the candidate with a new batch size (`SizeSpyingIteratorMap` does not have any properties to mutate).
@@ -62,6 +63,7 @@ newcand = cand |> MapCandidate(batchsizemutation)
 
 @test_logs((:info, "The sizes are ((32, 32, 3, 16), (1, 16))"),
            (:info, "The sizes are ((32, 32, 3, 4), (1, 4))"), 
+           match_mode=:any, 
            fitness(fitstrat, newcand))
 
 end #src

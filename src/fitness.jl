@@ -97,8 +97,8 @@ transferstate!(to::AbstractArray, from::AbstractArray) = copyto!(to, from)
 
 
 const gpu_gc = if CUDA.functional()
-    function()
-        GC.gc()
+    function(full=true)
+        GC.gc(full)
         CUDA.reclaim()
     end
 else
@@ -179,20 +179,17 @@ function _fitness(s::TrainThenFitness, c::AbstractCandidate)
     iter = _fitnessiterator(trainiterator, c, s.dataiter)
 
     valid = trainmodel!(loss, model(c), o, iter)
-    cleanopt!(o)
     return valid ? _fitness(s.fitstrat, c) : s.invalidfitness
 end
 
-# For legacy Flux optimizers we'll use implicit gradients
-# Will implement explicit for new Optimisers.jl after I get around to test it out thoroughly
-function trainmodel!(lossfun, model, opt::FluxOptimizer, dataiter)
-    ninput = ninputs(model)
-    ps = params(model)
-    for data in dataiter
 
-        l, gs = Flux.withgradient(ps) do
+function trainmodel!(lossfun, model, opt, dataiter)
+    ninput = ninputs(model)
+    opt_state = Flux.setup(opt, model)
+    for data in dataiter
+        l, modelgrads = Flux.withgradient(model) do m
             inputs = data[1:ninput]
-            ŷ = model(inputs...)
+            ŷ = m(inputs...)
 
             y = data[ninput+1:end]
             lossfun(ŷ, y...)  
@@ -203,7 +200,8 @@ function trainmodel!(lossfun, model, opt::FluxOptimizer, dataiter)
             @warn "$badval loss detected when training!"
             return false
         end
-        Flux.update!(opt, ps, gs)
+
+        Flux.update!(opt_state, model, modelgrads[1])
     end
     return true
 end

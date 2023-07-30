@@ -1,7 +1,7 @@
 @testset "Graph mutation" begin
 
-    struct NoOpMutation{T} <:AbstractMutation{T} end
-    (m::NoOpMutation{T})(t::T) where T = t
+    #struct NoOpMutation{T} <:AbstractMutation{T} end
+    #(m::NoOpMutation{T})(t::T) where T = t
     ProbeMutation(T) = RecordMutation(NoOpMutation{T}())
 
     dense(in, outsize;layerfun = LazyMutable, name="dense") = fluxvertex(name, Dense(nout(in), outsize), in, layerfun=layerfun)
@@ -149,6 +149,7 @@
         end
     end
 
+    import Flux: Conv, ConvTranspose, DepthwiseConv
     @testset "KernelSizeMutation $convtype" for convtype in (Conv, ConvTranspose, DepthwiseConv)
         v = fluxvertex(convtype((3,5), 2=>2, pad=(1,1,2,2)), inputvertex("in", 2))
         indata = ones(Float32, 7,7,2,2)
@@ -172,6 +173,7 @@
         @test layer(v).σ == elu
     end
 
+    import Flux: RNN
     @testset "ActivationFunctionMutation RNN" begin
         v = fluxvertex(RNN(2,3), inputvertex("in", 2))
         @test ActivationFunctionMutation(elu)(v) == v
@@ -184,6 +186,7 @@
         @test layer(v).σ == elu
     end
 
+    import Flux: BatchNorm, InstanceNorm, GroupNorm
     Flux.GroupNorm(n) = GroupNorm(n,n)
     @testset "ActivationFunctionMutation $normtype" for normtype in (BatchNorm, InstanceNorm, GroupNorm)
         v = fluxvertex(normtype(2), inputvertex("in", 2))

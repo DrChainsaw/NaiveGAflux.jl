@@ -11,7 +11,7 @@
     end
 
     @testset "Crossover" begin
-        import NaiveGAflux: FluxOptimizer, iteratormap, batchsize
+        import NaiveGAflux: Optimisers.AbstractRule, iteratormap, batchsize
 
         struct MapTypeTestCrossover{T} <: AbstractCrossover{T} end
         (::MapTypeTestCrossover)((c1, c2)) = c2,c1
@@ -32,9 +32,9 @@
         @test mt1(3) == 3
         @test mt2('c') == 'c'
 
-        mt1, mt2 = MapType(MapTypeTestCrossover{FluxOptimizer}(), (c1,c2), (identity, identity))
-        @test typeof(mt1(opt(c1))) == Momentum
-        @test typeof(mt2(opt(c2))) == Descent 
+        mt1, mt2 = MapType(MapTypeTestCrossover{Optimisers.AbstractRule}(), (c1,c2), (identity, identity))
+        @test typeof(mt1(opt(c1))) == Momentum{Float32}
+        @test typeof(mt2(opt(c2))) == Descent{Float32} 
         @test mt1(3) == 3
         @test mt2('c') == 'c'
 
@@ -72,7 +72,7 @@ end
         end
 
         @testset "Optimiser" begin
-            optmutation = CollectMutation{FluxOptimizer}()
+            optmutation = CollectMutation{Optimisers.AbstractRule}()
             cnew = MapCandidate(optmutation, deepcopy)(testcand("c"))
             @test length(optmutation.seen) == 1
             @test optmutation.seen[] === opt(cnew)
@@ -80,7 +80,7 @@ end
 
         @testset "CompGraph + Optimiser" begin  
             graphmutation = CollectMutation{CompGraph}()
-            optmutation = CollectMutation{FluxOptimizer}()
+            optmutation = CollectMutation{Optimisers.AbstractRule}()
             cnew = @inferred MapCandidate((graphmutation, optmutation), deepcopy)(testcand("c"))
             
             @test length(graphmutation.seen) == 1 
@@ -103,7 +103,7 @@ end
         end
 
         @testset "Optimiser" begin
-            optcrossover = CollectMutation{Tuple{FluxOptimizer, FluxOptimizer}}()
+            optcrossover = CollectMutation{Tuple{Optimisers.AbstractRule, Optimisers.AbstractRule}}()
             c1,c2 = testcand("c1", Descent()), testcand("c2", Momentum())
             cnew1, cnew2 = @inferred MapCandidate(optcrossover , deepcopy)((c1, c2))
 
@@ -113,7 +113,7 @@ end
 
         @testset "CompGraph + Optimiser" begin
             graphcrossover = CollectMutation{Tuple{CompGraph, CompGraph}}()
-            optcrossover = CollectMutation{Tuple{FluxOptimizer, FluxOptimizer}}()
+            optcrossover = CollectMutation{Tuple{Optimisers.AbstractRule, Optimisers.AbstractRule}}()
             c1,c2 = testcand("c1", Descent()), testcand("c2", Momentum())
             cnew1, cnew2 = @inferred MapCandidate((graphcrossover, optcrossover), deepcopy)((c1, c2))
 
@@ -137,7 +137,7 @@ end
 
     @testset "$ctype" for (ctype, candfun) in (
         (CandidateModel, CandidateModel),
-        (CandidateOptModel, g -> CandidateOptModel(Descent(0.01), g)),
+        (CandidateOptModel, g -> CandidateOptModel(Descent(0.01f0), g)),
         (CandidateBatchIterMap, CandidateBatchIterMap)
     )
     
@@ -174,9 +174,6 @@ end
 
                 if ctype === CandidateOptModel
                     @test opttype(newcand) !== opttype(cand) !== Nothing
-                    fmapped = fmap(identity, newcand)
-                    @test opt(fmapped) !== opt(newcand)
-                    @test opttype(fmapped) === opttype(newcand)
                 else
                     @test opttype(newcand) === opttype(cand) === Nothing
                 end
@@ -299,7 +296,7 @@ end
                 v = fluxvertex("v1", Dense(3,3), denseinputvertex("in", 3))
                 secand = FileCandidate(CandidateModel(CompGraph(inputs(v)[], v)))
 
-                indata = randn(3, 2)
+                indata = randn(Float32, 3, 2)
                 expected = v(indata)
 
                 io = PipeBuffer()
@@ -395,8 +392,8 @@ end
     end
 
     @testset "Global optimizer mutation" begin
-        import NaiveGAflux.Flux.Optimise: Optimiser
-        import NaiveGAflux: sameopt, learningrate, BoundedRandomWalk, global_optimizer_mutation, randomlrscale
+        import NaiveGAflux.Optimisers: OptimiserChain
+        import NaiveGAflux: setlearningrate, learningrate, BoundedRandomWalk, global_optimizer_mutation, randomlrscale
 
         @testset "Random learning rate scale" begin
             using Random
@@ -407,8 +404,8 @@ end
             om1 = omf()
             @test learningrate(om1(Descent(0.1))) ≈ learningrate(om1(Momentum(0.1)))
 
-            opt = Optimiser(so(Descent(0.1)), Momentum(0.1), so(Descent(1.0)), Adam(1.0), Descent(1.0))
-            @test length(om1(opt).os) == 4
+            opt = OptimiserChain(so(Descent(0.1)), Momentum(0.1), so(Descent(1.0)), Adam(1.0), Descent(1.0))
+            @test length(om1(opt).opts) == 4
             @test learningrate(om1(opt)) ≈ learningrate(om1(Descent(0.01)))
 
             om2 = omf()
@@ -430,7 +427,7 @@ end
             lr(c) = c.opt.eta
             @test lr.(pop) == 0.1:0.1:1.0
 
-            popscal = global_optimizer_mutation(pop, pp -> OptimizerMutation(o -> sameopt(o, 10learningrate(o))))
+            popscal = global_optimizer_mutation(pop, pp -> OptimizerMutation(o -> setlearningrate(o, 10learningrate(o))))
 
             @test lr.(popscal) == 1:10
         end

@@ -142,7 +142,7 @@ function plotfitness(p::ScatterOpt, population)
 end
 
 lr(o) = learningrate(o)
-ot(o::Flux.Optimiser) = ot(o.os[1])
+ot(o::Optimisers.OptimiserChain) = ot(o.opts[1])
 ot(o::ShieldedOpt{T}) where T = T
 ot(o) = typeof(o)
 

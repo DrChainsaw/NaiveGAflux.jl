@@ -3,6 +3,7 @@
 
     @testset "BasicLayerSpace" begin
         import NaiveGAflux: outsize, activation
+        import Flux: relu, σ
         rng = SeqRng()
         space = BaseLayerSpace([1,2,3], [relu,σ,identity])
         @test outsize(space, rng) == 1
@@ -74,6 +75,7 @@
     end
 
     @testset "DenseSpace" begin
+        import Flux: σ
         rng = SeqRng()
         space = DenseSpace(3, σ)
         l = space(2, rng)
@@ -85,6 +87,7 @@
     end
 
     @testset "ConvSpace" begin
+        import Flux: relu, elu
         rng = SeqRng()
         space = ConvSpace{2}(outsizes=5, activations=relu, kernelsizes=2:5)
         l = space(4, rng)
@@ -121,6 +124,7 @@
     end
 
     @testset "PoolSpace" begin
+        import Flux: MeanPool, MaxPool
         rng = SeqRng()
         space = PoolSpace{1}(windowsizes=1:3, strides=1, poolfuns=MeanPool)
         @test space(2, rng).k == (1,)

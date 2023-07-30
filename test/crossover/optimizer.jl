@@ -1,12 +1,12 @@
 @testset "Optimizer crossover" begin
-    using NaiveGAflux.Flux.Optimise
+    using NaiveGAflux.Optimisers
 
     prts(o) = typeof(o)
-    prts(o::Optimiser) = "$(typeof(o))$(prts.(Tuple(o.os)))"
+    prts(o::OptimiserChain) = "$(typeof(o))$(prts.(Tuple(o.opts)))"
 
     @testset "Swap optimizers $(prts(o1)) and $(prts(o2))" for (o1, o2) in (
         (Adam(), Momentum()),
-        (Optimiser(Descent(), WeightDecay()), Optimiser(Momentum(), Nesterov())),
+        (OptimiserChain(Descent(), WeightDecay()), OptimiserChain(Momentum(), Nesterov())),
         )
         oc = OptimizerCrossover()
         ooc = OptimizerCrossover(oc)
@@ -20,8 +20,8 @@
         
         @testset "$baseo1 and $baseo2" for (baseo1, baseo2) in (
             (Descent(), Momentum()),
-            (Descent(), Flux.Optimiser(Momentum())),
-            (Flux.Optimiser(Descent()),Flux.Optimiser(Momentum()))
+            (Descent(),OptimiserChain(Momentum())),
+            (OptimiserChain(Descent()),OptimiserChain(Momentum()))
         )
             @testset "With Shielding $w1 and $w2" for (w1, w2) in (
                 (identity, ShieldedOpt),
@@ -35,8 +35,8 @@
             end
         end
 
-        @testset "Inner shielding$(wrap == identity ? "" : wrap)" for wrap in (identity, Flux.Optimiser)
-            o1 = Flux.Optimiser(ShieldedOpt(Descent()))
+        @testset "Inner shielding$(wrap == identity ? "" : wrap)" for wrap in (identity, OptimiserChain)
+            o1 = OptimiserChain(ShieldedOpt(Descent()))
             o2 = wrap(Momentum())
 
             @test prts.(oc((o1, o2))) == prts.((o1, o2))
@@ -48,18 +48,18 @@
 
         @testset "Single opt vs Optimiser" begin
             oc = OptimizerCrossover()
-            @test prts.(oc((Descent(), Optimiser(Momentum(), WeightDecay())))) == prts.((Momentum(), Optimiser(Descent(), WeightDecay())))
+            @test prts.(oc((Descent(), OptimiserChain(Momentum(), WeightDecay())))) == prts.((Momentum(), OptimiserChain(Descent(), WeightDecay())))
         end
 
         @testset "Different size Optimisers" begin
             oc = OptimizerCrossover()
-            o1 = Optimiser(Descent(), WeightDecay(), Momentum())
-            o2 = Optimiser(Adam(), AdamW(), NAdam(), RAdam())
+            o1 = OptimiserChain(Descent(), WeightDecay(), Momentum())
+            o2 = OptimiserChain(Adam(), AdamW(), NAdam(), RAdam())
 
             o1n,o2n = oc((o1,o2))
 
-            @test prts(o1n) == prts(Optimiser(Adam(), AdamW(), NAdam()))
-            @test prts(o2n) == prts(Optimiser(Descent(), WeightDecay(), Momentum(), RAdam()))
+            @test prts(o1n) == prts(OptimiserChain(Adam(), AdamW(), NAdam()))
+            @test prts(o2n) == prts(OptimiserChain(Descent(), WeightDecay(), Momentum(), RAdam()))
         end
     end
 
@@ -67,51 +67,51 @@
         mplm(c) = MutationProbability(LogMutation(((o1,o2)::Tuple) -> "Crossover between $(prts(o1)) and $(prts(o2))", c), Probability(0.2, MockRng([0.3, 0.1, 0.3])))
         oc = OptimizerCrossover() |> mplm |> OptimizerCrossover
 
-        o1 = Optimiser(Descent(), WeightDecay(), Momentum())
-        o2 = Optimiser(Adam(), AdaGrad(), AdaMax())
+        o1 = OptimiserChain(Descent(), WeightDecay(), Momentum())
+        o2 = OptimiserChain(Adam(), AdaGrad(), AdaMax())
 
-        o1n,o2n = @test_logs (:info, "Crossover between WeightDecay and AdaGrad") oc((o1,o2))
+        o1n,o2n = @test_logs (:info, "Crossover between WeightDecay{Float32} and AdaGrad{Float32}") oc((o1,o2))
 
-        @test typeof.(o1n.os) == [Descent, AdaGrad, Momentum]
-        @test typeof.(o2n.os) == [Adam, WeightDecay, AdaMax]
+        @test typeof.(o1n.opts) == (Descent{Float32}, AdaGrad{Float32}, Momentum{Float32})
+        @test typeof.(o2n.opts) == (Adam{Float32}, WeightDecay{Float32}, AdaMax{Float32})
     end
 
     @testset "Learningrate crossover" begin
         import NaiveGAflux: learningrate
         @testset "Single opt" begin
             oc = LearningRateCrossover()
-            o1,o2 = oc((Descent(0.1), Momentum(0.2)))
+            o1,o2 = oc((Descent(0.1f0), Momentum(0.2f0)))
 
-            @test typeof(o1) == Descent
-            @test o1.eta == 0.2
+            @test typeof(o1) == Descent{Float32}
+            @test o1.eta == 0.2f0
 
-            @test typeof(o2) == Momentum
-            @test o2.eta == 0.1
+            @test typeof(o2) == Momentum{Float32}
+            @test o2.eta == 0.1f0
         end
 
         @testset "Shielded opt" begin
             oc = LearningRateCrossover()
-            o1,o2 = oc((ShieldedOpt(Descent(0.1)), Momentum(0.2)))
+            o1,o2 = oc((ShieldedOpt(Descent(0.1f0)), Momentum(0.2f0)))
 
-            @test typeof(o1) == ShieldedOpt{Descent}
-            @test o1.opt.eta == 0.1
+            @test typeof(o1) == ShieldedOpt{Descent{Float32}}
+            @test o1.opt.eta == 0.1f0
 
-            @test typeof(o2) == Momentum
-            @test o2.eta == 0.2
+            @test typeof(o2) == Momentum{Float32}
+            @test o2.eta == 0.2f0
         end
 
-        @testset "Optimiser" begin
+        @testset "OptimiserChain" begin
             oc = LearningRateCrossover()
-            o1 = Optimiser(Descent(0.1), Momentum(0.2), WeightDecay(0.1))
-            o2 = Optimiser(Adam(0.3), RAdam(0.4), NAdam(0.5), Nesterov(0.6))
+            o1 = OptimiserChain(Descent(0.1f0), Momentum(0.2f0), WeightDecay(0.1f0))
+            o2 = OptimiserChain(Adam(0.3f0), RAdam(0.4f0), NAdam(0.5f0), Nesterov(0.6f0))
 
             o1n,o2n = oc((o1,o2))
 
             @test prts(o1n) == prts(o1)
             @test prts(o2n) == prts(o2)
 
-            @test learningrate.(o1n.os[1:end-1]) == [0.3, 0.4]
-            @test learningrate.(o2n.os) == [0.1, 0.2, 0.5, 0.6]
+            @test learningrate.(o1n.opts[1:end-1]) == (0.3f0, 0.4f0)
+            @test learningrate.(o2n.opts) == (0.1f0, 0.2f0, 0.5f0, 0.6f0)
 
         end
     end

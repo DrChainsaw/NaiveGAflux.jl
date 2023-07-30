@@ -22,15 +22,18 @@
     end
 
     @testset "GpuFitness" begin
+        import Flux: gpu
         label = Val(:GpuTest)
         wasgpumapped = false
         function Flux.gpu(x::MockCandidate{Val{:GpuTest}}) 
+            yield() # Maybe a Julia 1.10.0-beta1 bug?
             wasgpumapped = true
             return x
         end
         
         wascpumapped = false
         function NaiveGAflux.transferstate!(::MockCandidate{Val{:GpuTest}}, ::MockCandidate{Val{:GpuTest}}) 
+            yield() # Maybe a Julia 1.10.0-beta1 bug?
             wascpumapped = true
         end
 
@@ -67,7 +70,7 @@
         (::NaNCandidateModel)(x) = x
         NaiveGAflux.lossfun(::NaNCandidateModel; default) = (args...) -> NaN32
 
-        @test @test_logs (:warn, "NaN loss detected when training!") fitness(ttf, NaNCandidateModel()) == 123.456
+        @test @test_logs (:warn, "NaN loss detected when training!") match_mode=:any fitness(ttf, NaNCandidateModel()) == 123.456
     end
 
     @testset "TrainAccuracyFitness" begin

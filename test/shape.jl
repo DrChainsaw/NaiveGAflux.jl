@@ -215,6 +215,8 @@
     @testset "ShapeTrace" begin
         import NaiveGAflux: GlobalPool
         import NaiveNASflux: named
+        import Flux
+        import Flux: BatchNorm, MaxPool, Conv
         iv(N=2) = convinputvertex("in", 1, N)
         bv(in, name) = fluxvertex(name, BatchNorm(nout(in)), in)
         pv(in, name; ks=(3,3), stride=ntuple(i->1, length(ks)), kwargs...) = fluxvertex(name, MaxPool(ks; stride=stride, kwargs...), in)

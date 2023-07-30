@@ -27,9 +27,9 @@
 
         globallearningrate(c::AbstractCandidate) = globallearningrate(c.c)
         globallearningrate(c::CandidateOptModel) = globallearningrate(c.opt)
-        globallearningrate(o::Flux.Optimiser) = prod(globallearningrate.(o.os))
+        globallearningrate(o::Optimisers.OptimiserChain) = prod(globallearningrate.(o.opts))
         globallearningrate(o) = 1
-        globallearningrate(o::ShieldedOpt{Descent}) = o.opt.eta
+        globallearningrate(o::ShieldedOpt{<:Descent}) = o.opt.eta
 
         @test unique(globallearningrate.(pop)) != [1]
         @test length(unique(globallearningrate.(pop))) == 1

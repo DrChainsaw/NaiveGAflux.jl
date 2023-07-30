@@ -58,6 +58,7 @@ end
 end
 
 @testset "GpuIterator" begin
+    import Flux: cpu
     dorg = 1:100;
     itr = GpuIterator(zip([view(dorg,1:10)], [dorg]))
     d1,d2 = first(itr) |> cpu

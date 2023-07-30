@@ -213,13 +213,6 @@ function(r::BoundedRandomWalk)(x...)
     return y
  end
 
- """
-    FluxOptimizer
-
-Alias for Flux.Optimise.AbstractOptimiser
-"""
-const FluxOptimizer = Flux.Optimise.AbstractOptimiser 
-
 
 """
     ShieldedOpt{O} <: Flux.Optimise.AbstractOptimiser 
@@ -227,29 +220,31 @@ const FluxOptimizer = Flux.Optimise.AbstractOptimiser
 
 Shields `o` from mutation by `OptimizerMutation`.
 """
-struct ShieldedOpt{O<:FluxOptimizer} <: FluxOptimizer
+struct ShieldedOpt{O<:Optimisers.AbstractRule} <: Optimisers.AbstractRule
     opt::O
 end
-Flux.Optimise.apply!(o::ShieldedOpt, args...) = Flux.Optimise.apply!(o.opt, args...)
+Optimisers.apply!(o::ShieldedOpt, args...) = Optimisers.apply!(o.opt, args...)
+function Optimisers.init(o::ShieldedOpt, args...) 
+    
+    Optimisers.init(o.opt, args...)
+end
 
 """
     mergeopts(t::Type{T}, os...) where T
     mergeopts(os::T...)
 
 Merge all optimizers of type `T` in `os` into one optimizer of type `T`.
-
-Defaults to `T(prod(learningrate.(os)))`.
 """
-function mergeopts(t::Type{T}, os...) where T
-    merged = mergeopts(filter(o -> isa(o, T), os)...)
-    return vcat(filter(o -> !isa(o, T), os)..., merged)
+function mergeopts(::Type{T}, os...) where T
+    merged = mergeopts(filter(o -> isa(o, T), os))
+    return (filter(o -> !isa(o, T), os)..., merged...)
 end
-mergeopts() = []
-mergeopts(t::Type{T}, os::T...) where T = [mergeopts(os...)]
-mergeopts(os...) = first(@set os[1].eta = (prod(learningrate.(os))))
-mergeopts(os::ShieldedOpt{T}...) where T = ShieldedOpt(mergeopts(map(o -> o.opt, os)...))
-mergeopts(os::WeightDecay...) = WeightDecay(mapreduce(o -> o.wd, *, os))
-
+mergeopts(os::Tuple) = tuple(mergeopts(os...))
+mergeopts(os::Tuple{}) = os
+mergeopts(::Type{T}, os::T...) where T = mergeopts(os...)
+mergeopts(os::Optimisers.AbstractRule...) = first(@set os[1].eta = prod(learningrate, os))
+mergeopts(os::ShieldedOpt{T}...) where T = ShieldedOpt(only(mergeopts(map(o -> o.opt, os))))
+mergeopts(os::WeightDecay...) = WeightDecay(prod(o -> o.gamma, os))
 
 """
     optmap(fopt, x, felse=identity)
@@ -261,15 +256,7 @@ Call without x to return `x -> optmap(fopt, x, felse)`
 """
 optmap(fopt, felse=identity) = x -> optmap(fopt, x, felse)
 optmap(fopt, x, felse) = felse(x)
-optmap(fopt, o::FluxOptimizer, felse) = fopt(o)
-
-function clearstate!(s) end
-clearstate!(s::AbstractDict) = empty!(s)
-
-cleanopt!(o::T) where T = (foreach(fn -> clearstate!(getfield(o, fn)), fieldnames(T)); return o)
-cleanopt!(o::ShieldedOpt) = (cleanopt!(o.opt); return o)
-cleanopt!(o::Flux.Optimiser) = (foreach(cleanopt!, o.os); return o)
-
+optmap(fopt, o::Optimisers.AbstractRule, felse) = fopt(o)
 
 """
     Singleton{T}

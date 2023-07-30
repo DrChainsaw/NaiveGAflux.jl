@@ -9,8 +9,10 @@ using NaiveNASflux: nograd, layertype
 using NaiveNASlib.Advanced, NaiveNASlib.Extend
 import Flux
 using Flux: Dense, Conv, ConvTranspose, DepthwiseConv, CrossCor, LayerNorm, BatchNorm, InstanceNorm, GroupNorm, 
-            MaxPool, MeanPool, Dropout, AlphaDropout, GlobalMaxPool, GlobalMeanPool, cpu, gpu, WeightDecay,
+            MaxPool, MeanPool, Dropout, AlphaDropout, GlobalMaxPool, GlobalMeanPool, cpu, gpu,
             SamePad, params
+import Optimisers
+import Optimisers: WeightDecay
 using Random
 using Logging
 using Statistics
