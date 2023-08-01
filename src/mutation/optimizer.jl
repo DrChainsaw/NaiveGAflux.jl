@@ -25,7 +25,7 @@ LearningRateMutation(rng=rng_default) = OptimizerMutation(o -> nudgelr(o, rng))
 
 
 nudgelr(o, rng=rng_default) = setlearningrate(o, nudgelr(learningrate(o), rng))
-nudgelr(lr::Number, rng=rng_default) = clamp(lr + (rand(rng) - 0.5) * lr * 0.3, 1e-6, 1.0)
+nudgelr(lr::T, rng=rng_default) where T <: Number = clamp(lr + (rand(rng, T) - oftype(lr, 0.5)) * lr * oftype(lr, 0.3), oftype(lr, 1e-6), oftype(lr, 1.0))
 
 learningrate(o::Optimisers.OptimiserChain) = prod(learningrate.(o.opts))
 learningrate(o::ShieldedOpt) = learningrate(o.opt)
