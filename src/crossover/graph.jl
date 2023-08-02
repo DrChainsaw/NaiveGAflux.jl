@@ -76,10 +76,10 @@ function crossover(g1::CompGraph, g2::CompGraph; selection=FilterMutationAllowed
 
     sel(g) = select(selection, g)
 
-    ninputs1 = length(g1.inputs)
-    ninputs2 = length(g2.inputs)
-    noutputs1 = length(g1.outputs)
-    noutputs2 = length(g2.outputs)
+    ninputs1 = length(inputs(g1))
+    ninputs2 = length(inputs(g2))
+    noutputs1 = length(outputs(g1))
+    noutputs2 = length(outputs(g2))
 
     # pairgen api is very close to the iterator specification. Not sure if things would be easier if it was an iterator instead...
     vs1, vs2 = sel(g1), sel(g2)
@@ -107,8 +107,8 @@ function regraph(vs)
 end
 function regraph(x, ninputs, noutputs)
     g = regraph(x)
-    @assert ninputs == length(g.inputs) "Incorrect number of inputs! Expected $ninputs but got $(length(g.inputs))"
-    @assert noutputs == length(g.outputs) "Incorrect number of inputs! Expected $noutputs but got $(length(g.outputs))"
+    @assert ninputs == length(inputs(g)) "Incorrect number of inputs! Expected $ninputs but got $(length(inputs(g)))"
+    @assert noutputs == length(outputs(g)) "Incorrect number of inputs! Expected $noutputs but got $(length(outputs(g)))"
     return g
 end
 

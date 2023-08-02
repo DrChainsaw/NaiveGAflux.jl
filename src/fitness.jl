@@ -79,7 +79,25 @@ function _fitness(s::GpuFitness, c::AbstractCandidate)
     return fitval
 end
 
-function transferstate!(to, from)
+transferstate!(to, from) = _transferstate!(to, from)
+function transferstate!(to::ActivationContribution, from::ActivationContribution)
+    if isempty(to.contribution)
+        resize!(to.contribution, length(from.contribution))
+    end
+    _transferstate!(to, from)
+end
+
+function transferstate!(to::T, from::T) where T <: NaiveNASflux.AbstractMutableComp
+    if ismutable(to)
+        for fn in fieldnames(T)
+            setfield!(to, fn, getfield(from, fn))
+        end
+    else
+        _transferstate!(to, from)
+    end
+end
+
+function _transferstate!(to, from)
     tocs, _ = functor(to)
     fromcs, _ = functor(from)
     @assert length(tocs) == length(fromcs) "Mismatched number of children for $to vs $from"
@@ -87,14 +105,12 @@ function transferstate!(to, from)
         transferstate!(toc, fromc)
     end
 end
-
-function transferstate!(to::T, from::T) where T <: NaiveNASflux.AbstractMutableComp
-    for fn in fieldnames(T)
-        setfield!(to, fn, getfield(from, fn))
-    end
-end
-transferstate!(to::AbstractArray, from::AbstractArray) = copyto!(to, from)
-
+#_transferstate!(to::AbstractArray, from::AbstractArray) = copyto!(to, from)
+_transferstate!(to::AbstractArray{<:Number}, from::AbstractArray{<:Number}) = copyto!(to, from)
+function _transferstate!(to::T, from::T) where T <:AbstractArray 
+    @assert length(to) === length(from) "Mismatched array lenghts´of type "
+    foreach(transferstate!, to, from)
+end 
 
 const gpu_gc = if CUDA.functional()
     function(full=true)
@@ -187,11 +203,11 @@ function trainmodel!(lossfun, model, opt, dataiter)
     ninput = ninputs(model)
     opt_state = Flux.setup(opt, model)
     for data in dataiter
+        inputs = data[1:ninput]
+        y = data[ninput+1:end]
+        
         l, modelgrads = Flux.withgradient(model) do m
-            inputs = data[1:ninput]
             ŷ = m(inputs...)
-
-            y = data[ninput+1:end]
             lossfun(ŷ, y...)  
         end 
         
@@ -201,7 +217,7 @@ function trainmodel!(lossfun, model, opt, dataiter)
             return false
         end
 
-        Flux.update!(opt_state, model, modelgrads[1])
+        #Flux.update!(opt_state, model, modelgrads[1])
     end
     return true
 end

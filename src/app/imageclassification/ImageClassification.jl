@@ -24,7 +24,7 @@ using Serialization
 export ImageClassifier, fit, TrainSplitAccuracy, TrainAccuracyVsSize, AccuracyVsSize, TrainIterConfig, BatchedIterConfig, ShuffleIterConfig, GlobalOptimizerMutation, EliteAndSusSelection, EliteAndTournamentSelection
 
 modelname(c::AbstractCandidate) = NaiveGAflux.model(modelname, c)
-modelname(g::CompGraph) = split(name(g.inputs[]),'.')[1]
+modelname(g::CompGraph) = split(name(first(inputs(g))),'.')[1]
 
 include("strategy.jl")
 include("archspace.jl")

@@ -207,7 +207,7 @@
                 outa = ga(indata)
 
                 vsa = vertices(ga)
-                aswap = separablefrom(v4n(ga, "a.dv3"), ga.inputs)
+                aswap = separablefrom(v4n(ga, "a.dv3"), inputs(ga))
                 @test name.(aswap) == ["a.dv3", "a.add1"]
             end
 
@@ -238,7 +238,7 @@
                 outa = ga(indata)
 
                 vsa = vertices(ga)
-                aswap = separablefrom(v4n(ga, "a.add_aa_bb"), ga.inputs)
+                aswap = separablefrom(v4n(ga, "a.add_aa_bb"), inputs(ga))
                 @test name.(vsa) == name.(vertices(ga))
                 @test name.(aswap) == ["a.add_aa_bb", "a.dva1"]
 
@@ -247,12 +247,12 @@
                 gb = g("b", true)
                 outb = gb(indata)
                 vsb = vertices(gb)
-                @test name.(separablefrom(v4n(gb, "b.add_aa_bb"), gb.inputs)) == ["b.add_aa_bb"]
+                @test name.(separablefrom(v4n(gb, "b.add_aa_bb"), inputs(gb))) == ["b.add_aa_bb"]
                 @test name.(vsb) == name.(vertices(gb))
 
                 @test gb(indata) == outb
 
-                bswap = separablefrom(v4n(gb, "b.dvbb1"), gb.inputs)
+                bswap = separablefrom(v4n(gb, "b.dvbb1"), inputs(gb))
                 @test name.(vsb) == name.(vertices(gb))
                 @test name.(bswap) == ["b.dvbb1"]
 

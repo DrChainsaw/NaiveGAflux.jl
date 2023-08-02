@@ -332,6 +332,6 @@ NaiveNASflux.layer(gp::GlobalPool) = gp
     
 Return the number of model inputs.
 """
-ninputs(cg::CompGraph) = length(cg.inputs)
+ninputs(cg::CompGraph) = length(inputs(cg))
 # I guess this is not good practice, but I'll fix it the first time someone posts an issue about it :)
 ninputs(m) = 1 
