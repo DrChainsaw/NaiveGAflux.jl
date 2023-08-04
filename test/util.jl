@@ -343,3 +343,50 @@ end
 
     @test Logging.min_enabled_level(PrefixLogger(current_logger(), "Test ")) == Logging.min_enabled_level(current_logger())
 end
+
+@testset "check_implicit_optimizer" begin
+    import NaiveGAflux: check_implicit_optimizer
+    import Flux
+    import Flux: Conv, MaxPool
+    
+    @testset "No implicit" begin
+        iv = conv2dinputvertex("in", 1)
+        v1 = fluxvertex("v1", Conv((1,1), nout(iv) => 1), iv; layerfun=identity)
+        v2 = "v2" >> v1 + iv
+        v3 = fluxvertex("v3", MaxPool((1,1)), v2; layerfun=identity)
+        g = CompGraph(iv, v3)
+        @test !check_implicit_optimizer(g)
+    end
+
+    @testset "Use implicit" begin
+        iv = conv2dinputvertex("in", 1)
+        v1 = fluxvertex("v1", Conv((1,1), nout(iv) => 1), iv; layerfun=LazyMutable ∘ AutoOptimiser)
+        v2 = "v2" >> v1 + iv
+        v3 = fluxvertex("v3", MaxPool((1,1)), v2; layerfun=identity)
+        g = CompGraph(iv, v3)
+        @test check_implicit_optimizer(g)
+    end
+
+    @testset "Inconsistent" begin
+        import NaiveGAflux: InconsistentAutoOptimiserException
+        iv = conv2dinputvertex("in", 1)
+        v1 = fluxvertex("v1", Conv((1,1), nout(iv) => 1), iv; layerfun=LazyMutable ∘ AutoOptimiser)
+        v2 = "v2" >> v1 + iv
+        v3 = fluxvertex("v3", Conv((1,1), nout(v2) => 1), v2; layerfun=identity)
+        g = CompGraph(iv, v3)
+        @test_throws InconsistentAutoOptimiserException check_implicit_optimizer(g)
+    end
+
+    @testset "_print_implicit_opts" begin
+        iv = conv2dinputvertex("in", 1)
+        v1 = fluxvertex("v1", Conv((1,1), nout(iv) => 1), iv; layerfun=LazyMutable ∘ AutoOptimiser)
+        v2 = "v2" >> v1 + iv
+        v3 = fluxvertex("v3", Conv((1,1), nout(v2) => 1), v2; layerfun=identity)
+        g = CompGraph(iv, v3)
+        res = sprint(NaiveGAflux._print_implicit_opts, g)
+        exp = ("vertex 2 implicit: true, name: v1", "vertex 4 implicit: false, name: v3")
+        for (expline, resline) in zip(exp, split(res, "\n"))
+            @test expline == resline
+        end
+    end
+end

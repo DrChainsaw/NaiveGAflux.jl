@@ -9,9 +9,9 @@ using NaiveNASlib.Advanced, NaiveNASlib.Extend
         MockRng(seq) = new(seq, 0)
     end
 
-    function Random.rand(rng::MockRng)
+    function Random.rand(rng::MockRng, type::Type{T}=eltype(rng.seq)) where T
         rng.ind = rng.ind % length(rng.seq) + 1
-        return rng.seq[rng.ind]
+        return convert(type, rng.seq[rng.ind])
     end
 
     mutable struct SeqRng <: AbstractRNG

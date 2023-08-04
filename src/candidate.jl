@@ -99,15 +99,30 @@ newcand(c::CandidateModel, mapfield) = CandidateModel(mapfield(c.model))
 
 """
     CandidateOptModel <: AbstractCandidate
-    CandidateOptModel(optimizer, candidate)
+    CandidateOptModel(optimizer, candidate; checkimplicit=true)
 
 A candidate adding an optimizer to another candidate. The optimizer is accessed by [`opt(c)`] for `CandidateOptModel c`.
+
+Use`checkimplicit=false`` to avoid consistenty checks for implicit optimiser state (e.g. NaiveNASflux.$AutoOptimiser).
 """
 struct CandidateOptModel{O, C <: AbstractCandidate} <: AbstractWrappingCandidate
     opt::O
     c::C
+    function CandidateOptModel(opt::O, c::C; checkimplicit=true) where {O <: Optimisers.AbstractRule, C<:AbstractCandidate}
+        if checkimplicit && check_implicit_optimizer(model(c))
+            throw(ArgumentError("Model uses implicit optimisers! Need to wrap optimizer $opt in an $(ImplicitOpt)!"))
+        end
+        new{O, C}(opt, c)     
+    end
+
+    function CandidateOptModel(opt::O, c::C; checkimplicit=true) where {O <: ImplicitOpt, C<:AbstractCandidate} 
+        if checkimplicit && !check_implicit_optimizer(model(c))
+            throw(ArgumentError("Model does not use implicit optimisers!"))
+        end
+        new{O, C}(opt, c)  
+    end  
 end
-CandidateOptModel(opt, g::CompGraph) = CandidateOptModel(opt, CandidateModel(g))
+CandidateOptModel(opt, g::CompGraph; kwargs...) = CandidateOptModel(opt, CandidateModel(g); kwargs...)
 
 Functors.@functor CandidateOptModel
 

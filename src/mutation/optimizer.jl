@@ -21,6 +21,7 @@ LearningRateMutation(rng=rng_default) = OptimizerMutation(o -> nudgelr(o, rng))
 
 (m::OptimizerMutation)(opt::Optimisers.OptimiserChain) = Optimisers.OptimiserChain(m.(opt.opts))
 (m::OptimizerMutation)(o::ShieldedOpt) = o;
+(m::OptimizerMutation)(o::ImplicitOpt) = ImplicitOpt(m(o.rule))
 (m::OptimizerMutation)(o::Optimisers.AbstractRule) = m.optfun(o)
 
 
@@ -28,10 +29,12 @@ nudgelr(o, rng=rng_default) = setlearningrate(o, nudgelr(learningrate(o), rng))
 nudgelr(lr::T, rng=rng_default) where T <: Number = clamp(lr + (rand(rng, T) - oftype(lr, 0.5)) * lr * oftype(lr, 0.3), oftype(lr, 1e-6), oftype(lr, 1.0))
 
 learningrate(o::Optimisers.OptimiserChain) = prod(learningrate.(o.opts))
-learningrate(o::ShieldedOpt) = learningrate(o.opt)
+learningrate(o::ShieldedOpt) = learningrate(o.rule)
+learningrate(o::ImplicitOpt) = learningrate(o.rule)
 learningrate(o) = o.eta
 
 newlr(o, lrf = nudgelr) = setlearningrate(o, lrf(learningrate(o)))
+setlearningrate(o::ImplicitOpt, lr) = setlearningrate(o.rule, lr)
 setlearningrate(o, lr) = @set o.eta = lr
 
 """
@@ -45,6 +48,7 @@ struct AddOptimizerMutation{F} <: AbstractMutation{Optimisers.AbstractRule}
     optgen::F
 end
 (m::AddOptimizerMutation)(o::ShieldedOpt) = o;
+(m::AddOptimizerMutation)(o::ImplicitOpt) = ImplicitOpt(m(o.rule))
 (m::AddOptimizerMutation)(o::Optimisers.AbstractRule) = m(Optimisers.OptimiserChain(o))
 function (m::AddOptimizerMutation)(opt::Optimisers.OptimiserChain)
     newopt = m.optgen(opt)

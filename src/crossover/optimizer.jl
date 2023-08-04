@@ -33,6 +33,7 @@ LearningRateCrossover() = OptimizerCrossover(learningrateswap)
 (oc::OptimizerCrossover)(os::EitherIs{ShieldedOpt}) = os
 (oc::OptimizerCrossover)(os::MixTuple{ShieldedOpt, Optimisers.OptimiserChain}) = os
 (oc::OptimizerCrossover)(os::EitherIs{Optimisers.OptimiserChain}) = zipcrossover(reoptiter, os, oc.crossover)
+(oc::OptimizerCrossover)((o1, o2)::NTuple{2, ImplicitOpt}) = ImplicitOpt.(oc((o1.rule, o2.rule)))
 
 
 reoptiter(o) = (o,), identity

@@ -199,9 +199,9 @@ function _fitness(s::TrainThenFitness, c::AbstractCandidate)
 end
 
 
-function trainmodel!(lossfun, model, opt, dataiter)
+function trainmodel!(lossfun, model, optrule, dataiter)
     ninput = ninputs(model)
-    opt_state = Flux.setup(opt, model)
+    opt_state = Flux.setup(optrule, model)
     for data in dataiter
         inputs = data[1:ninput]
         y = data[ninput+1:end]
@@ -211,15 +211,41 @@ function trainmodel!(lossfun, model, opt, dataiter)
             lossfun(ŷ, y...)  
         end 
         
-        if isnan(l) || isinf(l)
-            badval = isnan(l) ? "NaN" : "Inf"
-            @warn "$badval loss detected when training!"
-            return false
-        end
+        _lossok(l) || return false
 
-        #Flux.update!(opt_state, model, modelgrads[1])
+        Flux.update!(opt_state, model, modelgrads[1])
     end
     return true
+end
+
+function trainmodel!(lossfun, model, optrule::ImplicitOpt, dataiter)
+    ninput = ninputs(model)
+    ok = optimisersetup!(optrule, model)
+    if !ok 
+        throw(ArgumentError("Could not setup implicit optimiser for model $model. Forgot to use $AutoOptimiser when creating vertices?"))
+    end
+
+    for data in dataiter
+        inputs = data[1:ninput]
+        y = data[ninput+1:end]
+        
+        l, _ = Flux.withgradient() do 
+            ŷ = model(inputs...)
+            lossfun(ŷ, y...)  
+        end 
+        
+        _lossok(l) || return false
+    end
+    return true
+end
+
+function _lossok(l)
+    if isnan(l) || isinf(l)
+        badval = isnan(l) ? "NaN" : "Inf"
+        @warn "$badval loss detected when training!"
+        return false
+    end
+    true
 end
 
 
