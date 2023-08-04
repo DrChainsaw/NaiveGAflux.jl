@@ -46,7 +46,7 @@ export EvolutionChain, PairCandidates, ShuffleCandidates, EvolveCandidates
 export Population, generation
 
 # misc types
-export Probability, MutationShield, ApplyIf, RemoveIfSingleInput, PersistentArray, ShieldedOpt
+export Probability, MutationShield, ApplyIf, RemoveIfSingleInput, PersistentArray, ShieldedOpt, ImplicitOpt
 
 # Batch size selection
 export BatchSizeSelectionWithDefaultInShape, BatchSizeSelectionScaled, BatchSizeSelectionFromAlternatives, BatchSizeSelectionMaxSize, batchsizeselection

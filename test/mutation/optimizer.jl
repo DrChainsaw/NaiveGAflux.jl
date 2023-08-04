@@ -1,6 +1,7 @@
 @testset "Optimizer mutation" begin
-    import NaiveGAflux: setlearningrate, learningrate
-    import NaiveGAflux.Optimisers: OptimiserChain, Descent, Momentum, Nesterov, Adam
+    import NaiveGAflux: setlearningrate, learningrate, ImplicitOpt
+    import Optimisers
+    import Optimisers: OptimiserChain, Descent, Momentum, Nesterov, Adam
 
     @testset "Mutate learning rate" begin
         m = OptimizerMutation(o -> setlearningrate(o, 10 * learningrate(o)))
@@ -17,16 +18,20 @@
 
         @test typeof(m(Descent())) == Momentum{Float32}
         @test typeof(m(ShieldedOpt(Descent()))) == ShieldedOpt{Descent{Float32}}
-        @test typeof.(m(OptimiserChain(Nesterov(), ShieldedOpt(Adam()))).opts) == (Momentum{Float32}, ShieldedOpt{Adam{Float32}})
+        @test typeof(m(ImplicitOpt(Nesterov()))) == ImplicitOpt{Momentum{Float32}}
+        @test typeof(m(OptimiserChain(Nesterov(), ShieldedOpt(Adam())))) == OptimiserChain{Tuple{Momentum{Float32}, ShieldedOpt{Adam{Float32}}}}
+        @test typeof(m(ImplicitOpt(OptimiserChain(Nesterov(), Adam())))) == ImplicitOpt{OptimiserChain{Tuple{Momentum{Float32}, Momentum{Float32}}}}
     end
 
     @testset "Add optimizer" begin
         m = AddOptimizerMutation(o -> Descent(0.1f0))
 
-        @test typeof.(m(Descent(0.2f0)).opts) == tuple(Descent{Float32})
-        @test typeof.(m(Momentum(0.2f0)).opts) == (Momentum{Float32}, Descent{Float32})
+        @test typeof(m(Descent(0.2f0))) == OptimiserChain{Tuple{Descent{Float32}}}
+        @test typeof(m(Momentum(0.2f0))) == OptimiserChain{Tuple{Momentum{Float32}, Descent{Float32}}}
         @test typeof(m(ShieldedOpt(Descent()))) == ShieldedOpt{Descent{Float32}}
-        @test typeof.(m(OptimiserChain(Nesterov(), Descent(), ShieldedOpt(Descent()))).opts) == (Nesterov{Float32}, ShieldedOpt{Descent{Float32}}, Descent{Float32})
+        @test typeof(m(ImplicitOpt(Nesterov()))) == ImplicitOpt{OptimiserChain{Tuple{Nesterov{Float32}, Descent{Float32}}}}
+        @test typeof(m(OptimiserChain(Nesterov(), Descent(), ShieldedOpt(Descent())))) == OptimiserChain{Tuple{Nesterov{Float32}, ShieldedOpt{Descent{Float32}}, Descent{Float32}}}
+        @test typeof(m(ImplicitOpt(OptimiserChain(Nesterov(), Descent(), ShieldedOpt(Descent()))))) == ImplicitOpt{OptimiserChain{Tuple{Nesterov{Float32}, ShieldedOpt{Descent{Float32}}, Descent{Float32}}}}
     end
 
     @testset "MutationChain and LogMutation" begin

@@ -136,7 +136,7 @@ function generate_persistent(nr, newpop, mdir, insize, outsize, cwrap=identity, 
 end
 function create_model(name, as, in, cwrap, insize)
     optselect = optmutation(1.0)
-    opt = optselect(Descent(rand(Float32) * 0.099f0 + 0.01f0))
+    opt = optselect(ImplicitOpt(Descent(rand(Float32) * 0.099f0 + 0.01f0)))
     bslimit = batchsizeselection(insize[1:end-1]; alternatives=ntuple(i->2^i, 10))
     imstart = BatchSizeIteratorMap(64, 64, bslimit)
     im = itermapmutation(1.0)(imstart)

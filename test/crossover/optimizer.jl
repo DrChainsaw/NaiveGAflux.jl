@@ -1,12 +1,14 @@
 @testset "Optimizer crossover" begin
-    using NaiveGAflux.Optimisers
+    import NaiveGAflux: ImplicitOpt
+    import Optimisers
+    import Optimisers: OptimiserChain, Descent, Momentum, Nesterov, Adam, WeightDecay
 
     prts(o) = typeof(o)
-    prts(o::OptimiserChain) = "$(typeof(o))$(prts.(Tuple(o.opts)))"
 
     @testset "Swap optimizers $(prts(o1)) and $(prts(o2))" for (o1, o2) in (
         (Adam(), Momentum()),
         (OptimiserChain(Descent(), WeightDecay()), OptimiserChain(Momentum(), Nesterov())),
+        (ImplicitOpt(OptimiserChain(Descent(), WeightDecay())), ImplicitOpt(OptimiserChain(Momentum(), Nesterov()))),
         )
         oc = OptimizerCrossover()
         ooc = OptimizerCrossover(oc)
@@ -45,6 +47,8 @@
     end
 
     @testset "Cardinality difference" begin
+        import Optimisers
+        import Optimisers: Momentum, WeightDecay, OptimiserChain, Descent, AdamW, NAdam, RAdam
 
         @testset "Single opt vs Optimiser" begin
             oc = OptimizerCrossover()
@@ -64,6 +68,9 @@
     end
 
     @testset "LogMutation and MutationProbability" begin
+        import Optimisers
+        import Optimisers: Descent, WeightDecay, Momentum, Adam, AdaGrad, AdaMax
+
         mplm(c) = MutationProbability(LogMutation(((o1,o2)::Tuple) -> "Crossover between $(prts(o1)) and $(prts(o2))", c), Probability(0.2, MockRng([0.3, 0.1, 0.3])))
         oc = OptimizerCrossover() |> mplm |> OptimizerCrossover
 
@@ -94,7 +101,7 @@
             o1,o2 = oc((ShieldedOpt(Descent(0.1f0)), Momentum(0.2f0)))
 
             @test typeof(o1) == ShieldedOpt{Descent{Float32}}
-            @test o1.opt.eta == 0.1f0
+            @test o1.rule.eta == 0.1f0
 
             @test typeof(o2) == Momentum{Float32}
             @test o2.eta == 0.2f0

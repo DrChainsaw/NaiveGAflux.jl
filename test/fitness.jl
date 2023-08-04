@@ -50,25 +50,32 @@
         @test fitness(AccuracyFitness(DummyIter()), IdCand()) == 0.5
     end
 
-    @testset "TrainThenFitness" begin
+    struct NaNCandidateModel <: AbstractCandidate end
+    NaiveGAflux.ninputs(::NaNCandidateModel) = 1
+    NaiveGAflux.model(f::NaNCandidateModel) = f 
+    (::NaNCandidateModel)(x) = x
+    NaiveGAflux.lossfun(::NaNCandidateModel; default) = (args...) -> NaN32
+    NaiveNASflux.mutateoptimiser!(f, ::NaNCandidateModel) = true
+
+    import Flux
+    import Flux: Dense
+
+    @testset "TrainThenFitness with $layerfun" for (layerfun, optwrap) in (
+        (LazyMutable, identity),
+        (AutoOptimiser, NaiveGAflux.ImplicitOpt),
+    )
         iv = inputvertex("in", 2)
-        ov = fluxvertex(Dense(2, 2), iv)
+        ov = fluxvertex(Dense(2, 2), iv; layerfun)
         cand = CandidateModel(CompGraph(iv, ov))
 
         ttf = TrainThenFitness(
             dataiter = [(ones(Float32, 2, 1), ones(Float32, 2, 1))],
             defaultloss=Flux.mse,
-            defaultopt = Descent(0.0001),
+            defaultopt = optwrap(Descent(0.0001)),
             fitstrat = MockFitness(17),
             invalidfitness = 123.456)
 
         @test fitness(ttf, cand) === 17
-
-        struct NaNCandidateModel <: AbstractCandidate end
-        NaiveGAflux.ninputs(::NaNCandidateModel) = 1
-        NaiveGAflux.model(f::NaNCandidateModel) = f 
-        (::NaNCandidateModel)(x) = x
-        NaiveGAflux.lossfun(::NaNCandidateModel; default) = (args...) -> NaN32
 
         @test @test_logs (:warn, "NaN loss detected when training!") match_mode=:any fitness(ttf, NaNCandidateModel()) == 123.456
     end
