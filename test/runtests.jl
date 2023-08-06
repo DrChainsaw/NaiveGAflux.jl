@@ -81,4 +81,7 @@ using NaiveNASlib.Advanced, NaiveNASlib.Extend
     @info "Testing documentation"
     import Documenter
     Documenter.doctest(NaiveGAflux)
+
+    @info "Testing AutoOptimiser"
+    include("autooptimiser.jl")
 end

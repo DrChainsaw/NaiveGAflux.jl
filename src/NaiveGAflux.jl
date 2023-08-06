@@ -98,6 +98,12 @@ export AutoFlux
 # Visulization
 export PlotFitness, ScatterPop, ScatterOpt, ScatterBatchSize, MultiPlot, CbAll
 
+# This should come from NaiveNASflux once it matures (or be deleted if turned obsolete) 
+include("autooptimiser.jl")
+import .AutoOptimiserExperimental
+import .AutoOptimiserExperimental: AutoOptimiser, optimisersetup!, mutateoptimiser!
+export AutoOptimiser
+
 include("util.jl")
 include("shape.jl")
 include("batchsize.jl")

@@ -68,7 +68,7 @@ mutation = MutationProbability(VertexMutation(NoutMutation(-0.5, 0.5)), 0.98)
 mutation(graph)
 
 @test nout.(vertices(graph)) == [3,10,2,10]
-@test size(graph(ones(3,1))) == (10, 1)
+@test size(graph(ones(Float32,3,1))) == (10, 1)
 
 # Mutation can also be conditioned:
 mutation = VertexMutation(MutationFilter(v -> nout(v) < 10, RemoveVertexMutation()))

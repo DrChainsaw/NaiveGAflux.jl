@@ -233,7 +233,7 @@ Optimisers.init(r::ShieldedOpt, args...) = Optimisers.init(r.rule, args...)
 Sentinel value to be used e.g. for a [`CandidateOptModel`](@ref) or a [`TrainThenFitness`](@ref)
 to mark that parameters are updated implicitly when taking gradients.
 
-Main use case is when a `NaiveNASflux.$AutoOptimiser` is used to update the model.
+Main use case is when a `$AutoOptimiser` is used to update the model.
 """
 struct ImplicitOpt{R} <: Optimisers.AbstractRule
     rule::R
@@ -374,13 +374,13 @@ function _print_implicit_opts(io::IO, g::CompGraph)
         end
     end
 end
-_is_implicit_opt(v) = NaiveNASflux.mutateoptimiser!(a -> a.optstate, v)
+_is_implicit_opt(v) = mutateoptimiser!(a -> a.optstate, v)
 
 """
     check_implicit_optimizer(m::CompGraph)
     check_implicit_optimizer(c::AbstractCandidate)
 
-Returns true if input argument uses implicit optimizer state (e.g NaiveNASflux.$AutoOptimiser).
+Returns true if input argument uses implicit optimizer state (e.g $AutoOptimiser).
 
 Throws a $InconsistentAutoOptimiserException if some but not all parameters use implicit optimizer state.
 """

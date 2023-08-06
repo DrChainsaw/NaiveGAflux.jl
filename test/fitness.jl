@@ -55,7 +55,7 @@
     NaiveGAflux.model(f::NaNCandidateModel) = f 
     (::NaNCandidateModel)(x) = x
     NaiveGAflux.lossfun(::NaNCandidateModel; default) = (args...) -> NaN32
-    NaiveNASflux.mutateoptimiser!(f, ::NaNCandidateModel) = true
+    NaiveGAflux.AutoOptimiserExperimental.mutateoptimiser!(f, ::NaNCandidateModel) = true
 
     import Flux
     import Flux: Dense

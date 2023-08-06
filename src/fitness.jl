@@ -142,7 +142,7 @@ function _fitness(s::AccuracyFitness, c::AbstractCandidate)
         xs = data[1:ninput]
         ys = data[ninput+1:end]
 
-        correct = Flux.onecold(cpu(m(xs...))) .== Flux.onecold(cpu(ys)...)
+        correct = Flux.onecold(m(xs...)) .== Flux.onecold(ys...)
         acc += sum(correct)
         cnt += length(correct)
     end
