@@ -23,6 +23,7 @@ Mutation operations are exported as structs rather than functions since they are
 Random.seed!(NaiveGAflux.rng_default, 3) #src
 
 # Start with a simple model to mutate.
+import Flux: Dense
 invertex = denseinputvertex("in", 3)
 layer1 = fluxvertex(Dense(nout(invertex), 4), invertex)
 layer2 = fluxvertex(Dense(nout(layer1), 5), layer1)

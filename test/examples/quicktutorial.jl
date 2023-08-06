@@ -6,7 +6,10 @@ number of fully connected layers and their widths.
 """
 
 @testset "Basic example" begin #src
-using NaiveGAflux, Flux, Random
+using NaiveGAflux, Random
+import Flux, Optimisers
+import Flux: relu, elu, selu
+import Optimisers: Adam
 Random.seed!(NaiveGAflux.rng_default, 0)
 
 nlabels = 3
@@ -22,10 +25,10 @@ initial_searchspace = ArchSpaceChain(initial_hidden, outlayer)
 
 # Sample 5 models from the initial search space and make an initial population.
 samplemodel(invertex) = CompGraph(invertex, initial_searchspace(invertex))
-models = [samplemodel(denseinputvertex("input", ninputs)) for _ in 1:5]
-@test nvertices.(models) == [4, 3, 4, 5, 3]
+initial_models = [samplemodel(denseinputvertex("input", ninputs)) for _ in 1:5]
+@test nvertices.(initial_models) == [4, 3, 4, 5, 3]
 
-population = Population(CandidateModel.(models))
+population = Population(CandidateModel.(initial_models))
 @test generation(population) == 1
 
 # #### Step 2: Set up fitness function:
@@ -39,7 +42,7 @@ datasetvalidate = [(randn(Float32, ninputs, batchsize), onehot(rand(1:nlabels, b
 fitnessfunction = TrainThenFitness(;
     dataiter = datasettrain,
     defaultloss = Flux.logitcrossentropy, # Will be used if not provided by the candidate
-    defaultopt = Adam(), # Same as above. State is wiped after training to prevent memory leaks
+    defaultopt = Adam(), # Same as above.
     fitstrat = AccuracyFitness(datasetvalidate) # This is what creates our fitness value after training
 )
 

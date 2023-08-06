@@ -233,7 +233,7 @@ Optimisers.init(r::ShieldedOpt, args...) = Optimisers.init(r.rule, args...)
 Sentinel value to be used e.g. for a [`CandidateOptModel`](@ref) or a [`TrainThenFitness`](@ref)
 to mark that parameters are updated implicitly when taking gradients.
 
-Main use case is when a `$AutoOptimiser` is used to update the model.
+Main use case is when an `$AutoOptimiser` is used to update the model.
 """
 struct ImplicitOpt{R} <: Optimisers.AbstractRule
     rule::R

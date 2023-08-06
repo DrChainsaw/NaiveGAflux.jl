@@ -6,4 +6,6 @@ ApplyIf
 PersistentArray
 persist
 ShieldedOpt
+AutoOptimiser
+ImplicitOpt
 ```
