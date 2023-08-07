@@ -39,6 +39,7 @@ import Flux, Optimisers
 import Flux: relu, elu, selu
 import Optimisers: Descent, Momentum, Nesterov, Adam
 Random.seed!(NaiveGAflux.rng_default, 0)
+rng = Xoshiro(0)
 
 nlabels = 3
 ninputs = 5
@@ -59,8 +60,8 @@ initial_models = [samplemodel(denseinputvertex("input", ninputs)) for _ in 1:5]
 @test nvertices.(initial_models) == [4, 3, 4, 5, 3]
 
 # Lets add optimisers into the search space this time just to show how `ImplicitOpt` is used then.
-optalts = (Descent(0.1f0), Momentum(0.1f0), Nesterov(0.1f0), Adam(0.1f0))
-initial_optrules = ImplicitOpt.(rand(optalts, length(initial_models)))
+optalts = (Descent, Momentum, Nesterov, Adam)
+initial_optrules = (ImplicitOpt(OT(1f1^rand(rng, -3:-1))) for OT in rand(rng, optalts, length(initial_models)))
 
 population = Population(CandidateOptModel.(initial_optrules, initial_models))
 @test generation(population) == 1
