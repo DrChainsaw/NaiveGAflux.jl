@@ -70,13 +70,13 @@ export MutationChain, RecordMutation, LogMutation, MutationFilter
 # graph mutation types
 export VertexMutation, NoutMutation, AddVertexMutation, RemoveVertexMutation, AddEdgeMutation, RemoveEdgeMutation, KernelSizeMutation
 export KernelSizeMutation2D, ActivationFunctionMutation
-# optimizer mutation types
-export OptimizerMutation, LearningRateMutation, AddOptimizerMutation
+# optimiser mutation types
+export OptimiserMutation, LearningRateMutation, AddOptimiserMutation
 # Iterator wrapping mutation types
 export TrainBatchSizeMutation
 
 # Crossover types
-export AbstractCrossover, VertexCrossover, CrossoverSwap, OptimizerCrossover, LearningRateCrossover, IteratorMapCrossover
+export AbstractCrossover, VertexCrossover, CrossoverSwap, OptimiserCrossover, LearningRateCrossover, IteratorMapCrossover
 
 # architecture spaces
 export AbstractArchSpace, LoggingArchSpace, VertexSpace, NoOpArchSpace, ArchSpace, ConditionalArchSpace, RepeatArchSpace, ArchSpaceChain
@@ -111,11 +111,11 @@ include("iteratormaps.jl")
 include("archspace.jl")
 include("mutation/generic.jl")
 include("mutation/graph.jl")
-include("mutation/optimizer.jl")
+include("mutation/optimiser.jl")
 include("mutation/iteratormaps.jl")
 include("crossover/generic.jl")
 include("crossover/graph.jl")
-include("crossover/optimizer.jl")
+include("crossover/optimiser.jl")
 include("crossover/iteratormaps.jl")
 include("candidate.jl")
 include("fitness.jl")

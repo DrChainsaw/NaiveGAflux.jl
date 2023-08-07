@@ -21,7 +21,7 @@ import IterTools: ncycle
 # To store program state for pause/resume
 using Serialization
 
-export ImageClassifier, fit, TrainSplitAccuracy, TrainAccuracyVsSize, AccuracyVsSize, TrainIterConfig, BatchedIterConfig, ShuffleIterConfig, GlobalOptimizerMutation, EliteAndSusSelection, EliteAndTournamentSelection
+export ImageClassifier, fit, TrainSplitAccuracy, TrainAccuracyVsSize, AccuracyVsSize, TrainIterConfig, BatchedIterConfig, ShuffleIterConfig, GlobalOptimiserMutation, EliteAndSusSelection, EliteAndTournamentSelection
 
 modelname(c::AbstractCandidate) = NaiveGAflux.model(modelname, c)
 modelname(g::CompGraph) = split(name(first(inputs(g))),'.')[1]

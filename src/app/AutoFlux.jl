@@ -19,7 +19,7 @@ The following model types are currently supported
 
 Keyword `cb` can be used to supply a callback function which will be called each generation with the current population as input.
 
-Keyword `mdir` is a directory which will be searched for serialized state from which the optimization will resume operations. Particularly useful in combination with `cb=persist`.
+Keyword `mdir` is a directory which will be searched for serialized state from which the optimisation will resume operations. Particularly useful in combination with `cb=persist`.
 """
 function fit(x, y; cb=identity, mdir=missing)
     if ndims(x) == 4 

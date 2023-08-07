@@ -162,7 +162,7 @@ end
                 @test fitness(SizeFitness(), cand) == nparams(graph)
 
                 graphmutation = VertexMutation(MutationFilter(v -> name(v)=="hlayer", AddVertexMutation(ArchSpace(DenseSpace([1], [relu])))))
-                optmutation = OptimizerMutation((Momentum, Nesterov, Adam))
+                optmutation = OptimiserMutation((Momentum, Nesterov, Adam))
                 bsmutation = TrainBatchSizeMutation(0, -1, MockRng([0.5]))
                 evofun = MapCandidate(graphmutation, optmutation, bsmutation)
                 newcand = evofun(cand)
@@ -191,7 +191,7 @@ end
 
                 teststrat() = NaiveGAflux.default_crossoverswap_strategy(v -> 1)
                 graphcrossover = VertexCrossover(CrossoverSwap(;pairgen = (v1,v2) -> (1,1), strategy=teststrat); pairgen = (v1,v2;ind1) -> ind1==1 ? (2,3) : nothing)
-                optcrossover = OptimizerCrossover()
+                optcrossover = OptimiserCrossover()
                 crossfun = MapCandidate(graphcrossover, optcrossover)
 
                 newcand1, newcand2 = crossfun((cand, newcand))
@@ -391,9 +391,9 @@ end
         end
     end
 
-    @testset "Global optimizer mutation" begin
+    @testset "Global optimiser mutation" begin
         import NaiveGAflux.Optimisers: OptimiserChain
-        import NaiveGAflux: setlearningrate, learningrate, BoundedRandomWalk, global_optimizer_mutation, randomlrscale
+        import NaiveGAflux: setlearningrate, learningrate, BoundedRandomWalk, global_optimiser_mutation, randomlrscale
 
         @testset "Random learning rate scale" begin
             using Random
@@ -427,7 +427,7 @@ end
             lr(c) = c.opt.eta
             @test lr.(pop) == 0.1:0.1:1.0
 
-            popscal = global_optimizer_mutation(pop, pp -> OptimizerMutation(o -> setlearningrate(o, 10learningrate(o))))
+            popscal = global_optimiser_mutation(pop, pp -> OptimiserMutation(o -> setlearningrate(o, 10learningrate(o))))
 
             @test lr.(popscal) == 1:10
         end

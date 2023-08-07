@@ -108,7 +108,7 @@ end
 """
     ScatterOpt(plotfun, rootdir, subdir="ScatterOpt")
 
-Scatter plot of learning rate vs fitness vs optimizer type for each candidate.
+Scatter plot of learning rate vs fitness vs optimiser type for each candidate.
 
 Also serializes data so that plotting can be resumed if evolution is aborted.
 

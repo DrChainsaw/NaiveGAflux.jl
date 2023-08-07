@@ -1,24 +1,24 @@
-@testset "Optimizer crossover" begin
+@testset "Optimiser crossover" begin
     import NaiveGAflux: ImplicitOpt
     import Optimisers
     import Optimisers: OptimiserChain, Descent, Momentum, Nesterov, Adam, WeightDecay
 
     prts(o) = typeof(o)
 
-    @testset "Swap optimizers $(prts(o1)) and $(prts(o2))" for (o1, o2) in (
+    @testset "Swap optimisers $(prts(o1)) and $(prts(o2))" for (o1, o2) in (
         (Adam(), Momentum()),
         (OptimiserChain(Descent(), WeightDecay()), OptimiserChain(Momentum(), Nesterov())),
         (ImplicitOpt(OptimiserChain(Descent(), WeightDecay())), ImplicitOpt(OptimiserChain(Momentum(), Nesterov()))),
         )
-        oc = OptimizerCrossover()
-        ooc = OptimizerCrossover(oc)
+        oc = OptimiserCrossover()
+        ooc = OptimiserCrossover(oc)
         @test prts.(oc((o1,o2))) == prts.(ooc((o1,o2))) == prts.((o2, o1))
         @test prts.(oc((o2,o1))) == prts.(ooc((o2,o1))) == prts.((o1, o2))
     end
 
     @testset "ShieldedOpt" begin
 
-        oc = OptimizerCrossover()
+        oc = OptimiserCrossover()
         
         @testset "$baseo1 and $baseo2" for (baseo1, baseo2) in (
             (Descent(), Momentum()),
@@ -51,12 +51,12 @@
         import Optimisers: Momentum, WeightDecay, OptimiserChain, Descent, AdamW, NAdam, RAdam
 
         @testset "Single opt vs Optimiser" begin
-            oc = OptimizerCrossover()
+            oc = OptimiserCrossover()
             @test prts.(oc((Descent(), OptimiserChain(Momentum(), WeightDecay())))) == prts.((Momentum(), OptimiserChain(Descent(), WeightDecay())))
         end
 
         @testset "Different size Optimisers" begin
-            oc = OptimizerCrossover()
+            oc = OptimiserCrossover()
             o1 = OptimiserChain(Descent(), WeightDecay(), Momentum())
             o2 = OptimiserChain(Adam(), AdamW(), NAdam(), RAdam())
 
@@ -72,7 +72,7 @@
         import Optimisers: Descent, WeightDecay, Momentum, Adam, AdaGrad, AdaMax
 
         mplm(c) = MutationProbability(LogMutation(((o1,o2)::Tuple) -> "Crossover between $(prts(o1)) and $(prts(o2))", c), Probability(0.2, MockRng([0.3, 0.1, 0.3])))
-        oc = OptimizerCrossover() |> mplm |> OptimizerCrossover
+        oc = OptimiserCrossover() |> mplm |> OptimiserCrossover
 
         o1 = OptimiserChain(Descent(), WeightDecay(), Momentum())
         o2 = OptimiserChain(Adam(), AdaGrad(), AdaMax())

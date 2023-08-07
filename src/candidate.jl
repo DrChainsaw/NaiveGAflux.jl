@@ -35,7 +35,7 @@ model(f, c::AbstractCandidate; kwargs...) = f(model(c; kwargs...))
 """
     opt(c::AbstractCandidate; [default])
 
-Return the optimizer of candidate `c` if `c` has an optimizer, `default` (which defaults to `nothing`) otherwise.
+Return the optimiser of candidate `c` if `c` has an optimiser, `default` (which defaults to `nothing`) otherwise.
 """
 opt(::AbstractCandidate; default=nothing) = default
 
@@ -99,9 +99,9 @@ newcand(c::CandidateModel, mapfield) = CandidateModel(mapfield(c.model))
 
 """
     CandidateOptModel <: AbstractCandidate
-    CandidateOptModel(optimizer, candidate; checkimplicit=true)
+    CandidateOptModel(optimiser, candidate; checkimplicit=true)
 
-A candidate adding an optimizer to another candidate. The optimizer is accessed by [`opt(c)`] for `CandidateOptModel c`.
+A candidate adding an optimiser to another candidate. The optimiser is accessed by [`opt(c)`] for `CandidateOptModel c`.
 
 Use`checkimplicit=false`` to avoid consistenty checks for implicit optimiser state (e.g. NaiveNASflux.$AutoOptimiser).
 """
@@ -109,14 +109,14 @@ struct CandidateOptModel{O, C <: AbstractCandidate} <: AbstractWrappingCandidate
     opt::O
     c::C
     function CandidateOptModel(opt::O, c::C; checkimplicit=true) where {O <: Optimisers.AbstractRule, C<:AbstractCandidate}
-        if checkimplicit && check_implicit_optimizer(model(c))
-            throw(ArgumentError("Model uses implicit optimisers! Need to wrap optimizer $opt in an $(ImplicitOpt)!"))
+        if checkimplicit && check_implicit_optimiser(model(c))
+            throw(ArgumentError("Model uses implicit optimisers! Need to wrap optimiser $opt in an $(ImplicitOpt)!"))
         end
         new{O, C}(opt, c)     
     end
 
     function CandidateOptModel(opt::O, c::C; checkimplicit=true) where {O <: ImplicitOpt, C<:AbstractCandidate} 
-        if checkimplicit && !check_implicit_optimizer(model(c))
+        if checkimplicit && !check_implicit_optimiser(model(c))
             throw(ArgumentError("Model does not use implicit optimisers!"))
         end
         new{O, C}(opt, c)  
@@ -363,7 +363,7 @@ All other fields are mapped through the function `mapothers` (default `deepcopy`
 
 For instance, if `e = MapCandidate(m1, m2)` where `m1 isa AbstractMutation{CompGraph}` and `m2 isa 
 AbstractMutation{Optimisers.AbstractRule}` then `e(c)` where `c` is a `CandidateOptModel` will create a new `CandidateOptModel`where 
-the new model is `m1(model(c))` and the new optimizer is `m2(opt(c))`  
+the new model is `m1(model(c))` and the new optimiser is `m2(opt(c))`  
 
 When called as a function with a tuple of two `AbstractCandidate`s as input it will similarly apply crossover between the 
 two candidates, returning two new candidates.
@@ -438,21 +438,21 @@ Intended use is to apply the same learning rate scaling for a whole population o
 """
 randomlrscale(rfun = BoundedRandomWalk(-1.0, 1.0)) = function(x...)
     newopt = ShieldedOpt(Optimisers.Descent(10^rfun(x...)))
-    return AddOptimizerMutation(o -> newopt)
+    return AddOptimiserMutation(o -> newopt)
 end
 
 """
-    global_optimizer_mutation(pop, optfun)
+    global_optimiser_mutation(pop, optfun)
 
-Changes the optimizer of all candidates in `pop`.
+Changes the optimiser of all candidates in `pop`.
 
-The optimizer of each candidate in pop will be changed to `om(optc)` where `optc` is the current optimizer and `om = optfun(pop)`.
+The optimiser of each candidate in pop will be changed to `om(optc)` where `optc` is the current optimiser and `om = optfun(pop)`.
 
 Intended to be used with `AfterEvolution` to create things like global learning rate schedules.
 
 See `https://github.com/DrChainsaw/NaiveGAExperiments/blob/master/lamarckism/experiments.ipynb` for some hints as to why this might be needed.
 """
-function global_optimizer_mutation(pop, optfun)
+function global_optimiser_mutation(pop, optfun)
     mt = MapType{Optimisers.AbstractRule}(optfun(pop), identity)
     mc = MapCandidate(mt, identity)
     map(mc, pop)

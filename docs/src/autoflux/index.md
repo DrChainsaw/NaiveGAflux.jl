@@ -12,12 +12,12 @@ It is possible (and strongly recommended) to supply a callback function which wi
 
 ```julia
 using NaiveGAflux, Plots
-# Persist the whole population in directory models/CIFAR10 so that optimization can be resumed if aborted:
+# Persist the whole population in directory models/CIFAR10 so that optimisation can be resumed if aborted:
 models = fit(CIFAR10.traindata(), cb=persist, mdir="models/CIFAR10")
 
 # Plot best and average fitness for each generation
 plotfitness = PlotFitness(plot, "models/CIFAR10");
-# Plot data will be serialized in a subdir of "models/CIFAR10" for later postprocessing and for resuming optimization.
+# Plot data will be serialized in a subdir of "models/CIFAR10" for later postprocessing and for resuming optimisation.
 models = fit(CIFAR10.traindata(), cb=plotfitness, mdir="models/CIFAR10")
 
 

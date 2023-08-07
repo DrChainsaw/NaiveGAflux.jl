@@ -94,7 +94,7 @@ remlayer = mp(RemoveVertexMutation(), 0.4)
 modelmutation = MutationChain(changesize, remlayer, addlayer)
 
 changelr = MutationProbability(LearningRateMutation(), 0.5)
-changeoptrule = MutationProbability(OptimizerMutation((optalts)), 0.1)
+changeoptrule = MutationProbability(OptimiserMutation((optalts)), 0.1)
 optmutation = MutationChain(changelr, changeoptrule)
 
 # These steps are the same as in [Quick Tutorial](@ref) except we add the optmutation to [`MapCandidate`](@ref) 
