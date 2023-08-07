@@ -1,8 +1,10 @@
 @testset "AutoFlux" begin
 
     @testset "ImageClassifier smoketest" begin
+        import Flux
         using NaiveGAflux.AutoFlux
         import NaiveGAflux.AutoFlux.ImageClassification: TrainSplitAccuracy, TrainIterConfig, BatchedIterConfig, ShuffleIterConfig, AccuracyVsSize, TrainAccuracyVsSize, EliteAndTournamentSelection, EliteAndSusSelection, GlobalOptimizerMutation, modelname
+        import Optimisers
         using Random
 
         rng = MersenneTwister(123)
@@ -27,9 +29,10 @@
 
         globallearningrate(c::AbstractCandidate) = globallearningrate(c.c)
         globallearningrate(c::CandidateOptModel) = globallearningrate(c.opt)
-        globallearningrate(o::Flux.Optimiser) = prod(globallearningrate.(o.os))
+        globallearningrate(o::ImplicitOpt) = globallearningrate(o.rule)
+        globallearningrate(o::Optimisers.OptimiserChain) = prod(globallearningrate.(o.opts))
         globallearningrate(o) = 1
-        globallearningrate(o::ShieldedOpt{Descent}) = o.opt.eta
+        globallearningrate(o::ShieldedOpt{<:Optimisers.Descent}) = o.rule.eta
 
         @test unique(globallearningrate.(pop)) != [1]
         @test length(unique(globallearningrate.(pop))) == 1

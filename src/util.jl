@@ -213,43 +213,50 @@ function(r::BoundedRandomWalk)(x...)
     return y
  end
 
- """
-    FluxOptimizer
-
-Alias for Flux.Optimise.AbstractOptimiser
-"""
-const FluxOptimizer = Flux.Optimise.AbstractOptimiser 
-
 
 """
-    ShieldedOpt{O} <: Flux.Optimise.AbstractOptimiser 
-    ShieldedOpt(o)
+    ShieldedOpt{R} <: Flux.Optimise.AbstractOptimiser 
+    ShieldedOpt(rule)
 
-Shields `o` from mutation by `OptimizerMutation`.
+Shields `rule` from mutation by `OptimizerMutation`.
 """
-struct ShieldedOpt{O<:FluxOptimizer} <: FluxOptimizer
-    opt::O
+struct ShieldedOpt{R<:Optimisers.AbstractRule} <: Optimisers.AbstractRule
+    rule::R
 end
-Flux.Optimise.apply!(o::ShieldedOpt, args...) = Flux.Optimise.apply!(o.opt, args...)
+Optimisers.apply!(r::ShieldedOpt, args...) = Optimisers.apply!(r.rule, args...)
+Optimisers.init(r::ShieldedOpt, args...) = Optimisers.init(r.rule, args...)
+
+"""
+    ImplicitOpt{R}
+    ImplicitOpt(rule)
+
+Sentinel value to be used e.g. for a [`CandidateOptModel`](@ref) or a [`TrainThenFitness`](@ref)
+to mark that parameters are updated implicitly when taking gradients.
+
+Main use case is when an `$AutoOptimiser` is used to update the model.
+"""
+struct ImplicitOpt{R} <: Optimisers.AbstractRule
+    rule::R
+end
+Optimisers.apply!(o::ImplicitOpt, args...) = Optimisers.apply!(o.rule, args...)
+Optimisers.init(o::ImplicitOpt, args...) = Optimisers.init(o.rule, args...)
 
 """
     mergeopts(t::Type{T}, os...) where T
     mergeopts(os::T...)
 
 Merge all optimizers of type `T` in `os` into one optimizer of type `T`.
-
-Defaults to `T(prod(learningrate.(os)))`.
 """
-function mergeopts(t::Type{T}, os...) where T
-    merged = mergeopts(filter(o -> isa(o, T), os)...)
-    return vcat(filter(o -> !isa(o, T), os)..., merged)
+function mergeopts(::Type{T}, os...) where T
+    merged = mergeopts(filter(o -> isa(o, T), os))
+    return (filter(o -> !isa(o, T), os)..., merged...)
 end
-mergeopts() = []
-mergeopts(t::Type{T}, os::T...) where T = [mergeopts(os...)]
-mergeopts(os...) = first(@set os[1].eta = (prod(learningrate.(os))))
-mergeopts(os::ShieldedOpt{T}...) where T = ShieldedOpt(mergeopts(map(o -> o.opt, os)...))
-mergeopts(os::WeightDecay...) = WeightDecay(mapreduce(o -> o.wd, *, os))
-
+mergeopts(os::Tuple) = tuple(mergeopts(os...))
+mergeopts(os::Tuple{}) = os
+mergeopts(::Type{T}, os::T...) where T = mergeopts(os...)
+mergeopts(os::Optimisers.AbstractRule...) = first(@set os[1].eta = prod(learningrate, os))
+mergeopts(os::ShieldedOpt{T}...) where T = ShieldedOpt(only(mergeopts(map(o -> o.rule, os))))
+mergeopts(os::WeightDecay...) = WeightDecay(prod(o -> o.gamma, os))
 
 """
     optmap(fopt, x, felse=identity)
@@ -261,15 +268,7 @@ Call without x to return `x -> optmap(fopt, x, felse)`
 """
 optmap(fopt, felse=identity) = x -> optmap(fopt, x, felse)
 optmap(fopt, x, felse) = felse(x)
-optmap(fopt, o::FluxOptimizer, felse) = fopt(o)
-
-function clearstate!(s) end
-clearstate!(s::AbstractDict) = empty!(s)
-
-cleanopt!(o::T) where T = (foreach(fn -> clearstate!(getfield(o, fn)), fieldnames(T)); return o)
-cleanopt!(o::ShieldedOpt) = (cleanopt!(o.opt); return o)
-cleanopt!(o::Flux.Optimiser) = (foreach(cleanopt!, o.os); return o)
-
+optmap(fopt, o::Optimisers.AbstractRule, felse) = fopt(o)
 
 """
     Singleton{T}
@@ -345,6 +344,59 @@ NaiveNASflux.layer(gp::GlobalPool) = gp
     
 Return the number of model inputs.
 """
-ninputs(cg::CompGraph) = length(cg.inputs)
+ninputs(cg::CompGraph) = length(inputs(cg))
 # I guess this is not good practice, but I'll fix it the first time someone posts an issue about it :)
 ninputs(m) = 1 
+
+
+"""
+    InconsistentAutoOptimiserException{M}
+    InconsistentAutoOptimiserException(model)
+
+Thrown when `model` has implicit optimizer state for some but not all trainable parameters.
+"""
+struct InconsistentAutoOptimiserException{M} <: Exception
+    model::M
+end
+
+const failmodel = Ref{Any}(nothing)
+
+
+function Base.showerror(io::IO, e::InconsistentAutoOptimiserException{<:CompGraph}) 
+    println(io, "Model has a mix of implicit and explicit optimiser rules! This is currently not supported!")
+    failmodel[] = e.model
+    _print_implicit_opts(io, e.model)
+end
+function _print_implicit_opts(io::IO, g::CompGraph)
+    for (i, v) in enumerate(vertices(g))
+        if !isempty(Flux.trainable(layer(v)))
+            println(io, "vertex ", i, " implicit: ", _is_implicit_opt(v), ", name: ", name(v))
+        end
+    end
+end
+_is_implicit_opt(v) = mutateoptimiser!(a -> a.optstate, v)
+
+"""
+    check_implicit_optimizer(m::CompGraph)
+    check_implicit_optimizer(c::AbstractCandidate)
+
+Returns true if input argument uses implicit optimizer state (e.g $AutoOptimiser).
+
+Throws a $InconsistentAutoOptimiserException if some but not all parameters use implicit optimizer state.
+"""
+function check_implicit_optimizer(g::CompGraph)
+    prev = nothing
+    for v in vertices(g)
+        if !isempty(Flux.trainable(layer(v)))
+            isimplicit = _is_implicit_opt(v)
+            if isnothing(prev)
+                prev = isimplicit 
+            else
+                if prev !== isimplicit
+                   throw(InconsistentAutoOptimiserException(g)) 
+                end
+            end
+        end
+    end
+    isnothing(prev) ? false : prev
+end

@@ -31,6 +31,7 @@
 end
 
 @testset "MutationShield" begin
+    import Flux: Dense
     using NaiveGAflux: allow_mutation
     v1 = inputvertex("v1", 3)
     v2 = fluxvertex("v2", Dense(nout(v1), 5), v1)
@@ -75,6 +76,7 @@ end
 @testset "MutationShield allowed list" begin
 
     using NaiveGAflux: DecoratingMutation, allow_mutation
+    import Flux: Dense
 
     struct MutationShieldTestMutation1 <: AbstractMutation{AbstractVertex} end
     struct MutationShieldTestMutation2 <: AbstractMutation{AbstractVertex} end
@@ -137,6 +139,7 @@ end
 @testset "MutationShield abstract allowed list" begin
 
     using NaiveGAflux: allow_mutation
+    import Flux: Dense
     # This is not a java habit I promise! I have just been burnt by having to rename mock structs across tests when names clash too many times
     abstract type MutationShieldAbstractTestAbstractMutation <: AbstractMutation{AbstractVertex} end
     struct MutationShieldAbstractTestMutation1 <: MutationShieldAbstractTestAbstractMutation end
@@ -164,6 +167,7 @@ end
 
 @testset "SelectWithMutation" begin
     using NaiveGAflux: SelectWithMutation, select
+    import Flux: Dense
 
     struct SelectWithMutationMutation1 <: AbstractMutation{AbstractVertex} end
     struct SelectWithMutationMutation2 <: AbstractMutation{AbstractVertex} end
@@ -188,6 +192,7 @@ end
 
 @testset "remove_redundant_vertices" begin
     using NaiveGAflux: check_apply
+    import Flux: Dense, BatchNorm
     v1 = inputvertex("in", 3)
     v2 = fluxvertex("v2", Dense(nout(v1), 5), v1)
     v3 = fluxvertex("V3", Dense(nout(v1), 5), v1)
@@ -269,22 +274,25 @@ end
 
 @testset "Mergeopts" begin
     import NaiveGAflux: mergeopts, learningrate
+    import Optimisers: Descent, WeightDecay, Momentum
 
-    dm = mergeopts(Descent(0.1), Descent(2), Descent(0.4))
-    @test learningrate(dm) ≈ 0.08
+    dm = mergeopts(Descent(0.1f0), Descent(2f0), Descent(0.4f0))
+    @test learningrate(dm) ≈ 0.08f0
 
-    wd = mergeopts(WeightDecay(0.1), WeightDecay(2), WeightDecay(0.4))
-    @test wd.wd ≈ 0.08
+    wd = mergeopts(WeightDecay(0.1f0), WeightDecay(2f0), WeightDecay(0.4f0))
+    @test wd.gamma ≈ 0.08f0
 
-    dd = mergeopts(Momentum, Descent(0.1), Descent(2), Descent(0.4))
-    @test typeof.(dd) == [Descent, Descent, Descent]
+    dd = mergeopts(Momentum, Descent(0.1f0), Descent(2f0), Descent(0.4f0))
+    @test typeof.(dd) == (Descent{Float32}, Descent{Float32}, Descent{Float32})
 
-    mm = mergeopts(Momentum, Descent(0.1), Momentum(0.2), Momentum(0.3), Descent(0.2))
-    @test typeof.(mm) == [Descent, Descent, Momentum]
+    mm = mergeopts(Momentum, Descent(0.1f0), Momentum(0.2f0), Momentum(0.3f0), Descent(0.2f0))
+    @test typeof.(mm) == (Descent{Float32}, Descent{Float32}, Momentum{Float32})
 end
 
 @testset "optmap" begin
-    import NaiveGAflux: optmap, FluxOptimizer
+    import Optimisers
+    import Optimisers: Momentum, Nesterov
+    import NaiveGAflux: optmap
 
     isopt = "Is an optimizer!"
     noopt = "Is not an optimizer!"
@@ -293,7 +301,7 @@ end
     @test om(1234) == noopt
     @test om(Momentum()) == isopt
     @test om(NaiveGAflux.ShieldedOpt(Momentum())) == isopt
-    @test om(Flux.Optimiser(Momentum(), Nesterov())) == isopt
+    @test om(Optimisers.OptimiserChain(Momentum(), Nesterov())) == isopt
 end
 
 @testset "Singleton" begin
@@ -334,4 +342,51 @@ end
     @test_logs (:info, "Prefix testmsg") with_logger(() -> testlog("testmsg"), PrefixLogger("Prefix "))
 
     @test Logging.min_enabled_level(PrefixLogger(current_logger(), "Test ")) == Logging.min_enabled_level(current_logger())
+end
+
+@testset "check_implicit_optimizer" begin
+    import NaiveGAflux: check_implicit_optimizer
+    import Flux
+    import Flux: Conv, MaxPool
+    
+    @testset "No implicit" begin
+        iv = conv2dinputvertex("in", 1)
+        v1 = fluxvertex("v1", Conv((1,1), nout(iv) => 1), iv; layerfun=identity)
+        v2 = "v2" >> v1 + iv
+        v3 = fluxvertex("v3", MaxPool((1,1)), v2; layerfun=identity)
+        g = CompGraph(iv, v3)
+        @test !check_implicit_optimizer(g)
+    end
+
+    @testset "Use implicit" begin
+        iv = conv2dinputvertex("in", 1)
+        v1 = fluxvertex("v1", Conv((1,1), nout(iv) => 1), iv; layerfun=LazyMutable ∘ AutoOptimiser)
+        v2 = "v2" >> v1 + iv
+        v3 = fluxvertex("v3", MaxPool((1,1)), v2; layerfun=identity)
+        g = CompGraph(iv, v3)
+        @test check_implicit_optimizer(g)
+    end
+
+    @testset "Inconsistent" begin
+        import NaiveGAflux: InconsistentAutoOptimiserException
+        iv = conv2dinputvertex("in", 1)
+        v1 = fluxvertex("v1", Conv((1,1), nout(iv) => 1), iv; layerfun=LazyMutable ∘ AutoOptimiser)
+        v2 = "v2" >> v1 + iv
+        v3 = fluxvertex("v3", Conv((1,1), nout(v2) => 1), v2; layerfun=identity)
+        g = CompGraph(iv, v3)
+        @test_throws InconsistentAutoOptimiserException check_implicit_optimizer(g)
+    end
+
+    @testset "_print_implicit_opts" begin
+        iv = conv2dinputvertex("in", 1)
+        v1 = fluxvertex("v1", Conv((1,1), nout(iv) => 1), iv; layerfun=LazyMutable ∘ AutoOptimiser)
+        v2 = "v2" >> v1 + iv
+        v3 = fluxvertex("v3", Conv((1,1), nout(v2) => 1), v2; layerfun=identity)
+        g = CompGraph(iv, v3)
+        res = sprint(NaiveGAflux._print_implicit_opts, g)
+        exp = ("vertex 2 implicit: true, name: v1", "vertex 4 implicit: false, name: v3")
+        for (expline, resline) in zip(exp, split(res, "\n"))
+            @test expline == resline
+        end
+    end
 end

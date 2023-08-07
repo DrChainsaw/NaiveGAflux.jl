@@ -13,7 +13,7 @@
         struct PlotTestCand <: AbstractCandidate
             fitness::Real
             graph::DummyGraph
-            PlotTestCand(fitness, nv, np) = new(fitness, DummyGraph(nv, np))
+            PlotTestCand(fitness, nv, np) = new(Float32(fitness), DummyGraph(nv, np))
         end
         NaiveGAflux.model(c::PlotTestCand, f=identity) = f(c.graph)
         NaiveGAflux.fitness(c::PlotTestCand) = c.fitness
@@ -61,22 +61,25 @@
             end
 
             @testset "ScatterOpt" begin
-                NaiveGAflux.opt(c::PlotTestCand) = fitness(c) > 2 ? Adam(nparams(c) - fitness(c)) : Flux.Optimiser([ShieldedOpt(Descent(nparams(c) - fitness(c)))])
+                NaiveGAflux.opt(c::PlotTestCand) = fitness(c) > 2 ? Adam(nparams(c) - fitness(c)) : Optimisers.OptimiserChain(ShieldedOpt(Descent(nparams(c) - fitness(c))))
 
                 p = ScatterOpt((args...;kwargs...) -> true, testdir)
                 @test !isdir(p.basedir)
 
                 @test p(PlotTestCand.(1:3, [10, 20, 30], [100, 200, 300]))
-                @test p.data ==  [[1 99 Descent; 2 198 Descent; 3 297 Adam]]
+                exp1 = [1 99 Descent{Float32}; 2 198 Descent{Float32}; 3 297 Adam{Float32}]
+                @test p.data ==  [exp1]
 
                 @test p(PlotTestCand.(2:4, [20, 30, 40], [200, 300, 400]))
-                @test p.data ==  [[1 99 Descent; 2 198 Descent; 3 297 Adam], [2 198 Descent; 3 297 Adam; 4 396 Adam]]
+                exp2 =  [2 198 Descent{Float32}; 3 297 Adam{Float32}; 4 396 Adam{Float32}]
+                @test p.data ==  [exp1, exp2]
 
                 p2 = ScatterOpt((args...;kwargs...) -> true, testdir)
                 @test p2.data == p.data
 
                 @test p2(PlotTestCand.(3:5, [30, 40, 50], [300, 400, 500]))
-                @test p2.data ==  [[1 99 Descent; 2 198 Descent; 3 297 Adam], [2 198 Descent; 3 297 Adam; 4 396 Adam],[3 297 Adam; 4 396 Adam; 5 495 Adam]]
+                exp3 = [3 297 Adam{Float32}; 4 396 Adam{Float32}; 5 495 Adam{Float32}]
+                @test p2.data ==  [exp1, exp2, exp3]
 
                 p3 = ScatterOpt((args...;kwargs...) -> true, testdir)
                 @test p3(PlotTestCand.(3:5, [30, 40, 50], [300, 400, 500]))

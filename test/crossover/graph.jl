@@ -203,11 +203,11 @@
 
                 ga = g("a")
 
-                indata = randn(MersenneTwister(1), 3, 2)
+                indata = randn(MersenneTwister(1), Float32, 3, 2)
                 outa = ga(indata)
 
                 vsa = vertices(ga)
-                aswap = separablefrom(v4n(ga, "a.dv3"), ga.inputs)
+                aswap = separablefrom(v4n(ga, "a.dv3"), inputs(ga))
                 @test name.(aswap) == ["a.dv3", "a.add1"]
             end
 
@@ -234,11 +234,11 @@
 
                 ga = g("a")
 
-                indata = randn(MersenneTwister(1), 3, 2)
+                indata = randn(MersenneTwister(1), Float32, 3, 2)
                 outa = ga(indata)
 
                 vsa = vertices(ga)
-                aswap = separablefrom(v4n(ga, "a.add_aa_bb"), ga.inputs)
+                aswap = separablefrom(v4n(ga, "a.add_aa_bb"), inputs(ga))
                 @test name.(vsa) == name.(vertices(ga))
                 @test name.(aswap) == ["a.add_aa_bb", "a.dva1"]
 
@@ -247,12 +247,12 @@
                 gb = g("b", true)
                 outb = gb(indata)
                 vsb = vertices(gb)
-                @test name.(separablefrom(v4n(gb, "b.add_aa_bb"), gb.inputs)) == ["b.add_aa_bb"]
+                @test name.(separablefrom(v4n(gb, "b.add_aa_bb"), inputs(gb))) == ["b.add_aa_bb"]
                 @test name.(vsb) == name.(vertices(gb))
 
                 @test gb(indata) == outb
 
-                bswap = separablefrom(v4n(gb, "b.dvbb1"), gb.inputs)
+                bswap = separablefrom(v4n(gb, "b.dvbb1"), inputs(gb))
                 @test name.(vsb) == name.(vertices(gb))
                 @test name.(bswap) == ["b.dvbb1"]
 
@@ -289,7 +289,7 @@
                 gg = g("a")
                 dva1 = v4n(gg, "a.dva1")
 
-                indata = randn(MersenneTwister(0), 3,2)
+                indata = randn(MersenneTwister(0), Float32, 3,2)
                 graphout_before = gg(indata)
 
                 expected1 = name.(outputs(dva1))
@@ -312,7 +312,7 @@
                 gg = g("a")
                 ca1 = v4n(gg, "a.ca1")
 
-                indata = randn(MersenneTwister(0), 3,2)
+                indata = randn(MersenneTwister(0), Float32, 3,2)
                 graphout_before = gg(indata)
 
                 expected = name.(inputs(ca1))
@@ -331,7 +331,7 @@
             g_org = g("a")
             g_new = deepcopy(g_org)
 
-            indata = randn(MersenneTwister(0), 3, 2)
+            indata = randn(MersenneTwister(0), Float32, 3, 2)
             out_org = g_org(indata)
 
             swappable_new = separablefrom(v4n(g_new, "a.dva1"))

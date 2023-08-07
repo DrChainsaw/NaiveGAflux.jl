@@ -19,6 +19,8 @@ NaiveGAflux comes bundled with a neural architecture search application called [
 This is a good next read if you are interested in quickly getting started with model search using a standard train-validate-select-evolve loop. 
 It is however a bit disconnected from NaiveGAflux and many readers will find it better to just continue to the next sections.
 
+The [Performance Tips](@ref) can be good to skim through since you probably want to apply a few of them.
+
 There is a short set of examples for each main component types. Each component is designed to work well in isolation and examples are largely 
 self-contained, allowing you to pick and choose the ones you like when building an own application.
 

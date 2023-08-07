@@ -22,6 +22,7 @@ Most of the mutation utilities also work with crossover operations. Here are a f
 # Start by creating a model to play with.
 Random.seed!(NaiveGAflux.rng_default, 0) #src
 
+import Flux: Dense
 invertex = denseinputvertex("A.in", 3)
 layer1 = fluxvertex("A.l1", Dense(nout(invertex), 4), invertex; layerfun=ActivationContribution)
 layer2 = fluxvertex("A.l2", Dense(nout(layer1), 5), layer1; layerfun=ActivationContribution)

@@ -9,7 +9,8 @@ using NaiveNASlib.Advanced, NaiveNASlib.Extend
 import Flux
 using Flux: Dense, Conv, ConvTranspose, DepthwiseConv, CrossCor, LayerNorm, BatchNorm, InstanceNorm, GroupNorm, 
             MaxPool, MeanPool, Dropout, AlphaDropout, GlobalMaxPool, GlobalMeanPool, cpu, gpu
-using Flux: Descent, Momentum, Nesterov, Adam, NAdam, AdaGrad, WeightDecay
+import Optimisers
+import Optimisers: Descent, Momentum, Nesterov, Adam, NAdam, AdaGrad, WeightDecay
 import Functors
 using Functors: fmap
 using Random
@@ -23,7 +24,7 @@ using Serialization
 export ImageClassifier, fit, TrainSplitAccuracy, TrainAccuracyVsSize, AccuracyVsSize, TrainIterConfig, BatchedIterConfig, ShuffleIterConfig, GlobalOptimizerMutation, EliteAndSusSelection, EliteAndTournamentSelection
 
 modelname(c::AbstractCandidate) = NaiveGAflux.model(modelname, c)
-modelname(g::CompGraph) = split(name(g.inputs[]),'.')[1]
+modelname(g::CompGraph) = split(name(first(inputs(g))),'.')[1]
 
 include("strategy.jl")
 include("archspace.jl")
@@ -135,7 +136,7 @@ function generate_persistent(nr, newpop, mdir, insize, outsize, cwrap=identity, 
 end
 function create_model(name, as, in, cwrap, insize)
     optselect = optmutation(1.0)
-    opt = optselect(Descent(rand() * 0.099 + 0.01))
+    opt = optselect(ImplicitOpt(Descent(rand(Float32) * 0.099f0 + 0.01f0)))
     bslimit = batchsizeselection(insize[1:end-1]; alternatives=ntuple(i->2^i, 10))
     imstart = BatchSizeIteratorMap(64, 64, bslimit)
     im = itermapmutation(1.0)(imstart)

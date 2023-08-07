@@ -99,27 +99,32 @@ newcand(c::CandidateModel, mapfield) = CandidateModel(mapfield(c.model))
 
 """
     CandidateOptModel <: AbstractCandidate
-    CandidateOptModel(optimizer, candidate)
+    CandidateOptModel(optimizer, candidate; checkimplicit=true)
 
 A candidate adding an optimizer to another candidate. The optimizer is accessed by [`opt(c)`] for `CandidateOptModel c`.
+
+Use`checkimplicit=false`` to avoid consistenty checks for implicit optimiser state (e.g. NaiveNASflux.$AutoOptimiser).
 """
 struct CandidateOptModel{O, C <: AbstractCandidate} <: AbstractWrappingCandidate
     opt::O
     c::C
-end
-CandidateOptModel(opt, g::CompGraph) = CandidateOptModel(opt, CandidateModel(g))
-
-function Functors.functor(::Type{<:CandidateOptModel}, c) 
-    return (opt=c.opt, c=c.c), function ((newopt, newc),)
-        # Optimizers are stateful and having multiple candidates pointing to the same instance is downright scary
-        # User would need to go out of its way to make it the same instance (e.g. by using a wrapper type and dispatch on it in CandidateOptModel)
-        # Hope that we get stateless optimizers soon
-        if newopt === c.opt
-            newopt = deepcopy(cleanopt!(newopt))
+    function CandidateOptModel(opt::O, c::C; checkimplicit=true) where {O <: Optimisers.AbstractRule, C<:AbstractCandidate}
+        if checkimplicit && check_implicit_optimizer(model(c))
+            throw(ArgumentError("Model uses implicit optimisers! Need to wrap optimizer $opt in an $(ImplicitOpt)!"))
         end
-        CandidateOptModel(newopt, newc)
+        new{O, C}(opt, c)     
     end
+
+    function CandidateOptModel(opt::O, c::C; checkimplicit=true) where {O <: ImplicitOpt, C<:AbstractCandidate} 
+        if checkimplicit && !check_implicit_optimizer(model(c))
+            throw(ArgumentError("Model does not use implicit optimisers!"))
+        end
+        new{O, C}(opt, c)  
+    end  
 end
+CandidateOptModel(opt, g::CompGraph; kwargs...) = CandidateOptModel(opt, CandidateModel(g); kwargs...)
+
+Functors.@functor CandidateOptModel
 
 opt(c::CandidateOptModel; kwargs...) = c.opt 
 
@@ -324,12 +329,12 @@ function MapType(c::AbstractCrossover{CompGraph}, (c1, c2), (nomatch1, nomatch2)
     return MapType{CompGraph}(Returns(g1), nomatch1), MapType{CompGraph}(Returns(g2), nomatch2)
 end
 
-function MapType(c::AbstractCrossover{FluxOptimizer}, (c1, c2), (nomatch1, nomatch2))
+function MapType(c::AbstractCrossover{Optimisers.AbstractRule}, (c1, c2), (nomatch1, nomatch2))
     o1 = opt(c1)
     o2 = opt(c2)
 
     o1n, o2n = c((o1, o2))
-    return MapType{FluxOptimizer}(Returns(o1n), nomatch1), MapType{FluxOptimizer}(Returns(o2n), nomatch2)
+    return MapType{Optimisers.AbstractRule}(Returns(o1n), nomatch1), MapType{Optimisers.AbstractRule}(Returns(o2n), nomatch2)
 end
 
 function MapType(c::AbstractCrossover{AbstractIteratorMap}, (c1, c2), (nomatch1, nomatch2))
@@ -357,7 +362,7 @@ wrapped candidates of `c`) satisfying `typeof(f) <: MT` through `m(f)` where `m 
 All other fields are mapped through the function `mapothers` (default `deepcopy`).
 
 For instance, if `e = MapCandidate(m1, m2)` where `m1 isa AbstractMutation{CompGraph}` and `m2 isa 
-AbstractMutation{FluxOptimizer}` then `e(c)` where `c` is a `CandidateOptModel` will create a new `CandidateOptModel`where 
+AbstractMutation{Optimisers.AbstractRule}` then `e(c)` where `c` is a `CandidateOptModel` will create a new `CandidateOptModel`where 
 the new model is `m1(model(c))` and the new optimizer is `m2(opt(c))`  
 
 When called as a function with a tuple of two `AbstractCandidate`s as input it will similarly apply crossover between the 
@@ -432,7 +437,7 @@ Return a function which scales the learning rate based on the output of `rfun`.
 Intended use is to apply the same learning rate scaling for a whole population of models, e.g to have a global learning rate schedule.
 """
 randomlrscale(rfun = BoundedRandomWalk(-1.0, 1.0)) = function(x...)
-    newopt = ShieldedOpt(Flux.Descent(10^rfun(x...)))
+    newopt = ShieldedOpt(Optimisers.Descent(10^rfun(x...)))
     return AddOptimizerMutation(o -> newopt)
 end
 
@@ -448,7 +453,7 @@ Intended to be used with `AfterEvolution` to create things like global learning 
 See `https://github.com/DrChainsaw/NaiveGAExperiments/blob/master/lamarckism/experiments.ipynb` for some hints as to why this might be needed.
 """
 function global_optimizer_mutation(pop, optfun)
-    mt = MapType{FluxOptimizer}(optfun(pop), identity)
+    mt = MapType{Optimisers.AbstractRule}(optfun(pop), identity)
     mc = MapCandidate(mt, identity)
     map(mc, pop)
 end

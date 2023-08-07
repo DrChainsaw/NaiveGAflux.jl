@@ -79,7 +79,25 @@ function _fitness(s::GpuFitness, c::AbstractCandidate)
     return fitval
 end
 
-function transferstate!(to, from)
+transferstate!(to, from) = _transferstate!(to, from)
+function transferstate!(to::ActivationContribution, from::ActivationContribution)
+    if isempty(to.contribution)
+        resize!(to.contribution, length(from.contribution))
+    end
+    _transferstate!(to, from)
+end
+
+function transferstate!(to::T, from::T) where T <: NaiveNASflux.AbstractMutableComp
+    if ismutable(to)
+        for fn in fieldnames(T)
+            setfield!(to, fn, getfield(from, fn))
+        end
+    else
+        _transferstate!(to, from)
+    end
+end
+
+function _transferstate!(to, from)
     tocs, _ = functor(to)
     fromcs, _ = functor(from)
     @assert length(tocs) == length(fromcs) "Mismatched number of children for $to vs $from"
@@ -87,18 +105,16 @@ function transferstate!(to, from)
         transferstate!(toc, fromc)
     end
 end
-
-function transferstate!(to::T, from::T) where T <: NaiveNASflux.AbstractMutableComp
-    for fn in fieldnames(T)
-        setfield!(to, fn, getfield(from, fn))
-    end
-end
-transferstate!(to::AbstractArray, from::AbstractArray) = copyto!(to, from)
-
+#_transferstate!(to::AbstractArray, from::AbstractArray) = copyto!(to, from)
+_transferstate!(to::AbstractArray{<:Number}, from::AbstractArray{<:Number}) = copyto!(to, from)
+function _transferstate!(to::T, from::T) where T <:AbstractArray 
+    @assert length(to) === length(from) "Mismatched array lenghts´of type "
+    foreach(transferstate!, to, from)
+end 
 
 const gpu_gc = if CUDA.functional()
-    function()
-        GC.gc()
+    function(full=true)
+        GC.gc(full)
         CUDA.reclaim()
     end
 else
@@ -126,7 +142,7 @@ function _fitness(s::AccuracyFitness, c::AbstractCandidate)
         xs = data[1:ninput]
         ys = data[ninput+1:end]
 
-        correct = Flux.onecold(cpu(m(xs...))) .== Flux.onecold(cpu(ys)...)
+        correct = Flux.onecold(m(xs...)) .== Flux.onecold(ys...)
         acc += sum(correct)
         cnt += length(correct)
     end
@@ -179,33 +195,57 @@ function _fitness(s::TrainThenFitness, c::AbstractCandidate)
     iter = _fitnessiterator(trainiterator, c, s.dataiter)
 
     valid = trainmodel!(loss, model(c), o, iter)
-    cleanopt!(o)
     return valid ? _fitness(s.fitstrat, c) : s.invalidfitness
 end
 
-# For legacy Flux optimizers we'll use implicit gradients
-# Will implement explicit for new Optimisers.jl after I get around to test it out thoroughly
-function trainmodel!(lossfun, model, opt::FluxOptimizer, dataiter)
+
+function trainmodel!(lossfun, model, optrule, dataiter)
     ninput = ninputs(model)
-    ps = params(model)
+    opt_state = Flux.setup(optrule, model)
     for data in dataiter
-
-        l, gs = Flux.withgradient(ps) do
-            inputs = data[1:ninput]
-            ŷ = model(inputs...)
-
-            y = data[ninput+1:end]
+        inputs = data[1:ninput]
+        y = data[ninput+1:end]
+        
+        l, modelgrads = Flux.withgradient(model) do m
+            ŷ = m(inputs...)
             lossfun(ŷ, y...)  
         end 
         
-        if isnan(l) || isinf(l)
-            badval = isnan(l) ? "NaN" : "Inf"
-            @warn "$badval loss detected when training!"
-            return false
-        end
-        Flux.update!(opt, ps, gs)
+        _lossok(l) || return false
+
+        Flux.update!(opt_state, model, modelgrads[1])
     end
     return true
+end
+
+function trainmodel!(lossfun, model, optrule::ImplicitOpt, dataiter)
+    ninput = ninputs(model)
+    ok = optimisersetup!(optrule, model)
+    if !ok 
+        throw(ArgumentError("Could not setup implicit optimiser for model $model. Forgot to use $AutoOptimiser when creating vertices?"))
+    end
+
+    for data in dataiter
+        inputs = data[1:ninput]
+        y = data[ninput+1:end]
+        
+        l, _ = Flux.withgradient() do 
+            ŷ = model(inputs...)
+            lossfun(ŷ, y...)  
+        end 
+        
+        _lossok(l) || return false
+    end
+    return true
+end
+
+function _lossok(l)
+    if isnan(l) || isinf(l)
+        badval = isnan(l) ? "NaN" : "Inf"
+        @warn "$badval loss detected when training!"
+        return false
+    end
+    true
 end
 
 

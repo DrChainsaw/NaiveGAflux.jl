@@ -20,6 +20,7 @@ candidate_ex = literate_example("candidate.jl")
 evolution_ex = literate_example("evolution.jl")
 iteratormaps_ex = literate_example("iteratormaps.jl")
 iterators_ex = literate_example("iterators.jl")
+performance_ex = literate_example("performancetips.jl")
 
 makedocs(   sitename="NaiveGAflux",
             root = joinpath(nndir, "docs"), 
@@ -43,6 +44,7 @@ makedocs(   sitename="NaiveGAflux",
                     iteratormaps_ex,
                     iterators_ex
                 ],
+                performance_ex,
                 "API Reference" => [
                     "reference/searchspace.md",
                     "reference/mutation.md",

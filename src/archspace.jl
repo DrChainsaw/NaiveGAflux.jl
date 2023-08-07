@@ -315,6 +315,7 @@ default_logging() = logged(level=Logging.Debug)
 """
     LayerVertexConf
     LayerVertexConf(layerfun, traitfun)
+    LayerVertexConf(;layerfun=ActivationContribution ∘ LazyMutable, traitfun=validated() ∘ default_logging())
 
 Generic configuration template for computation graph vertices with `Flux` layers as their computation.
 
@@ -326,7 +327,9 @@ struct LayerVertexConf{F, T}
     layerfun::F
     traitfun::T
 end
-LayerVertexConf() = LayerVertexConf(ActivationContribution ∘ LazyMutable, validated() ∘ default_logging())
+function LayerVertexConf(;layerfun=ActivationContribution ∘ LazyMutable, traitfun=validated() ∘ default_logging())
+    return LayerVertexConf(layerfun, traitfun)
+end
 
 """
     Shielded(base=LayerVertexConf(); allowed = tuple())

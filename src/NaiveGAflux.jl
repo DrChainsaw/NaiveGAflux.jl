@@ -9,8 +9,10 @@ using NaiveNASflux: nograd, layertype
 using NaiveNASlib.Advanced, NaiveNASlib.Extend
 import Flux
 using Flux: Dense, Conv, ConvTranspose, DepthwiseConv, CrossCor, LayerNorm, BatchNorm, InstanceNorm, GroupNorm, 
-            MaxPool, MeanPool, Dropout, AlphaDropout, GlobalMaxPool, GlobalMeanPool, cpu, gpu, WeightDecay,
+            MaxPool, MeanPool, Dropout, AlphaDropout, GlobalMaxPool, GlobalMeanPool, cpu, gpu,
             SamePad, params
+import Optimisers
+import Optimisers: WeightDecay
 using Random
 using Logging
 using Statistics
@@ -44,7 +46,7 @@ export EvolutionChain, PairCandidates, ShuffleCandidates, EvolveCandidates
 export Population, generation
 
 # misc types
-export Probability, MutationShield, ApplyIf, RemoveIfSingleInput, PersistentArray, ShieldedOpt
+export Probability, MutationShield, ApplyIf, RemoveIfSingleInput, PersistentArray, ShieldedOpt, ImplicitOpt
 
 # Batch size selection
 export BatchSizeSelectionWithDefaultInShape, BatchSizeSelectionScaled, BatchSizeSelectionFromAlternatives, BatchSizeSelectionMaxSize, batchsizeselection
@@ -95,6 +97,12 @@ export AutoFlux
 
 # Visulization
 export PlotFitness, ScatterPop, ScatterOpt, ScatterBatchSize, MultiPlot, CbAll
+
+# This should come from NaiveNASflux once it matures (or be deleted if turned obsolete) 
+include("autooptimiser.jl")
+import .AutoOptimiserExperimental
+import .AutoOptimiserExperimental: AutoOptimiser, optimisersetup!, mutateoptimiser!
+export AutoOptimiser
 
 include("util.jl")
 include("shape.jl")

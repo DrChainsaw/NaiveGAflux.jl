@@ -4,7 +4,7 @@ const MixTuple{T1, T2} = Union{Tuple{T1, T2}, Tuple{T2, T1}}
 const EitherIs{T} = MixTuple{T, Any}
 
 # Useful for doing crossover between candiates which wraps a collection of candidates, 
-# e.g. Flux.Optimiser and IteratorMaps
+# e.g. Optimisers.OptimiserChain and IteratorMaps
 function zipcrossover(reiterfun, (c1,c2), crossoverfun)
     cs1,c1re = reiterfun(c1)
     cs2,c2re = reiterfun(c2)
