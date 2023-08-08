@@ -179,7 +179,7 @@ mutable struct FileCandidate{C, R<:Real, L<:Base.AbstractLock} <: AbstractWrappi
         writelock = ReentrantLock()
         movetimer = hold ? asynctodisk(cref, movedelay, writelock) : Timer(movedelay)
         fc = new{C, R, typeof(writelock)}(cref, movedelay, movetimer, writelock, hold)
-        finalizer(gfc -> MemPool.pooldelete(gfc.c), fc)
+        finalizer(gfc -> @async(MemPool.pooldelete(gfc.c)), fc)
         return fc
      end
 end

@@ -144,7 +144,7 @@ end
     end
 end
 
-@testset "RepeatPartitionIterator and ShuffleIterator" begin
+@testset "RepeatPartitionIterator and shuffling BatchIterator" begin
     import IterTools: ncycle
 
     @testset "Single epoch small" begin

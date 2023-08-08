@@ -58,7 +58,6 @@ combined = AggFitness(+, accfitness, smallmodelfitness, bigmodelfitness)
 @test fitness(combined, candidate2) == 13 + 1/12
 
 # [`GpuFitness`](@ref) moves the candidates to GPU (using `Flux.gpu`) before computing the wrapped fitness.
-# Note that any data in the wrapped fitness must also be moved to the same GPU before being fed to the model.
 gpuaccfitness = GpuFitness(AccuracyFitness(GpuIterator(accfitness.dataset)))
 
 @test fitness(gpuaccfitness, candidate1) == 0
