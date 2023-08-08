@@ -218,7 +218,7 @@ function(r::BoundedRandomWalk)(x...)
     ShieldedOpt{R} <: Flux.Optimise.AbstractOptimiser 
     ShieldedOpt(rule)
 
-Shields `rule` from mutation by `OptimizerMutation`.
+Shields `rule` from mutation by `OptimiserMutation`.
 """
 struct ShieldedOpt{R<:Optimisers.AbstractRule} <: Optimisers.AbstractRule
     rule::R
@@ -245,7 +245,7 @@ Optimisers.init(o::ImplicitOpt, args...) = Optimisers.init(o.rule, args...)
     mergeopts(t::Type{T}, os...) where T
     mergeopts(os::T...)
 
-Merge all optimizers of type `T` in `os` into one optimizer of type `T`.
+Merge all optimisers of type `T` in `os` into one optimiser of type `T`.
 """
 function mergeopts(::Type{T}, os...) where T
     merged = mergeopts(filter(o -> isa(o, T), os))
@@ -262,7 +262,7 @@ mergeopts(os::WeightDecay...) = WeightDecay(prod(o -> o.gamma, os))
     optmap(fopt, x, felse=identity)
     optmap(fopt, felse=identity)
 
-Return `fopt(x)` if `x` is an optimizer, else return `felse(x)`.
+Return `fopt(x)` if `x` is an optimiser, else return `felse(x)`.
 
 Call without x to return `x -> optmap(fopt, x, felse)`
 """
@@ -353,7 +353,7 @@ ninputs(m) = 1
     InconsistentAutoOptimiserException{M}
     InconsistentAutoOptimiserException(model)
 
-Thrown when `model` has implicit optimizer state for some but not all trainable parameters.
+Thrown when `model` has implicit optimiser state for some but not all trainable parameters.
 """
 struct InconsistentAutoOptimiserException{M} <: Exception
     model::M
@@ -377,14 +377,14 @@ end
 _is_implicit_opt(v) = mutateoptimiser!(a -> a.optstate, v)
 
 """
-    check_implicit_optimizer(m::CompGraph)
-    check_implicit_optimizer(c::AbstractCandidate)
+    check_implicit_optimiser(m::CompGraph)
+    check_implicit_optimiser(c::AbstractCandidate)
 
-Returns true if input argument uses implicit optimizer state (e.g $AutoOptimiser).
+Returns true if input argument uses implicit optimiser state (e.g $AutoOptimiser).
 
-Throws a $InconsistentAutoOptimiserException if some but not all parameters use implicit optimizer state.
+Throws a $InconsistentAutoOptimiserException if some but not all parameters use implicit optimiser state.
 """
-function check_implicit_optimizer(g::CompGraph)
+function check_implicit_optimiser(g::CompGraph)
     prev = nothing
     for v in vertices(g)
         if !isempty(Flux.trainable(layer(v)))

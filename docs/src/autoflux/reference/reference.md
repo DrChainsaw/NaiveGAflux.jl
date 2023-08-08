@@ -16,7 +16,7 @@ AccuracyVsSize
 TrainIterConfig
 BatchedIterConfig
 ShuffleIterConfig
-GlobalOptimizerMutation
+GlobalOptimiserMutation
 EliteAndSusSelection
 EliteAndTournamentSelection
 ```

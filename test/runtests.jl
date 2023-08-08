@@ -42,12 +42,12 @@ using NaiveNASlib.Advanced, NaiveNASlib.Extend
     @info "Testing mutation"
     include("mutation/generic.jl")
     include("mutation/graph.jl")
-    include("mutation/optimizer.jl")
+    include("mutation/optimiser.jl")
     include("mutation/iteratormaps.jl")
 
     @info "Testing crossover"
     include("crossover/graph.jl")
-    include("crossover/optimizer.jl")
+    include("crossover/optimiser.jl")
     include("crossover/iteratormaps.jl")
 
     @info "Testing fitness"

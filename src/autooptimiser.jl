@@ -4,7 +4,7 @@ module AutoOptimiserExperimental
 
 # Criteria for maturity: 
 # 1. Implementation of size mutation so that iterator state can persist after a model is mutated
-# 2. Implementation of optimizer per vertex as a search space parameter in NaiveGAflux
+# 2. Implementation of optimiser per vertex as a search space parameter in NaiveGAflux
 
 # Criteria for obsoletion
 # 1. Gradients of deeply nested models does not cause explosive compile times when updating parameters through Optimisers.update!

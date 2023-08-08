@@ -9,9 +9,9 @@ VertexCrossover
 CrossoverSwap
 ```
 
-## Core Optimizer Crossover Operations
+## Core Optimiser Crossover Operations
 ```@docs
-OptimizerCrossover
+OptimiserCrossover
 LearningRateCrossover
 ```
 

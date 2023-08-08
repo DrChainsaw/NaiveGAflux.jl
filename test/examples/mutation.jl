@@ -12,8 +12,8 @@ The following basic mutation operations are currently supported:
 5.  Add edges between vertices using [`AddEdgeMutation`](@ref).
 6.  Mutation of kernel size for conv layers using [`KernelSizeMutation`](@ref).
 7.  Change of activation function using [`ActivationFunctionMutation`](@ref).
-8.  Change the type of optimizer using [`OptimizerMutation`](@ref).
-9.  Add an optimizer using [`AddOptimizerMutation`](@ref).
+8.  Change the type of optimiser using [`OptimiserMutation`](@ref).
+9.  Add an optimiser using [`AddOptimiserMutation`](@ref).
 10. Change the batch size for training using [`TrainBatchSizeMutation`](@ref)
 
 Mutation operations are exported as structs rather than functions since they are designed to be composed with more generic utilities. Here are a few examples:

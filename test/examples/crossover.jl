@@ -12,7 +12,7 @@ Whether these effects actually make crossover a genuinely useful operation when 
 
 The following basic crossover operations are currently supported:
 1. Swap segments between two models using [`CrossoverSwap`](@ref).
-2. Swap optimizers between two candidates using [`OptimizerCrossover`](@ref).
+2. Swap optimisers between two candidates using [`OptimiserCrossover`](@ref).
 3. Swap learning rate between two candidates using [`LearningRateCrossover`](@ref).
 
 Most of the mutation utilities also work with crossover operations. Here are a few examples:

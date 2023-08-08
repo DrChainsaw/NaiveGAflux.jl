@@ -166,7 +166,7 @@ matchdatatype(::AbstractArray, iter) = iter
 
 Measure fitness using `fitstrat` after training the model using `dataiter`.
 
-Loss function and optimizer may be provided by the candidate if `lossfun(c; defaultloss)` 
+Loss function and optimiser may be provided by the candidate if `lossfun(c; defaultloss)` 
 and `opt(c; defaultopt)` are implemented, otherwise `defaultloss` and `defaultopt` will 
 be used.
 

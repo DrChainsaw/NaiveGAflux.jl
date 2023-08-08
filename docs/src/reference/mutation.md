@@ -11,11 +11,11 @@ RemoveEdgeMutation
 KernelSizeMutation
 ActivationFunctionMutation
 ```
-## Core Optimizer Mutation Operations
+## Core Optimiser Mutation Operations
 ```@docs
-OptimizerMutation
+OptimiserMutation
 LearningRateMutation
-AddOptimizerMutation
+AddOptimiserMutation
 ```
 
 ## Core IteratorMap Mutation Operations

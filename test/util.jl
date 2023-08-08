@@ -294,8 +294,8 @@ end
     import Optimisers: Momentum, Nesterov
     import NaiveGAflux: optmap
 
-    isopt = "Is an optimizer!"
-    noopt = "Is not an optimizer!"
+    isopt = "Is an optimiser!"
+    noopt = "Is not an optimiser!"
     om = optmap(o -> isopt, o -> noopt)
 
     @test om(1234) == noopt
@@ -344,8 +344,8 @@ end
     @test Logging.min_enabled_level(PrefixLogger(current_logger(), "Test ")) == Logging.min_enabled_level(current_logger())
 end
 
-@testset "check_implicit_optimizer" begin
-    import NaiveGAflux: check_implicit_optimizer
+@testset "check_implicit_optimiser" begin
+    import NaiveGAflux: check_implicit_optimiser
     import Flux
     import Flux: Conv, MaxPool
     
@@ -355,7 +355,7 @@ end
         v2 = "v2" >> v1 + iv
         v3 = fluxvertex("v3", MaxPool((1,1)), v2; layerfun=identity)
         g = CompGraph(iv, v3)
-        @test !check_implicit_optimizer(g)
+        @test !check_implicit_optimiser(g)
     end
 
     @testset "Use implicit" begin
@@ -364,7 +364,7 @@ end
         v2 = "v2" >> v1 + iv
         v3 = fluxvertex("v3", MaxPool((1,1)), v2; layerfun=identity)
         g = CompGraph(iv, v3)
-        @test check_implicit_optimizer(g)
+        @test check_implicit_optimiser(g)
     end
 
     @testset "Inconsistent" begin
@@ -374,7 +374,7 @@ end
         v2 = "v2" >> v1 + iv
         v3 = fluxvertex("v3", Conv((1,1), nout(v2) => 1), v2; layerfun=identity)
         g = CompGraph(iv, v3)
-        @test_throws InconsistentAutoOptimiserException check_implicit_optimizer(g)
+        @test_throws InconsistentAutoOptimiserException check_implicit_optimiser(g)
     end
 
     @testset "_print_implicit_opts" begin

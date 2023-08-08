@@ -220,25 +220,25 @@ function _dataiter(x::AbstractArray, y::AbstractArray, bs::Integer, xwrap, ywrap
 end
 
 """
-    struct GlobalOptimizerMutation{S<:AbstractEvolutionStrategy, F} <: AbstractEvolutionStrategy
-    GlobalOptimizerMutation(base::AbstractEvolutionStrategy)
-    GlobalOptimizerMutation(base::AbstractEvolutionStrategy, optfun)
+    struct GlobalOptimiserMutation{S<:AbstractEvolutionStrategy, F} <: AbstractEvolutionStrategy
+    GlobalOptimiserMutation(base::AbstractEvolutionStrategy)
+    GlobalOptimiserMutation(base::AbstractEvolutionStrategy, optfun)
 
-Maps the optimizer of each candidate in a population through `optfun` (default `randomlrscale()`).
+Maps the optimiser of each candidate in a population through `optfun` (default `randomlrscale()`).
 
-Basically a thin wrapper for `global_optimizer_mutation`.
+Basically a thin wrapper for `global_optimiser_mutation`.
 
 Useful for applying the same mutation to every candidate, e.g. global learning rate schedules which all models follow.
 """
-struct GlobalOptimizerMutation{S<:AbstractEvolutionStrategy, F} <: AbstractEvolutionStrategy
+struct GlobalOptimiserMutation{S<:AbstractEvolutionStrategy, F} <: AbstractEvolutionStrategy
     base::S
     optfun::F
 end
-GlobalOptimizerMutation(base::AbstractEvolutionStrategy) = GlobalOptimizerMutation(base, NaiveGAflux.randomlrscale())
+GlobalOptimiserMutation(base::AbstractEvolutionStrategy) = GlobalOptimiserMutation(base, NaiveGAflux.randomlrscale())
 
-function evostrategy_internal(s::GlobalOptimizerMutation, inshape)
+function evostrategy_internal(s::GlobalOptimiserMutation, inshape)
     base = evostrategy_internal(s.base, inshape)
-    return AfterEvolution(base, pop -> NaiveGAflux.global_optimizer_mutation(pop, s.optfun))
+    return AfterEvolution(base, pop -> NaiveGAflux.global_optimiser_mutation(pop, s.optfun))
 end
 
 
@@ -253,7 +253,7 @@ Selects `nelites` candidates to move on to the next generation without any mutat
 
 Also selects `popsize - nelites` candidates out of the whole population using [`SusSelection`](@ref) to evolve by applying random mutation.
 
-Mutation operations are both applied to the model itself (change sizes, add/remove vertices/edges) as well as to the optimizer (change learning rate and optimizer algorithm).
+Mutation operations are both applied to the model itself (change sizes, add/remove vertices/edges) as well as to the optimiser (change learning rate and optimiser algorithm).
 
 Finally, models are renamed so that the name of each vertex of the model of candidate `i` is prefixed with "model`i`".
 """
@@ -284,7 +284,7 @@ Selects `nelites` candidates to move on to the next generation without any mutat
 
 Also selects `popsize - nelites` candidates out of the whole population using [`TournamentSelection`](@ref) to evolve by applying random mutation.
 
-Mutation operations are determined by `evolve` both applied to the model itself (change sizes, add/remove vertices/edges) as well as to the optimizer (change learning rate and optimizer algorithm).
+Mutation operations are determined by `evolve` both applied to the model itself (change sizes, add/remove vertices/edges) as well as to the optimiser (change learning rate and optimiser algorithm).
 
 Finally, models are renamed so that the name of each vertex of the model of candidate `i` is prefixed with "model`i`".
 """
@@ -311,11 +311,11 @@ end
 
 Return a function which creates an [`EvolutionChain`](@ref) when called with an inputshape.
 
-Crossover will be applied with a probability of `pcrossover` while mutation will be applied with a probability of `pmutate`. Note that these probabilities apply to models only, not optimizers.
+Crossover will be applied with a probability of `pcrossover` while mutation will be applied with a probability of `pmutate`. Note that these probabilities apply to models only, not optimisers.
 
-Crossover is done using [`CrossoverSwap`](@ref) for models and [`LearningRateCrossover`](@ref) and [`OptimizerCrossover`](@ref) for optimizers.
+Crossover is done using [`CrossoverSwap`](@ref) for models and [`LearningRateCrossover`](@ref) and [`OptimiserCrossover`](@ref) for optimisers.
 
-Mutation is applied both to the model itself (change sizes, add/remove vertices/edges) as well as to the optimizer (change learning rate and optimizer algorithm).
+Mutation is applied both to the model itself (change sizes, add/remove vertices/edges) as well as to the optimiser (change learning rate and optimiser algorithm).
 """
 crossovermutate(;pcrossover=0.3, pmutate=0.8) = function(inshape)
     cross = candidatecrossover(pcrossover)
@@ -368,14 +368,14 @@ function itermapmutation(p=0.1)
 end
 
 function optcrossover(poptswap=0.3, plrswap=0.4)
-    lrc = MutationProbability(LearningRateCrossover(), plrswap) |> OptimizerCrossover
-    oc = MutationProbability(OptimizerCrossover(), poptswap) |> OptimizerCrossover
+    lrc = MutationProbability(LearningRateCrossover(), plrswap) |> OptimiserCrossover
+    oc = MutationProbability(OptimiserCrossover(), poptswap) |> OptimiserCrossover
     return MutationChain(lrc, oc)
 end
 
 function optmutation(p=0.1)
     lrm = LearningRateMutation()
-    om = MutationProbability(OptimizerMutation([Descent, Momentum, Nesterov, Adam, NAdam, AdaGrad]), p)
+    om = MutationProbability(OptimiserMutation([Descent, Momentum, Nesterov, Adam, NAdam, AdaGrad]), p)
     return MutationChain(lrm, om)
 end
 

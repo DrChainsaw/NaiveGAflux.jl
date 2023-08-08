@@ -16,7 +16,7 @@ that models which produce `NaN`s or `Inf`s or take very long to train can be ass
 
 Function to compute fitness for does not have to be a `CompGraph`, or even a neural network.
 It must be wrapped in an `AbstractCandidate` since fitness functions generally need to query the candidate
-for things which affect the fitness, such as the model but also things like optimizers and loss functions.
+for things which affect the fitness, such as the model but also things like optimisers and loss functions.
 """
 @testset "Fitness functions" begin #src
 candidate1 = CandidateModel(x -> 3:-1:1)
