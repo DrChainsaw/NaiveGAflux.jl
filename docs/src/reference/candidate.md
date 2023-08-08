@@ -5,6 +5,7 @@ CandidateModel
 CandidateOptModel
 CandidateDataIterMap
 FittedCandidate
+FileCandidate
 MapCandidate
 Population
 model

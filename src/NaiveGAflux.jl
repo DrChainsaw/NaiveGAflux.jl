@@ -36,7 +36,7 @@ export fitness, AbstractFitness, LogFitness, GpuFitness, AccuracyFitness, TrainT
 export EwmaFitness, TimeFitness, SizeFitness, AggFitness
 
 # Candidate
-export AbstractCandidate, CandidateModel, CandidateOptModel, CandidateDataIterMap, FittedCandidate, MapCandidate, model, opt, lossfun
+export AbstractCandidate, CandidateModel, CandidateOptModel, CandidateDataIterMap, FittedCandidate, FileCandidate, MapCandidate, model, opt, lossfun
 
 # Evolution
 export evolve, AbstractEvolution, NoOpEvolution, AfterEvolution, EliteSelection, SusSelection, TournamentSelection, CombinedEvolution
@@ -52,7 +52,7 @@ export Probability, MutationShield, ApplyIf, RemoveIfSingleInput, PersistentArra
 export BatchSizeSelectionWithDefaultInShape, BatchSizeSelectionScaled, BatchSizeSelectionFromAlternatives, BatchSizeSelectionMaxSize, batchsizeselection
 
 # Iterators. These should preferably come from somewhere else, but I haven't found anything which fits the bill w.r.t repeatability over subsets
-export RepeatPartitionIterator, SeedIterator, MapIterator, GpuIterator, BatchIterator, ShuffleIterator, TimedIterator, TimedIteratorStop
+export RepeatPartitionIterator, SeedIterator, MapIterator, GpuIterator, BatchIterator, TimedIterator, TimedIteratorStop
 export StatefulGenerationIter
 
 # Iterator mapping types for evolving hyperparameters related to datasets, e.g. augmentation and batch size

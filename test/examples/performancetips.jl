@@ -43,6 +43,7 @@ rng = Xoshiro(0)
 
 nlabels = 3
 ninputs = 5
+popsize = 5
 
 # #### Step 1: Create initial models
 # Our LayerVertexConf which wraps layers in `AutoOptimiser` (and `ActivationContribution`).
@@ -56,12 +57,13 @@ initial_searchspace = ArchSpaceChain(initial_hidden, outlayer)
 
 # Sample 5 models from the initial search space and make an initial population.
 samplemodel(invertex) = CompGraph(invertex, initial_searchspace(invertex))
-initial_models = [samplemodel(denseinputvertex("input", ninputs)) for _ in 1:5]
+initial_models = [samplemodel(denseinputvertex("input", ninputs)) for _ in 1:popsize]
 @test nvertices.(initial_models) == [4, 3, 4, 5, 3]
 
 # Lets add optimisers into the search space this time just to show how `ImplicitOpt` is used then.
 optalts = (Descent, Momentum, Nesterov, Adam)
-initial_optrules = (ImplicitOpt(OT(1f1^rand(rng, -3:-1))) for OT in rand(rng, optalts, length(initial_models)))
+initial_learningrates = 10f0^rand(rng, -3:-1, popsize)
+initial_optrules = ImplicitOpt.(initial_learningrates .|> rand(rng, optalts, popsize))
 
 population = Population(CandidateOptModel.(initial_optrules, initial_models))
 @test generation(population) == 1
@@ -106,5 +108,90 @@ selection = CombinedEvolution(elites, mutate)
 newpopulation = evolve(selection, fitnessfunction, population)
 @test newpopulation != population
 @test generation(newpopulation) == 2 
+
+end #src
+
+md"""
+## Garbage Collect Between Batches
+
+One should never need to call garbage collection manually from inside a program. However, there is an [CUDA.jl issue](https://github.com/JuliaGPU/CUDA.jl/issues/1540) which causes the program to halt for very long times when using alot of memory. For one reason or the other this is alleviated by garbage collection.
+
+The following iterator wrapper keeps the issue at bay until a more permanent fix is issued:
+"""
+
+@testset "GpuGcIterator" begin #src
+using NaiveGAflux
+function cudareclaim()
+    ## Uncomment the line below!
+    ## CUDA.reclaim()
+end
+
+struct GpuGcIterator{I}
+    base::I
+end
+
+function Base.iterate(itr::GpuGcIterator) 
+    valstate = iterate(itr.base)
+    valstate === nothing && return nothing
+    val, state = valstate
+    gctask = Threads.@spawn Timer(0.0)
+    return val, (2, gctask, state)
+end
+
+function Base.iterate(itr::GpuGcIterator, (cnt, gctask, state)) 
+    close(fetch(gctask))
+
+    if cnt > 5
+        ## This is quite fast and enough to keep the problem away in 99% of cases
+        GC.gc(false)
+        cnt = 0
+    end
+
+    gctask = Threads.@spawn begin
+        ## This can often get us unstuck if the above doesn't help in time
+        reclaimcnt = Ref(0)
+        Timer(0.1; interval=0.1) do t
+            GC.gc(false)
+            reclaimcnt[] += 1
+            if reclaimcnt[] > 5
+                GC.gc()
+                cudareclaim()
+            end
+            if reclaimcnt[] > 40
+                ## Stop the task eventually, e.g if program crashes
+                close(t)
+            end
+        end
+    end
+    
+    valstate = iterate(itr.base, state)
+    if valstate === nothing
+        close(fetch(gctask))
+        return nothing
+    end
+    val, state = valstate
+    return val, (cnt+1, gctask, state)
+end
+
+
+Base.IteratorSize(::Type{GpuGcIterator{I}}) where I = Base.IteratorSize(I)
+Base.IteratorEltype(::Type{GpuGcIterator{I}}) where I = Base.IteratorEltype(I)
+
+Base.length(itr::GpuGcIterator) = length(itr.base)
+Base.size(itr::GpuGcIterator) = size(itr.base)
+Base.eltype(::Type{GpuGcIterator{I}}) where I = eltype(I)
+
+# This makes it work even when wrapping a [`StatefulGenerationIter`](@ref):
+NaiveGAflux.itergeneration(itr::GpuGcIterator, gen) = GpuGcIterator(NaiveGAflux.itergeneration(itr.base, gen))
+
+# Just wrap your iterator in the `GpuGcIterator (don't forget to wrap the validation iterator)`
+
+trainiter = GpuGcIterator(BatchIterator(randn(10, 128), 16; shuffle=true))
+valiter = GpuGcIterator(BatchIterator(randn(10, 64), 32))
+
+@test size.(collect(trainiter)) == repeat([(10, 16)], 8)
+@test size.(collect(valiter)) == repeat([(10, 32)], 2)
+
+@test size.(collect(NaiveGAflux.itergeneration(trainiter, 1))) == repeat([(10, 16)], 8)
 
 end #src
