@@ -62,7 +62,7 @@ initial_models = [samplemodel(denseinputvertex("input", ninputs)) for _ in 1:pop
 
 # Lets add optimisers into the search space this time just to show how `ImplicitOpt` is used then.
 optalts = (Descent, Momentum, Nesterov, Adam)
-initial_learningrates = 10f0^rand(rng, -3:-1, popsize)
+initial_learningrates = 10f0.^rand(rng, -3:-1, popsize)
 initial_optrules = ImplicitOpt.(initial_learningrates .|> rand(rng, optalts, popsize))
 
 population = Population(CandidateOptModel.(initial_optrules, initial_models))

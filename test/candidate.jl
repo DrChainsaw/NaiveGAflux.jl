@@ -266,6 +266,13 @@ end
                 @test isfile(fname)
 
                 finalize(fc)
+
+                # File is deleted in async block.Lets hope that 10 seconds is enough to not be flaky in noisy CI VMs
+                attempt = 0
+                while isfile(fname) && attempt < 100
+                    sleep(0.1)
+                    attempt += 1
+                end
                 @test !isfile(fname)
             end
 
