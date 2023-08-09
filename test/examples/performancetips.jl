@@ -184,7 +184,7 @@ Base.eltype(::Type{GpuGcIterator{I}}) where I = eltype(I)
 # This makes it work even when wrapping a [`StatefulGenerationIter`](@ref):
 NaiveGAflux.itergeneration(itr::GpuGcIterator, gen) = GpuGcIterator(NaiveGAflux.itergeneration(itr.base, gen))
 
-# Just wrap your iterator in the `GpuGcIterator (don't forget to wrap the validation iterator)`
+# Just wrap your iterator in the `GpuGcIterator` (don't forget to wrap the validation iterator)
 
 trainiter = GpuGcIterator(BatchIterator(randn(10, 128), 16; shuffle=true))
 valiter = GpuGcIterator(BatchIterator(randn(10, 64), 32))
