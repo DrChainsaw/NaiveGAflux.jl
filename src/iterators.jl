@@ -161,6 +161,8 @@ Base.IteratorEltype(::Type{SeedIterator{R, T}}) where {R,T} = Base.IteratorEltyp
     GpuIterator(itr)
 
 Return an iterator which sends values from `itr` to the GPU.
+
+Will often be used automatically when training a model with parameters on the GPU.
 """
 GpuIterator(itr) = Iterators.map(gpuitr, itr) # Iterator.map can't infer eltypes, but we can't either as we don't know for sure what Flux.gpu will do
 gpuitr(a) = Flux.gpu(a)
@@ -353,7 +355,6 @@ Base.IteratorEltype(::Type{ReBatchingIterator{I}}) where I = Base.IteratorEltype
 _rangetoarr(a) = a
 _rangetoarr(t::Type{<:Tuple}) = Tuple{map(_rangetoarr, t.parameters)...}
 _rangetoarr(a::Type{<:Array}) = a
-_rangetoarr(a::Type{<:CUDA.CuArray}) = a
 _rangetoarr(::Type{<:AbstractArray{T,N}}) where {T,N} = Array{T,N}
 
 function Base.iterate(itr::ReBatchingIterator)

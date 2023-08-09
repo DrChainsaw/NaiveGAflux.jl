@@ -52,7 +52,7 @@
 
     struct NaNCandidateModel <: AbstractCandidate end
     NaiveGAflux.ninputs(::NaNCandidateModel) = 1
-    NaiveGAflux.model(f::NaNCandidateModel) = f 
+    NaiveGAflux.model(::NaNCandidateModel; default=identity) = default  
     (::NaNCandidateModel)(x) = x
     NaiveGAflux.lossfun(::NaNCandidateModel; default) = (args...) -> NaN32
     NaiveGAflux.AutoOptimiserExperimental.mutateoptimiser!(f, ::NaNCandidateModel) = true

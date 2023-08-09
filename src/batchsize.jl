@@ -2,7 +2,7 @@ generic_batchsizefun_docstring(fname="batchsizefun") = """
 
 `$(fname)` is a function with the following signature:
 
-`$(fname)(model, batchsize; inshape_nobatch, availablebytes)`
+`$(fname)(batchsize, model; inshape_nobatch, availablebytes)`
 
 It returns the largest batch size not larger than `batchsize` which can be used for `model` without using more than `availablebytes` bytes of memory.
 The type of `batchsize` may be used to e.g. determine if one shall account for backwards pass (if `typeof(batchsize) === TrainBatchSize`) or not (if `typeof(batchsize) == ValidationBatchSize`).
@@ -128,8 +128,8 @@ struct BatchSizeSelectionScaled{F}
     batchsizefun::F
 end
 BatchSizeSelectionScaled(scale::AbstractFloat) = BatchSizeSelectionScaled(scale, limit_maxbatchsize)  
-function (bs::BatchSizeSelectionScaled)(args...; availablebytes=_availablebytes(), kwargs...) 
-    bs.batchsizefun(args...;availablebytes = floor(Int, bs.scale * availablebytes), kwargs...)
+function (bs::BatchSizeSelectionScaled)(orgbs, model; availablebytes=_availablebytes(model), kwargs...) 
+    bs.batchsizefun(orgbs, model;availablebytes = floor(Int, bs.scale * availablebytes), kwargs...)
 end
 
 """
@@ -288,7 +288,7 @@ function batchsizeselection(inshape_nobatch::Tuple;
     bs = isnothing(alternatives) ? bs : BatchSizeSelectionFromAlternatives(alternatives, bs)
 end
 
-function limit_maxbatchsize(bs::TrainBatchSize, model; inshape_nobatch, availablebytes = _availablebytes())
+function limit_maxbatchsize(bs::TrainBatchSize, model; inshape_nobatch, availablebytes = _availablebytes(model))
     maxsize = maxtrainbatchsize(model, inshape_nobatch, availablebytes)
     maxsize > -1 ? min(batchsize(bs), maxsize) : batchsize(bs)
 end
@@ -296,20 +296,20 @@ end
 function limit_maxbatchsize(bs::ValidationBatchSize,
                             model; 
                             inshape_nobatch,
-                            availablebytes = _availablebytes()
+                            availablebytes = _availablebytes(model)
                             )
     maxsize = maxvalidationbatchsize(model, inshape_nobatch, availablebytes)
     maxsize > -1 ? min(batchsize(bs), maxsize) : batchsize(bs)
 end
 
-function maxtrainbatchsize(model, inshape_nobatch, availablebytes=_availablebytes())
+function maxtrainbatchsize(model, inshape_nobatch, availablebytes=_availablebytes(model))
     paramsize = mapreduce(ps -> length(ps) * sizeof(eltype(ps)), +, params(model); init=0)
     actsize = activationsizes(model, inshape_nobatch) 
     den = paramsize + 2 * actsize
     return den > 0 ? fld(availablebytes - paramsize, den) : -1
 end
 
-function maxvalidationbatchsize(model, inshape_nobatch, availablebytes=_availablebytes())
+function maxvalidationbatchsize(model, inshape_nobatch, availablebytes=_availablebytes(model))
     paramsize = mapreduce(ps -> length(ps) * sizeof(eltype(ps)), +, params(model); init=0)
     actsize = activationsizes(model, inshape_nobatch)
     return actsize > 0 ? fld(availablebytes - paramsize, actsize) : -1
@@ -335,12 +335,6 @@ function _model_parsize(model)
     return ps |> first |> eltype |> sizeof
 end
 
-# TODO: Take model as input and look at params to determine of cpu or gpu
-function _availablebytes()
-    if CUDA.functional()
-        info = CUDA.MemoryInfo()
-        info.free_bytes + info.pool_reserved_bytes - info.pool_used_bytes
-    else
-        Int(Sys.free_memory())
-    end
-end
+_availablebytes(model) = _availablebytes(execution_device(model))
+_availablebytes(::NaiveGAfluxCpuDevice) = Int(Sys.free_memory())
+

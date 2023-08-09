@@ -16,7 +16,6 @@ import Optimisers: WeightDecay
 using Random
 using Logging
 using Statistics
-import CUDA
 import MemPool
 import IterTools
 import Functors

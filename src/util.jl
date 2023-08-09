@@ -369,7 +369,7 @@ function Base.showerror(io::IO, e::InconsistentAutoOptimiserException{<:CompGrap
 end
 function _print_implicit_opts(io::IO, g::CompGraph)
     for (i, v) in enumerate(vertices(g))
-        if !isempty(Flux.trainable(layer(v)))
+        if find_first_array(layer(v)) !== nothing
             println(io, "vertex ", i, " implicit: ", _is_implicit_opt(v), ", name: ", name(v))
         end
     end
@@ -387,7 +387,7 @@ Throws a $InconsistentAutoOptimiserException if some but not all parameters use 
 function check_implicit_optimiser(g::CompGraph)
     prev = nothing
     for v in vertices(g)
-        if !isempty(Flux.trainable(layer(v)))
+        if find_first_array(layer(v)) !== nothing
             isimplicit = _is_implicit_opt(v)
             if isnothing(prev)
                 prev = isimplicit 
@@ -400,3 +400,34 @@ function check_implicit_optimiser(g::CompGraph)
     end
     isnothing(prev) ? false : prev
 end
+
+struct NaiveGAfluxCpuDevice end
+
+function execution_device(model) 
+     maybearray = find_first_array(model)
+     maybearray === nothing ? NaiveGAfluxCpuDevice() : execution_device(maybearray)
+end
+execution_device(::AbstractArray) = NaiveGAfluxCpuDevice()
+
+# Just to avoid infinite recursion due to inputs -> outputs -> inputs
+find_first_array(g::CompGraph) = find_first_array(vertices(g))
+find_first_array(v::AbstractVertex) = find_first_array(layer(v))
+
+find_first_array(model) = find_first_array(Flux.trainable(model))
+function find_first_array(x::Union{Tuple, NamedTuple, AbstractArray}) 
+    for e in x
+        res = find_first_array(e)
+        res !== nothing && return res
+    end
+end
+find_first_array(x::AbstractArray{<:Number}) = x
+
+
+function allow_free!(model) 
+    # fmapstructure to avoid things like trying to create a layer with nothing as weights
+    # We really just want to walk the structure, not map it here
+     Functors.fmapstructure(_allow_free!, model)
+     nothing
+end
+_allow_free!(x) = nothing
+
