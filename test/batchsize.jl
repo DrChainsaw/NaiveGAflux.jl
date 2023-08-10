@@ -11,10 +11,10 @@
     end
 
     @testset "BatchSizeSelectionScaled" begin
-        testfun = function(x; availablebytes=1)
+        testfun = function(x, ::Any; availablebytes=1)
             return x => availablebytes
         end
-        @test BatchSizeSelectionScaled(0.5, testfun)(4; availablebytes=6) == (4 => 3)
+        @test BatchSizeSelectionScaled(0.5, testfun)(4, nothing; availablebytes=6) == (4 => 3)
     end
 
     @testset "BatchSizeSelectionFromAlternatives" begin
@@ -33,11 +33,6 @@
     @testset "BatchSizeSelectionMaxSize" begin
 
         BatchSizeSelectionMaxSize(10, Pair)(1, 13) == 10 => 13
-    end
-
-    @testset "availablebytes" begin
-        # Just a smoketest so that we e.g don't crash if CUDA.functional() is false
-        @test NaiveGAflux._availablebytes() > 0
     end
 
     function testgraph(insize)

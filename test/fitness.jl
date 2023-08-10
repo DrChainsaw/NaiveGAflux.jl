@@ -50,12 +50,17 @@
         @test fitness(AccuracyFitness(DummyIter()), IdCand()) == 0.5
     end
 
+    # just so we can dispatch on it below without adding a weird method
+    struct IdentityModel end
+    (::IdentityModel)(x) = x
+
     struct NaNCandidateModel <: AbstractCandidate end
     NaiveGAflux.ninputs(::NaNCandidateModel) = 1
-    NaiveGAflux.model(f::NaNCandidateModel) = f 
-    (::NaNCandidateModel)(x) = x
-    NaiveGAflux.lossfun(::NaNCandidateModel; default) = (args...) -> NaN32
-    NaiveGAflux.AutoOptimiserExperimental.mutateoptimiser!(f, ::NaNCandidateModel) = true
+    NaiveGAflux.model(::NaNCandidateModel; kwargs...) = IdentityModel()  
+    NaiveGAflux.lossfun(::NaNCandidateModel; kwargs...) = (args...) -> NaN32
+
+    # Or else an exception is thrown when using ImplicitOpt
+    NaiveGAflux.AutoOptimiserExperimental.mutateoptimiser!(f, ::IdentityModel) = true
 
     import Flux
     import Flux: Dense

@@ -1,4 +1,5 @@
 [deps]
+CUDA = "052768ef-5323-5732-b1bb-66c8b64840ba"
 Documenter = "e30172f5-a6a5-5a46-863b-614d45cd2de4"
 Flux = "587475ba-b771-5e3f-ad9e-33799f191a9c"
 Functors = "d9f16b24-f501-4c13-a1f2-28368ffc5196"
@@ -17,5 +18,7 @@ Test = "8dfed614-e22c-5e08-85e1-65c5234f0b40"
 cuDNN = "02a925ec-e4fe-4b08-9a7e-0d78e3d38ccd"
 
 [compat]
-Documenter = "0.27"
+CUDA = "4"
 cuDNN = "1"
+Documenter = "0.27"
+

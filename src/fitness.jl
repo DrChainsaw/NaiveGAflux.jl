@@ -72,10 +72,6 @@ function _fitness(s::GpuFitness, c::AbstractCandidate)
     fitval = _fitness(s.f, cgpu)
     # In case parameters changed. Would like to do this some other way, perhaps return the candidate too, or move training to evolve...
     transferstate!(c, cpu(cgpu)) # Can't load CuArray into a normal array
-    cgpu = nothing # So we can reclaim the memory
-    # Should not be needed according to CUDA docs, but programs seems to hang every now and then if not done.
-    # Should revisit every now and then to see if things have changed...
-    gpu_gc()
     return fitval
 end
 
@@ -112,14 +108,6 @@ function _transferstate!(to::T, from::T) where T <:AbstractArray
     foreach(transferstate!, to, from)
 end 
 
-const gpu_gc = if CUDA.functional()
-    function(full=true)
-        GC.gc(full)
-        CUDA.reclaim()
-    end
-else
-    () -> nothing
-end
 
 """
     AccuracyFitness <: AbstractFitness
@@ -152,13 +140,12 @@ end
 function _fitnessiterator(f, c::AbstractCandidate, iter)
     geniter = itergeneration(iter, generation(c; default=0))
     canditer = f(c; default=geniter)
-    matchdatatype(params(c), canditer)
+    matchdatatype(c, canditer)
 end
 
-matchdatatype(ps::Flux.Params, iter) = isempty(ps) ? iter : matchdatatype(first(ps), iter)
-
-matchdatatype(::CUDA.CuArray, iter) = GpuIterator(iter)
-matchdatatype(::AbstractArray, iter) = iter
+matchdatatype(c::AbstractCandidate, iter) = matchdatatype(model(c), iter)
+matchdatatype(model, iter) = matchdatatype(execution_device(model), iter)
+matchdatatype(::NaiveGAfluxCpuDevice, iter) = iter
 
 """
     TrainThenFitness{I,L,O,F} <: AbstractFitness

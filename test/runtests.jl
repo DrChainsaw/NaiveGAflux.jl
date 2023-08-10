@@ -1,5 +1,6 @@
 using NaiveGAflux, Random, Logging, Test
 using NaiveNASlib.Advanced, NaiveNASlib.Extend
+import CUDA
 
 @testset "NaiveGAflux.jl" begin
 

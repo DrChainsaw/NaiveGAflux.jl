@@ -279,7 +279,7 @@ struct FittedCandidate{F, C <: AbstractCandidate} <: AbstractWrappingCandidate
     c::C
 end
 FittedCandidate(c::AbstractCandidate, f::AbstractFitness, gen) = FittedCandidate(gen, fitness(f, c), c)
-FittedCandidate(c::FittedCandidate, f::AbstractFitness, gen) = FittedCandidate(gen, fitness(f, c), wrappedcand(c))
+FittedCandidate(c::FittedCandidate{F}, f::AbstractFitness, gen) where F = FittedCandidate(gen, fitness(f, c)::F, wrappedcand(c))
 
 @functor FittedCandidate
 
@@ -294,8 +294,18 @@ generation(c::FittedCandidate; default=nothing) = c.gen
 # if they are not passed a FittedCandidate. Perhaps having some kind of fitness state container in each candidate?
 newcand(c::FittedCandidate, mapfield) = FittedCandidate(c.gen, c.fitness, newcand(wrappedcand(c), mapfield))
 
+"""
+    nparams(model)
+
+Return the number of trainable parameters in `model`.
+"""
 nparams(c::AbstractCandidate) = model(nparams, c)
-nparams(x) = mapreduce(length, +, params(x).order; init=0)
+nparams(x) = nparams(0, x)
+nparams(x::Integer, g::CompGraph) = nparams(x, vertices(g))
+nparams(x::Integer, v::AbstractVertex) = nparams(x, layer(v))
+nparams(x::Integer, m) = nparams(x, Flux.trainable(m))
+nparams(x::Integer, tr::Union{Tuple, NamedTuple, AbstractArray}) = foldl(nparams, tr; init=x)
+nparams(x::Integer, tr::AbstractArray{<:Number}) = x + length(tr)
 
 """
     MapType{T, F1, F2}
