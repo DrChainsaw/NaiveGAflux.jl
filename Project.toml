@@ -1,7 +1,7 @@
 name = "NaiveGAflux"
 uuid = "81ede08e-ab29-11e9-16d3-79edd30a1d76"
 authors = ["DrChainsaw"]
-version = "0.10.4"
+version = "0.11.0"
 
 [deps]
 Flux = "587475ba-b771-5e3f-ad9e-33799f191a9c"
