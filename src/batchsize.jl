@@ -303,14 +303,16 @@ function limit_maxbatchsize(bs::ValidationBatchSize,
 end
 
 function maxtrainbatchsize(model, inshape_nobatch, availablebytes=_availablebytes(model))
-    paramsize = mapreduce(ps -> length(ps) * sizeof(eltype(ps)), +, params(model); init=0)
+    elemsize = _model_parsize(model)
+    paramsize = elemsize > 0 ? nparams(model) * elemsize : 0
     actsize = activationsizes(model, inshape_nobatch) 
     den = paramsize + 2 * actsize
     return den > 0 ? fld(availablebytes - paramsize, den) : -1
 end
 
 function maxvalidationbatchsize(model, inshape_nobatch, availablebytes=_availablebytes(model))
-    paramsize = mapreduce(ps -> length(ps) * sizeof(eltype(ps)), +, params(model); init=0)
+    elemsize = _model_parsize(model)
+    paramsize = elemsize > 0 ? nparams(model) * elemsize : 0
     actsize = activationsizes(model, inshape_nobatch)
     return actsize > 0 ? fld(availablebytes - paramsize, actsize) : -1
 end
@@ -330,9 +332,8 @@ function activationsizes(model::CompGraph, inshape_nobatch, elemsize = _model_pa
 end
 
 function _model_parsize(model)
-    ps = params(model)
-    isempty(ps) && return 0
-    return ps |> first |> eltype |> sizeof
+    anyarr = find_first_array(model)
+    anyarr === nothing ? 0 : sizeof(eltype(anyarr))
 end
 
 _availablebytes(model) = _availablebytes(execution_device(model))

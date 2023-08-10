@@ -423,11 +423,3 @@ end
 find_first_array(x::AbstractArray{<:Number}) = x
 
 
-function allow_free!(model) 
-    # fmapstructure to avoid things like trying to create a layer with nothing as weights
-    # We really just want to walk the structure, not map it here
-     Functors.fmapstructure(_allow_free!, model)
-     nothing
-end
-_allow_free!(x) = nothing
-

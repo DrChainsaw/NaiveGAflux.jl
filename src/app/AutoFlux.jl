@@ -24,7 +24,7 @@ Keyword `mdir` is a directory which will be searched for serialized state from w
 function fit(x, y; cb=identity, mdir=missing)
     if ndims(x) == 4 
         outsize = ndims(y) == 1 ? length(unique(y)) : size(y, 1)
-        return fit(ImageClassifier(insize=size(x), outsize, mdir=defaultdir(mdir, "ImageClassifier")), x, y; cb=identity)
+        return fit(ImageClassifier(;insize=size(x), outsize, mdir=modeldir(mdir, "ImageClassifier")), x, y; cb=identity)
     end
     error("No model for $(ndims(x))D data")
 end

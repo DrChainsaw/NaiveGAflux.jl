@@ -72,7 +72,6 @@ function _fitness(s::GpuFitness, c::AbstractCandidate)
     fitval = _fitness(s.f, cgpu)
     # In case parameters changed. Would like to do this some other way, perhaps return the candidate too, or move training to evolve...
     transferstate!(c, cpu(cgpu)) # Can't load CuArray into a normal array
-    allow_free!(cgpu) 
     return fitval
 end
 

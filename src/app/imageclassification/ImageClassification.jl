@@ -1,7 +1,7 @@
 module ImageClassification
 
 using ...NaiveGAflux
-using ..AutoFlux: fit
+using ..AutoFlux: fit, defaultdir
 using NaiveGAflux: GlobalPool
 using NaiveGAflux: shapetrace, squashshapes, fshape, ndimsout, check_apply
 using NaiveGAflux: StatefulGenerationIter

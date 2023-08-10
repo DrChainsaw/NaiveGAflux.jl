@@ -10,7 +10,7 @@ using NaiveNASlib.Advanced, NaiveNASlib.Extend
 import Flux
 using Flux: Dense, Conv, ConvTranspose, DepthwiseConv, CrossCor, LayerNorm, BatchNorm, InstanceNorm, GroupNorm, 
             MaxPool, MeanPool, Dropout, AlphaDropout, GlobalMaxPool, GlobalMeanPool, cpu, gpu,
-            SamePad, params
+            SamePad
 import Optimisers
 import Optimisers: WeightDecay
 using Random
@@ -27,7 +27,7 @@ using Setfield
 # For temporary storage of program state for pause/resume type of operations
 using Serialization
 
-const rng_default = MersenneTwister(abs(rand(Int)))
+const rng_default = MersenneTwister(1)
 const modeldir = "models"
 
 # Fitness
@@ -123,5 +123,13 @@ include("population.jl")
 include("iterators.jl")
 include("app/AutoFlux.jl")
 include("visualize/callbacks.jl")
+
+
+using PackageExtensionCompat
+function __init__()
+    @require_extensions
+end
+
+include("precompile.jl")
 
 end # module

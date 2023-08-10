@@ -21,6 +21,4 @@ NaiveGAflux.matchdatatype(::NaiveGAfluxCudaDevice, iter) = GpuIterator(iter)
 
 NaiveGAflux._rangetoarr(a::Type{<:CUDA.CuArray}) = a
 
-NaiveGAflux._allow_free!(x::CUDA.CuArray) = CUDA.unsafe_free!(x)
-
 end
