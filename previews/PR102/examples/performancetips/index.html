@@ -1,0 +1,106 @@
+<!DOCTYPE html>
+<html lang="en"><head><meta charset="UTF-8"/><meta name="viewport" content="width=device-width, initial-scale=1.0"/><title>Performance Tips · NaiveGAflux</title><script data-outdated-warner src="../../assets/warner.js"></script><link href="https://cdnjs.cloudflare.com/ajax/libs/lato-font/3.0.0/css/lato-font.min.css" rel="stylesheet" type="text/css"/><link href="https://cdnjs.cloudflare.com/ajax/libs/juliamono/0.045/juliamono.min.css" rel="stylesheet" type="text/css"/><link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/5.15.4/css/fontawesome.min.css" rel="stylesheet" type="text/css"/><link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/5.15.4/css/solid.min.css" rel="stylesheet" type="text/css"/><link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/5.15.4/css/brands.min.css" rel="stylesheet" type="text/css"/><link href="https://cdnjs.cloudflare.com/ajax/libs/KaTeX/0.13.24/katex.min.css" rel="stylesheet" type="text/css"/><script>documenterBaseURL="../.."</script><script src="https://cdnjs.cloudflare.com/ajax/libs/require.js/2.3.6/require.min.js" data-main="../../assets/documenter.js"></script><script src="../../siteinfo.js"></script><script src="../../../versions.js"></script><link class="docs-theme-link" rel="stylesheet" type="text/css" href="../../assets/themes/documenter-dark.css" data-theme-name="documenter-dark" data-theme-primary-dark/><link class="docs-theme-link" rel="stylesheet" type="text/css" href="../../assets/themes/documenter-light.css" data-theme-name="documenter-light" data-theme-primary/><script src="../../assets/themeswap.js"></script></head><body><div id="documenter"><nav class="docs-sidebar"><div class="docs-package-name"><span class="docs-autofit"><a href="../../">NaiveGAflux</a></span></div><form class="docs-search" action="../../search/"><input class="docs-search-query" id="documenter-search-query" name="q" type="text" placeholder="Search docs"/></form><ul class="docs-menu"><li><a class="tocitem" href="../../">Introduction</a></li><li><a class="tocitem" href="../quicktutorial/">Quick Tutorial</a></li><li><span class="tocitem">AutoFlux</span><ul><li><a class="tocitem" href="../../autoflux/">AutoFlux</a></li><li><a class="tocitem" href="../../autoflux/reference/reference/">AutoFlux API Reference</a></li></ul></li><li><span class="tocitem">Components</span><ul><li><a class="tocitem" href="../searchspace/">Search Spaces</a></li><li><a class="tocitem" href="../mutation/">Mutation Operations</a></li><li><a class="tocitem" href="../crossover/">Crossover Operations</a></li><li><a class="tocitem" href="../fitness/">Fitness Functions</a></li><li><a class="tocitem" href="../candidate/">Candidate Utilities</a></li><li><a class="tocitem" href="../evolution/">Evolution Strategies</a></li><li><a class="tocitem" href="../iteratormaps/">Iterator Maps</a></li><li><a class="tocitem" href="../iterators/">Iterators</a></li></ul></li><li class="is-active"><a class="tocitem" href>Performance Tips</a><ul class="internal"><li><a class="tocitem" href="#Faster-Training-with-AutoOptimiser-and-ImplicitOpt"><span>Faster Training with AutoOptimiser and ImplicitOpt</span></a></li><li><a class="tocitem" href="#Garbage-Collect-Between-Batches"><span>Garbage Collect Between Batches</span></a></li></ul></li><li><span class="tocitem">API Reference</span><ul><li><a class="tocitem" href="../../reference/searchspace/">Search Spaces</a></li><li><a class="tocitem" href="../../reference/mutation/">Mutation Operations</a></li><li><a class="tocitem" href="../../reference/crossover/">Crossover Operations</a></li><li><a class="tocitem" href="../../reference/fitness/">Fitness Functions</a></li><li><a class="tocitem" href="../../reference/candidate/">Candidate Utilities</a></li><li><a class="tocitem" href="../../reference/evolution/">Evolution Strategies</a></li><li><a class="tocitem" href="../../reference/batchsize/">Batch Size Utilities</a></li><li><a class="tocitem" href="../../reference/iteratormaps/">Iterator Maps</a></li><li><a class="tocitem" href="../../reference/iterators/">Iterators</a></li><li><a class="tocitem" href="../../reference/utils/">Misc. Utilities</a></li></ul></li></ul><div class="docs-version-selector field has-addons"><div class="control"><span class="docs-label button is-static is-size-7">Version</span></div><div class="docs-selector control is-expanded"><div class="select is-fullwidth is-size-7"><select id="documenter-version-selector"></select></div></div></div></nav><div class="docs-main"><header class="docs-navbar"><nav class="breadcrumb"><ul class="is-hidden-mobile"><li class="is-active"><a href>Performance Tips</a></li></ul><ul class="is-hidden-tablet"><li class="is-active"><a href>Performance Tips</a></li></ul></nav><div class="docs-right"><a class="docs-edit-link" href="https://github.com/DrChainsaw/NaiveGAflux.jl/blob/master/test/examples/performancetips.jl" title="Edit on GitHub"><span class="docs-icon fab"></span><span class="docs-label is-hidden-touch">Edit on GitHub</span></a><a class="docs-settings-button fas fa-cog" id="documenter-settings-button" href="#" title="Settings"></a><a class="docs-sidebar-button fa fa-bars is-hidden-desktop" id="documenter-sidebar-button" href="#"></a></div></header><article class="content" id="documenter-page"><h1 id="Performance-Tips"><a class="docs-heading-anchor" href="#Performance-Tips">Performance Tips</a><a id="Performance-Tips-1"></a><a class="docs-heading-anchor-permalink" href="#Performance-Tips" title="Permalink"></a></h1><p>This section contains a couple of things one can do to speed up the program. These things are either experimental or unorthodox which is why they are not enabled by default.</p><h2 id="Faster-Training-with-AutoOptimiser-and-ImplicitOpt"><a class="docs-heading-anchor" href="#Faster-Training-with-AutoOptimiser-and-ImplicitOpt">Faster Training with AutoOptimiser and ImplicitOpt</a><a id="Faster-Training-with-AutoOptimiser-and-ImplicitOpt-1"></a><a class="docs-heading-anchor-permalink" href="#Faster-Training-with-AutoOptimiser-and-ImplicitOpt" title="Permalink"></a></h2><p>By default the models will use the normal <code>Flux</code> training flow of</p><ol><li>Compute the initial optimiser state from the optimiser rule and model</li><li>Compute the gradient of the entire model</li><li>Update the model and optimiser state using the gradient</li></ol><p>The main performance problem is that NaiveGAflux can create quite messy nested models with few repeating motifs. This can cause compile times to explode since the model gradient is a nested <code>NamedTuple</code> which mirrors the model structure. Since each unique model architecture will have its own unique gradient type the compilation will happen for each evaluated model, even after mutation (since the model architecture might be different then).</p><p>To mitigate this issue, the <a href="../../reference/utils/#NaiveGAflux.AutoOptimiserExperimental.AutoOptimiser"><code>AutoOptimiser</code></a> updates parameters and optimiser state of a single layer (e.g. a <code>Flux.Dense</code>) during the backwards pass. This is obviously a rather surprising side effect from what is normally just a pure calculation which is one has to actively opt in for it.</p><p>The way it works is simply that it wraps both a specific layer (e.g. a <code>Flux.Dense</code>) and the associated optimiser state for the wrapped layer and intercepts the gradient during the pullback.</p><p>Use a <a href="../../reference/searchspace/#NaiveGAflux.LayerVertexConf"><code>LayerVertexConf</code></a> to make layers created by NaiveGAflux use an <a href="../../reference/utils/#NaiveGAflux.AutoOptimiserExperimental.AutoOptimiser"><code>AutoOptimiser</code></a>.</p><div class="admonition is-warning"><header class="admonition-header">Warning</header><div class="admonition-body"><p>Be careful to ensure that all <code>VertexSpace</code>s (which produce layers with trainable parameters) have a <code>LayerVertexConf</code> which adds an <code>AutoOptimiser</code> since a mix of auto optimising and non-auto optimising layers is not supported.</p><p>NaiveGAflux will throw an error if an inconsistent model is found, but it can be difficult to find out the origin of the error since it is not caught right away.</p></div></div><p>A secondary benefit is that parameter gradients are consumed right after they are computed and can be garbage collected immediately. By default, <a href="../../reference/utils/#NaiveGAflux.AutoOptimiserExperimental.AutoOptimiser"><code>AutoOptimiser</code></a> will not return the gradient of the wrapped layer just to enable this. This behaviour is configurable by supplying a different <code>gradfun</code> when creating the <a href="../../reference/utils/#NaiveGAflux.AutoOptimiserExperimental.AutoOptimiser"><code>AutoOptimiser</code></a>.</p><p>When using <a href="../../reference/utils/#NaiveGAflux.AutoOptimiserExperimental.AutoOptimiser"><code>AutoOptimiser</code></a>s, one must also wrap optimiser rules in an <a href="../../reference/utils/#NaiveGAflux.ImplicitOpt"><code>ImplicitOpt</code></a>. This tells NaiveGAflux that step 3) above shall be skipped since the model is already updated after gradient calculation.</p><div class="admonition is-info"><header class="admonition-header">Info</header><div class="admonition-body"><p><code>AutoFlux</code> uses <code>AutoOptimiser</code> and <code>ImplicitOpt</code> so there is no need to configure them there.</p></div></div><p>Here is the example from the <a href="../quicktutorial/#Quick-Tutorial">Quick Tutorial</a> modified to use <a href="../../reference/utils/#NaiveGAflux.AutoOptimiserExperimental.AutoOptimiser"><code>AutoOptimiser</code></a>.</p><pre><code class="language-julia hljs">using NaiveGAflux, Random
+import Flux, Optimisers
+import Flux: relu, elu, selu
+import Optimisers: Descent, Momentum, Nesterov, Adam
+Random.seed!(NaiveGAflux.rng_default, 0)
+rng = Xoshiro(0)
+
+nlabels = 3
+ninputs = 5
+popsize = 5</code></pre><h4 id="Step-1:-Create-initial-models"><a class="docs-heading-anchor" href="#Step-1:-Create-initial-models">Step 1: Create initial models</a><a id="Step-1:-Create-initial-models-1"></a><a class="docs-heading-anchor-permalink" href="#Step-1:-Create-initial-models" title="Permalink"></a></h4><p>Our LayerVertexConf which wraps layers in <code>AutoOptimiser</code> (and <code>ActivationContribution</code>).</p><pre><code class="language-julia hljs">layerconf = LayerVertexConf(layerfun=ActivationContribution ∘ AutoOptimiser)</code></pre><p>Search space: 2-4 dense layers of width 3-10.</p><pre><code class="language-julia hljs">layerspace = VertexSpace(layerconf, DenseSpace(3:10, [identity, relu, elu, selu]))
+initial_hidden = RepeatArchSpace(layerspace, 1:3)</code></pre><p>Output layer has fixed size and is shielded from mutation. Don&#39;t forget to add the <code>layerconf</code> here as well!</p><pre><code class="language-julia hljs">outlayer = VertexSpace(Shielded(layerconf), DenseSpace(nlabels, identity))
+initial_searchspace = ArchSpaceChain(initial_hidden, outlayer)</code></pre><p>Sample 5 models from the initial search space and make an initial population.</p><pre><code class="language-julia hljs">samplemodel(invertex) = CompGraph(invertex, initial_searchspace(invertex))
+initial_models = [samplemodel(denseinputvertex(&quot;input&quot;, ninputs)) for _ in 1:popsize]
+@test nvertices.(initial_models) == [4, 3, 4, 5, 3]</code></pre><p>Lets add optimisers into the search space this time just to show how <code>ImplicitOpt</code> is used then.</p><pre><code class="language-julia hljs">optalts = (Descent, Momentum, Nesterov, Adam)
+initial_learningrates = 10f0.^rand(rng, -3:-1, popsize)
+initial_optrules = ImplicitOpt.(initial_learningrates .|&gt; rand(rng, optalts, popsize))
+
+population = Population(CandidateOptModel.(initial_optrules, initial_models))
+@test generation(population) == 1</code></pre><h4 id="Step-2:-Set-up-fitness-function:"><a class="docs-heading-anchor" href="#Step-2:-Set-up-fitness-function:">Step 2: Set up fitness function:</a><a id="Step-2:-Set-up-fitness-function:-1"></a><a class="docs-heading-anchor-permalink" href="#Step-2:-Set-up-fitness-function:" title="Permalink"></a></h4><p>Basically the same as in the quick tutorial except we wrap the default optimiser in an <code>ImplicitOpt</code>. Note that this does not matter here since each candidate now has its own optimiser.</p><pre><code class="language-julia hljs">onehot(y) = Flux.onehotbatch(y, 1:nlabels)
+batchsize = 4
+datasettrain    = [(randn(Float32, ninputs, batchsize), onehot(rand(1:nlabels, batchsize)))]
+datasetvalidate = [(randn(Float32, ninputs, batchsize), onehot(rand(1:nlabels, batchsize)))]
+
+fitnessfunction = TrainThenFitness(;
+    dataiter = datasettrain,
+    defaultloss = Flux.logitcrossentropy, # Will be used if not provided by the candidate
+    defaultopt = ImplicitOpt(Adam()), # Same as above. Note that this will not be used
+    fitstrat = AccuracyFitness(datasetvalidate) # This is what creates our fitness value after training
+)</code></pre><h4 id="Step-3:-Define-how-to-search-for-new-candidates"><a class="docs-heading-anchor" href="#Step-3:-Define-how-to-search-for-new-candidates">Step 3: Define how to search for new candidates</a><a id="Step-3:-Define-how-to-search-for-new-candidates-1"></a><a class="docs-heading-anchor-permalink" href="#Step-3:-Define-how-to-search-for-new-candidates" title="Permalink"></a></h4><p>We choose to evolve the existing ones through mutation.</p><p><a href="../../reference/mutation/#NaiveGAflux.VertexMutation"><code>VertexMutation</code></a> selects valid vertices from the graph to mutate. <a href="../../reference/mutation/#NaiveGAflux.MutationProbability"><code>MutationProbability</code></a> applies mutation <code>m</code> with a probability of <code>p</code>. Lets create a short helper for brevity:</p><pre><code class="language-julia hljs">mp(m, p) = VertexMutation(MutationProbability(m, p))</code></pre><p>This time around we also add an optimiser mutation in the mix</p><pre><code class="language-julia hljs">changesize = mp(NoutMutation(-0.2, 0.2), 0.6)
+addlayer = mp(AddVertexMutation(layerspace), 0.4)
+remlayer = mp(RemoveVertexMutation(), 0.4)
+modelmutation = MutationChain(changesize, remlayer, addlayer)
+
+changelr = MutationProbability(LearningRateMutation(), 0.5)
+changeoptrule = MutationProbability(OptimiserMutation((optalts)), 0.1)
+optmutation = MutationChain(changelr, changeoptrule)</code></pre><p>These steps are the same as in <a href="../quicktutorial/#Quick-Tutorial">Quick Tutorial</a> except we add the optmutation to <a href="../../reference/candidate/#NaiveGAflux.MapCandidate"><code>MapCandidate</code></a></p><pre><code class="language-julia hljs">elites = EliteSelection(2)
+mutate = SusSelection(3, EvolveCandidates(MapCandidate(modelmutation, optmutation)))
+selection = CombinedEvolution(elites, mutate)</code></pre><h4 id="Step-4:-Run-evolution"><a class="docs-heading-anchor" href="#Step-4:-Run-evolution">Step 4: Run evolution</a><a id="Step-4:-Run-evolution-1"></a><a class="docs-heading-anchor-permalink" href="#Step-4:-Run-evolution" title="Permalink"></a></h4><pre><code class="language-julia hljs">newpopulation = evolve(selection, fitnessfunction, population)
+@test newpopulation != population
+@test generation(newpopulation) == 2</code></pre><h2 id="Garbage-Collect-Between-Batches"><a class="docs-heading-anchor" href="#Garbage-Collect-Between-Batches">Garbage Collect Between Batches</a><a id="Garbage-Collect-Between-Batches-1"></a><a class="docs-heading-anchor-permalink" href="#Garbage-Collect-Between-Batches" title="Permalink"></a></h2><p>One should never need to call garbage collection manually from inside a program. However, there is an <a href="https://github.com/JuliaGPU/CUDA.jl/issues/1540">CUDA.jl issue</a> which causes the program to halt for very long times when using alot of memory. For one reason or the other this is alleviated by garbage collection.</p><p>The following iterator wrapper keeps the issue at bay until a more permanent fix is issued:</p><pre><code class="language-julia hljs">using NaiveGAflux
+function cudareclaim()
+    # Uncomment the line below!
+    # CUDA.reclaim()
+end
+
+struct GpuGcIterator{I}
+    base::I
+end
+
+function Base.iterate(itr::GpuGcIterator)
+    valstate = iterate(itr.base)
+    valstate === nothing &amp;&amp; return nothing
+    val, state = valstate
+    gctask = Threads.@spawn Timer(0.0)
+    return val, (2, gctask, state)
+end
+
+function Base.iterate(itr::GpuGcIterator, (cnt, gctask, state))
+    close(fetch(gctask))
+
+    if cnt &gt; 5
+        # This is quite fast and enough to keep the problem away in 99% of cases
+        GC.gc(false)
+        cnt = 0
+    end
+
+    gctask = Threads.@spawn begin
+        # This can often get us unstuck if the above doesn&#39;t help in time
+        reclaimcnt = Ref(0)
+        Timer(0.1; interval=0.1) do t
+            GC.gc(false)
+            reclaimcnt[] += 1
+            if reclaimcnt[] &gt; 5
+                GC.gc()
+                cudareclaim()
+            end
+            if reclaimcnt[] &gt; 40
+                # Stop the task eventually, e.g if program crashes
+                close(t)
+            end
+        end
+    end
+
+    valstate = iterate(itr.base, state)
+    if valstate === nothing
+        close(fetch(gctask))
+        return nothing
+    end
+    val, state = valstate
+    return val, (cnt+1, gctask, state)
+end
+
+
+Base.IteratorSize(::Type{GpuGcIterator{I}}) where I = Base.IteratorSize(I)
+Base.IteratorEltype(::Type{GpuGcIterator{I}}) where I = Base.IteratorEltype(I)
+
+Base.length(itr::GpuGcIterator) = length(itr.base)
+Base.size(itr::GpuGcIterator) = size(itr.base)
+Base.eltype(::Type{GpuGcIterator{I}}) where I = eltype(I)</code></pre><p>This makes it work even when wrapping a <a href="../../reference/iterators/#NaiveGAflux.StatefulGenerationIter"><code>StatefulGenerationIter</code></a>:</p><pre><code class="language-julia hljs">NaiveGAflux.itergeneration(itr::GpuGcIterator, gen) = GpuGcIterator(NaiveGAflux.itergeneration(itr.base, gen))</code></pre><p>Just wrap your iterator in the <code>GpuGcIterator</code> (don&#39;t forget to wrap the validation iterator)</p><pre><code class="language-julia hljs">trainiter = GpuGcIterator(BatchIterator(randn(10, 128), 16; shuffle=true))
+valiter = GpuGcIterator(BatchIterator(randn(10, 64), 32))
+
+@test size.(collect(trainiter)) == repeat([(10, 16)], 8)
+@test size.(collect(valiter)) == repeat([(10, 32)], 2)
+
+@test size.(collect(NaiveGAflux.itergeneration(trainiter, 1))) == repeat([(10, 16)], 8)</code></pre><hr/><p><em>This page was generated using <a href="https://github.com/fredrikekre/Literate.jl">Literate.jl</a>.</em></p></article><nav class="docs-footer"><a class="docs-footer-prevpage" href="../iterators/">« Iterators</a><a class="docs-footer-nextpage" href="../../reference/searchspace/">Search Spaces »</a><div class="flexbox-break"></div><p class="footer-message">Powered by <a href="https://github.com/JuliaDocs/Documenter.jl">Documenter.jl</a> and the <a href="https://julialang.org/">Julia Programming Language</a>.</p></nav></div><div class="modal" id="documenter-settings"><div class="modal-background"></div><div class="modal-card"><header class="modal-card-head"><p class="modal-card-title">Settings</p><button class="delete"></button></header><section class="modal-card-body"><p><label class="label">Theme</label><div class="select"><select id="documenter-themepicker"><option value="documenter-light">documenter-light</option><option value="documenter-dark">documenter-dark</option></select></div></p><hr/><p>This document was generated with <a href="https://github.com/JuliaDocs/Documenter.jl">Documenter.jl</a> version 0.27.25 on <span class="colophon-date" title="Sunday 5 November 2023 10:37">Sunday 5 November 2023</span>. Using Julia version 1.9.3.</p></section><footer class="modal-card-foot"></footer></div></div></div></body></html>
