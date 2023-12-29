@@ -77,23 +77,23 @@
         o1 = OptimiserChain(Descent(), WeightDecay(), Momentum())
         o2 = OptimiserChain(Adam(), AdaGrad(), AdaMax())
 
-        o1n,o2n = @test_logs (:info, "Crossover between WeightDecay{Float32} and AdaGrad{Float32}") oc((o1,o2))
+        o1n,o2n = @test_logs (:info, "Crossover between WeightDecay and AdaGrad") oc((o1,o2))
 
-        @test typeof.(o1n.opts) == (Descent{Float32}, AdaGrad{Float32}, Momentum{Float32})
-        @test typeof.(o2n.opts) == (Adam{Float32}, WeightDecay{Float32}, AdaMax{Float32})
+        @test typeof.(o1n.opts) == (Descent{Float32}, AdaGrad, Momentum)
+        @test typeof.(o2n.opts) == (Adam, WeightDecay, AdaMax)
     end
 
     @testset "Learningrate crossover" begin
         import NaiveGAflux: learningrate
         @testset "Single opt" begin
             oc = LearningRateCrossover()
-            o1,o2 = oc((Descent(0.1f0), Momentum(0.2f0)))
+            o1,o2 = oc((Descent(0.1), Momentum(0.2)))
 
-            @test typeof(o1) == Descent{Float32}
-            @test o1.eta == 0.2f0
+            @test typeof(o1) == Descent{Float64}
+            @test o1.eta == 0.2
 
-            @test typeof(o2) == Momentum{Float32}
-            @test o2.eta == 0.1f0
+            @test typeof(o2) == Momentum
+            @test o2.eta == 0.1
         end
 
         @testset "Shielded opt" begin
@@ -103,23 +103,22 @@
             @test typeof(o1) == ShieldedOpt{Descent{Float32}}
             @test o1.rule.eta == 0.1f0
 
-            @test typeof(o2) == Momentum{Float32}
+            @test typeof(o2) == Momentum
             @test o2.eta == 0.2f0
         end
 
         @testset "OptimiserChain" begin
             oc = LearningRateCrossover()
-            o1 = OptimiserChain(Descent(0.1f0), Momentum(0.2f0), WeightDecay(0.1f0))
-            o2 = OptimiserChain(Adam(0.3f0), RAdam(0.4f0), NAdam(0.5f0), Nesterov(0.6f0))
+            o1 = OptimiserChain(Descent(0.1), Momentum(0.2), WeightDecay(0.1))
+            o2 = OptimiserChain(Adam(0.3), RAdam(0.4), NAdam(0.5), Nesterov(0.6))
 
             o1n,o2n = oc((o1,o2))
 
             @test prts(o1n) == prts(o1)
             @test prts(o2n) == prts(o2)
 
-            @test learningrate.(o1n.opts[1:end-1]) == (0.3f0, 0.4f0)
-            @test learningrate.(o2n.opts) == (0.1f0, 0.2f0, 0.5f0, 0.6f0)
-
+            @test learningrate.(o1n.opts[1:end-1]) == (0.3, 0.4)
+            @test learningrate.(o2n.opts) == (0.1, 0.2, 0.5, 0.6)
         end
     end
 end

@@ -33,7 +33,7 @@
         @test mt2('c') == 'c'
 
         mt1, mt2 = MapType(MapTypeTestCrossover{Optimisers.AbstractRule}(), (c1,c2), (identity, identity))
-        @test typeof(mt1(opt(c1))) == Momentum{Float32}
+        @test typeof(mt1(opt(c1))) == Momentum
         @test typeof(mt2(opt(c2))) == Descent{Float32} 
         @test mt1(3) == 3
         @test mt2('c') == 'c'

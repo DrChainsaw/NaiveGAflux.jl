@@ -67,18 +67,18 @@
                 @test !isdir(p.basedir)
 
                 @test p(PlotTestCand.(1:3, [10, 20, 30], [100, 200, 300]))
-                exp1 = [1 99 Descent{Float32}; 2 198 Descent{Float32}; 3 297 Adam{Float32}]
+                exp1 = [1 99 Descent{Float32}; 2 198 Descent{Float32}; 3 297 Adam]
                 @test p.data ==  [exp1]
 
                 @test p(PlotTestCand.(2:4, [20, 30, 40], [200, 300, 400]))
-                exp2 =  [2 198 Descent{Float32}; 3 297 Adam{Float32}; 4 396 Adam{Float32}]
+                exp2 =  [2 198 Descent{Float32}; 3 297 Adam; 4 396 Adam]
                 @test p.data ==  [exp1, exp2]
 
                 p2 = ScatterOpt((args...;kwargs...) -> true, testdir)
                 @test p2.data == p.data
 
                 @test p2(PlotTestCand.(3:5, [30, 40, 50], [300, 400, 500]))
-                exp3 = [3 297 Adam{Float32}; 4 396 Adam{Float32}; 5 495 Adam{Float32}]
+                exp3 = [3 297 Adam; 4 396 Adam; 5 495 Adam]
                 @test p2.data ==  [exp1, exp2, exp3]
 
                 p3 = ScatterOpt((args...;kwargs...) -> true, testdir)
