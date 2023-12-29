@@ -69,7 +69,7 @@ import CUDA
     @info "Testing visualization"
     include("visualization/callbacks.jl")
 
-    if VERSION === v"1.9.2"
+    if VERSION === v"1.10.0"
         @info "Testing README examples"
         include("examples.jl")
     else
