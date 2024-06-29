@@ -280,7 +280,7 @@ end
     @test learningrate(dm) ≈ 0.08f0
 
     wd = mergeopts(WeightDecay(0.1f0), WeightDecay(2f0), WeightDecay(0.4f0))
-    @test wd.gamma ≈ 0.08f0
+    @test wd.lambda ≈ 0.08f0
 
     dd = mergeopts(Momentum, Descent(0.1f0), Descent(2f0), Descent(0.4f0))
     @test typeof.(dd) == (Descent{Float32}, Descent{Float32}, Descent{Float32})

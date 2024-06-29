@@ -256,7 +256,7 @@ mergeopts(os::Tuple{}) = os
 mergeopts(::Type{T}, os::T...) where T = mergeopts(os...)
 mergeopts(os::Optimisers.AbstractRule...) = first(@set os[1].eta = prod(learningrate, os))
 mergeopts(os::ShieldedOpt{T}...) where T = ShieldedOpt(only(mergeopts(map(o -> o.rule, os))))
-mergeopts(os::WeightDecay...) = WeightDecay(prod(o -> o.gamma, os))
+mergeopts(os::WeightDecay...) = WeightDecay(prod(o -> o.lambda, os))
 
 """
     optmap(fopt, x, felse=identity)
