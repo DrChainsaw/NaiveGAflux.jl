@@ -29,7 +29,7 @@ NaiveGAfluxCUDAExt = "CUDA"
 
 [compat]
 CUDA = "3, 4, 5"
-Flux = "0.13.4, 0.14"
+Flux = "0.13.4, 0.14, 0.15"
 Functors = "0.2, 0.3, 0.4"
 IterTools = "1"
 MemPool = "0.3"
