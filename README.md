@@ -2,8 +2,7 @@
 
 [![](https://img.shields.io/badge/docs-stable-blue.svg)](https://DrChainsaw.github.io/NaiveGAflux.jl/stable)
 [![](https://img.shields.io/badge/docs-dev-blue.svg)](https://DrChainsaw.github.io/NaiveGAflux.jl/dev)
-[![Build status](https://github.com/DrChainsaw/NaiveGAflux.jl/workflows/CI/badge.svg?branch=master)](https://github.com/DrChainsaw/NaiveGAflux.jl/actions)
-[![Build Status](https://ci.appveyor.com/api/projects/status/github/DrChainsaw/NaiveGAflux.jl?svg=true)](https://ci.appveyor.com/project/DrChainsaw/NaiveGAflux-jl)
+[![Build status](https://github.com/DrChainsaw/NaiveGAflux.jl/actions/workflows/ci.yml/badge.svg?branch=master)](https://github.com/DrChainsaw/NaiveGAflux.jl/actions)
 [![Codecov](https://codecov.io/gh/DrChainsaw/NaiveGAflux.jl/branch/master/graph/badge.svg)](https://codecov.io/gh/DrChainsaw/NaiveGAflux.jl)
 
 Neural architecture search for [Flux](https://github.com/FluxML/Flux.jl) models using genetic algorithms.

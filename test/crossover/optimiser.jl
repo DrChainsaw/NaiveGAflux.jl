@@ -77,10 +77,10 @@
         o1 = OptimiserChain(Descent(), WeightDecay(), Momentum())
         o2 = OptimiserChain(Adam(), AdaGrad(), AdaMax())
 
-        o1n,o2n = @test_logs (:info, "Crossover between WeightDecay and AdaGrad") oc((o1,o2))
+        o1n,o2n = @test_logs (:info, r"Crossover between WeightDecay{.*} and AdaGrad{.*}") oc((o1,o2))
 
-        @test typeof.(o1n.opts) == (Descent{Float32}, AdaGrad, Momentum)
-        @test typeof.(o2n.opts) == (Adam, WeightDecay, AdaMax)
+        @test typeof.(o1n.opts) == (typeof(Descent()), typeof(AdaGrad()), typeof(Momentum()))
+        @test typeof.(o2n.opts) == (typeof(Adam()), typeof(WeightDecay()), typeof(AdaMax()))
     end
 
     @testset "Learningrate crossover" begin
@@ -92,18 +92,18 @@
             @test typeof(o1) == Descent{Float64}
             @test o1.eta == 0.2
 
-            @test typeof(o2) == Momentum
+            @test typeof(o2) == typeof(Momentum())
             @test o2.eta == 0.1
         end
 
         @testset "Shielded opt" begin
             oc = LearningRateCrossover()
-            o1,o2 = oc((ShieldedOpt(Descent(0.1f0)), Momentum(0.2f0)))
+            o1,o2 = oc((ShieldedOpt(Descent(0.1f0)), Momentum(0.2f0, 0.9f0)))
 
-            @test typeof(o1) == ShieldedOpt{Descent{Float32}}
+            @test typeof(o1) == ShieldedOpt{typeof(Descent(0.1f0))}
             @test o1.rule.eta == 0.1f0
 
-            @test typeof(o2) == Momentum
+            @test typeof(o2) == typeof(Momentum(0.2f0, 0.9f0))
             @test o2.eta == 0.2f0
         end
 

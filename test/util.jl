@@ -285,8 +285,8 @@ end
     dd = mergeopts(Momentum, Descent(0.1f0), Descent(2f0), Descent(0.4f0))
     @test typeof.(dd) == (Descent{Float32}, Descent{Float32}, Descent{Float32})
 
-    mm = mergeopts(Momentum, Descent(0.1f0), Momentum(0.2f0), Momentum(0.3f0), Descent(0.2f0))
-    @test typeof.(mm) == (Descent{Float32}, Descent{Float32}, Momentum)
+    mm = mergeopts(Momentum, Descent(0.1f0), Momentum(0.2f0, 0.9f0), Momentum(0.3f0, 0.9f0), Descent(0.2f0))
+    @test typeof.(mm) == (Descent{Float32}, Descent{Float32}, Momentum{Float32, Float32})
 end
 
 @testset "optmap" begin

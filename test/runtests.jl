@@ -69,11 +69,11 @@ import CUDA
     @info "Testing visualization"
     include("visualization/callbacks.jl")
 
-    if VERSION === v"1.10.4"
+    if VERSION === v"1.10.9"
         @info "Testing README examples"
         include("examples.jl")
     else
-        @warn "README examples will only be tested in julia version 1.10.4 due to rng dependency. Skipping..."
+        @warn "README examples will only be tested in julia version 1.10.9 due to rng dependency. Skipping..."
     end
 
     @info "Testing AutoFlux"
