@@ -84,6 +84,8 @@ struct BatchSizeIteratorMap{F} <: AbstractIteratorMap
     limitfun::F
 end
 
+Functors.@leaf BatchSizeIteratorMap
+
 function BatchSizeIteratorMap(tbs::Integer, vbs::Integer, limitfun)
     BatchSizeIteratorMap(TrainBatchSize(tbs), ValidationBatchSize(vbs), limitfun)
 end
@@ -106,6 +108,8 @@ struct IteratorMaps{T<:Tuple} <: AbstractIteratorMap
     maps::T
 end
 IteratorMaps(x...) = IteratorMaps(x)
+
+Functors.@leaf IteratorMaps
 
 maptrain(iws::IteratorMaps, iter) = foldr(maptrain, iws.maps; init=iter)
 mapvalidation(iws::IteratorMaps, iter) = foldr(mapvalidation, iws.maps; init=iter)
