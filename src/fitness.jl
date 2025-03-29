@@ -214,9 +214,8 @@ function trainmodel!(lossfun, model, optrule::ImplicitOpt, dataiter)
 
     for data in dataiter
         inputs = data[1:ninput]
-        y = data[ninput+1:end]
-        
-        l, _ = Flux.withgradient() do 
+ 
+        l, _ = Flux.withgradient(data[ninput+1:end]) do y
             ŷ = model(inputs...)
             lossfun(ŷ, y...)  
         end 

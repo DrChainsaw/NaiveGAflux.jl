@@ -63,22 +63,25 @@
             @testset "ScatterOpt" begin
                 NaiveGAflux.opt(c::PlotTestCand) = fitness(c) > 2 ? Adam(nparams(c) - fitness(c)) : Optimisers.OptimiserChain(ShieldedOpt(Descent(nparams(c) - fitness(c))))
 
+                DescentType = typeof(Descent())
+                AdamType = typeof(Adam(0.1f0))
+
                 p = ScatterOpt((args...;kwargs...) -> true, testdir)
                 @test !isdir(p.basedir)
 
                 @test p(PlotTestCand.(1:3, [10, 20, 30], [100, 200, 300]))
-                exp1 = [1 99 Descent{Float32}; 2 198 Descent{Float32}; 3 297 Adam]
+                exp1 = [1 99 DescentType; 2 198 DescentType; 3 297 AdamType]
                 @test p.data ==  [exp1]
 
                 @test p(PlotTestCand.(2:4, [20, 30, 40], [200, 300, 400]))
-                exp2 =  [2 198 Descent{Float32}; 3 297 Adam; 4 396 Adam]
+                exp2 =  [2 198 DescentType; 3 297 AdamType; 4 396 AdamType]
                 @test p.data ==  [exp1, exp2]
 
                 p2 = ScatterOpt((args...;kwargs...) -> true, testdir)
                 @test p2.data == p.data
 
                 @test p2(PlotTestCand.(3:5, [30, 40, 50], [300, 400, 500]))
-                exp3 = [3 297 Adam; 4 396 Adam; 5 495 Adam]
+                exp3 = [3 297 AdamType; 4 396 AdamType; 5 495 AdamType]
                 @test p2.data ==  [exp1, exp2, exp3]
 
                 p3 = ScatterOpt((args...;kwargs...) -> true, testdir)

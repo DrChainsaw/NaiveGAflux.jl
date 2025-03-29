@@ -8,7 +8,7 @@
 
     @testset "Gradients with layerfun=$layerfun" for (layerfun, isinit) in (
         (AutoOptimiser, false),
-        (AutoOptimiser(Descent(0.1)), true),
+        (AutoOptimiser(Descent(0.1f0)), true),
         (LazyMutable ∘ AutoOptimiser, false),
         (ActivationContribution ∘ LazyMutable ∘ AutoOptimiser, false),
         (LazyMutable ∘ ActivationContribution ∘ AutoOptimiser, false),
@@ -20,16 +20,16 @@
         x = ones(Float32, 1, 1)
         
         if !isinit
-            @test_throws ArgumentError("AutoOptimiser without optimiser state invoked. Forgot to call optimisersetup!?") gradient(() -> sum(g(x)))
+            @test_throws ArgumentError("AutoOptimiser without optimiser state invoked. Forgot to call optimisersetup!?") gradient(sum ∘ g, x) 
         else
-            gradient(() -> sum(g(x))) 
+            gradient(sum ∘ g, x) 
             @test NaiveNASflux.weights(layer(v1)) != ones(1,1)
             # Again with opposite sign to reset change so test below succeeds
-            gradient(() -> -sum(g(x))) 
+            gradient((-) ∘ sum ∘ g, x) 
         end
 
         optimisersetup!(Descent(0.5f0), g)
-        gradient(() -> sum(g(x)))
+        gradient(sum ∘ g, x) 
 
         @test NaiveNASflux.weights(layer(v1)) == fill(0.5, 1, 1)
         @test NaiveNASflux.bias(layer(v1)) == fill(-0.5, 1)

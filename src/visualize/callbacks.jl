@@ -153,7 +153,7 @@ function plotgen(p::ScatterOpt, gen = length(p.data))
     data = p.data[gen]
     fits = data[:,1]
     lrs = data[:,2]
-    ots = map(ostr -> last(split(ostr, ".")), string.(data[:,3]))
+    ots = map(ostr -> last(split(ostr, ".")), _simplename.(data[:,3]))
 
     uots = sort(unique(ots))
     inds = map(o -> o .== ots, uots)
@@ -163,6 +163,8 @@ function plotgen(p::ScatterOpt, gen = length(p.data))
 
     return p.plotfun(lrso, fitso, xlabel="Learning rate (log10)", ylabel="Fitness", label=reshape(uots,1,:), legend=:outerright, legendfontsize=5)
 end
+
+_simplename(x) = string(x.name.name)
 
 function(p::ScatterOpt)(population)
     plt = plotfitness(p, population)

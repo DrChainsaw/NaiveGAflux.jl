@@ -175,7 +175,7 @@
 
     import Flux: RNN
     @testset "ActivationFunctionMutation RNN" begin
-        v = fluxvertex(RNN(2,3), inputvertex("in", 2))
+        v = fluxvertex(RNN(2 => 3), inputvertex("in", 2))
         @test ActivationFunctionMutation(elu)(v) == v
         @test layer(v).cell.σ == elu
     end
