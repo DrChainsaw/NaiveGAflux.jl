@@ -1,0 +1,167 @@
+<!DOCTYPE html>
+<html lang="en"><head><meta charset="UTF-8"/><meta name="viewport" content="width=device-width, initial-scale=1.0"/><title>Batch Size Utilities · NaiveGAflux</title><script data-outdated-warner src="../../assets/warner.js"></script><link href="https://cdnjs.cloudflare.com/ajax/libs/lato-font/3.0.0/css/lato-font.min.css" rel="stylesheet" type="text/css"/><link href="https://cdnjs.cloudflare.com/ajax/libs/juliamono/0.045/juliamono.min.css" rel="stylesheet" type="text/css"/><link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/5.15.4/css/fontawesome.min.css" rel="stylesheet" type="text/css"/><link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/5.15.4/css/solid.min.css" rel="stylesheet" type="text/css"/><link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/5.15.4/css/brands.min.css" rel="stylesheet" type="text/css"/><link href="https://cdnjs.cloudflare.com/ajax/libs/KaTeX/0.13.24/katex.min.css" rel="stylesheet" type="text/css"/><script>documenterBaseURL="../.."</script><script src="https://cdnjs.cloudflare.com/ajax/libs/require.js/2.3.6/require.min.js" data-main="../../assets/documenter.js"></script><script src="../../siteinfo.js"></script><script src="../../../versions.js"></script><link class="docs-theme-link" rel="stylesheet" type="text/css" href="../../assets/themes/documenter-dark.css" data-theme-name="documenter-dark" data-theme-primary-dark/><link class="docs-theme-link" rel="stylesheet" type="text/css" href="../../assets/themes/documenter-light.css" data-theme-name="documenter-light" data-theme-primary/><script src="../../assets/themeswap.js"></script></head><body><div id="documenter"><nav class="docs-sidebar"><div class="docs-package-name"><span class="docs-autofit"><a href="../../">NaiveGAflux</a></span></div><form class="docs-search" action="../../search/"><input class="docs-search-query" id="documenter-search-query" name="q" type="text" placeholder="Search docs"/></form><ul class="docs-menu"><li><a class="tocitem" href="../../">Introduction</a></li><li><a class="tocitem" href="../../examples/quicktutorial/">Quick Tutorial</a></li><li><span class="tocitem">AutoFlux</span><ul><li><a class="tocitem" href="../../autoflux/">AutoFlux</a></li><li><a class="tocitem" href="../../autoflux/reference/reference/">AutoFlux API Reference</a></li></ul></li><li><span class="tocitem">Components</span><ul><li><a class="tocitem" href="../../examples/searchspace/">Search Spaces</a></li><li><a class="tocitem" href="../../examples/mutation/">Mutation Operations</a></li><li><a class="tocitem" href="../../examples/crossover/">Crossover Operations</a></li><li><a class="tocitem" href="../../examples/fitness/">Fitness Functions</a></li><li><a class="tocitem" href="../../examples/candidate/">Candidate Utilities</a></li><li><a class="tocitem" href="../../examples/evolution/">Evolution Strategies</a></li><li><a class="tocitem" href="../../examples/iteratormaps/">Iterator Maps</a></li><li><a class="tocitem" href="../../examples/iterators/">Iterators</a></li></ul></li><li><a class="tocitem" href="../../examples/performancetips/">Performance Tips</a></li><li><span class="tocitem">API Reference</span><ul><li><a class="tocitem" href="../searchspace/">Search Spaces</a></li><li><a class="tocitem" href="../mutation/">Mutation Operations</a></li><li><a class="tocitem" href="../crossover/">Crossover Operations</a></li><li><a class="tocitem" href="../fitness/">Fitness Functions</a></li><li><a class="tocitem" href="../candidate/">Candidate Utilities</a></li><li><a class="tocitem" href="../evolution/">Evolution Strategies</a></li><li class="is-active"><a class="tocitem" href>Batch Size Utilities</a></li><li><a class="tocitem" href="../iteratormaps/">Iterator Maps</a></li><li><a class="tocitem" href="../iterators/">Iterators</a></li><li><a class="tocitem" href="../utils/">Misc. Utilities</a></li></ul></li></ul><div class="docs-version-selector field has-addons"><div class="control"><span class="docs-label button is-static is-size-7">Version</span></div><div class="docs-selector control is-expanded"><div class="select is-fullwidth is-size-7"><select id="documenter-version-selector"></select></div></div></div></nav><div class="docs-main"><header class="docs-navbar"><nav class="breadcrumb"><ul class="is-hidden-mobile"><li><a class="is-disabled">API Reference</a></li><li class="is-active"><a href>Batch Size Utilities</a></li></ul><ul class="is-hidden-tablet"><li class="is-active"><a href>Batch Size Utilities</a></li></ul></nav><div class="docs-right"><a class="docs-edit-link" href="https://github.com/DrChainsaw/NaiveGAflux.jl/blob/master/docs/src/reference/batchsize.md" title="Edit on GitHub"><span class="docs-icon fab"></span><span class="docs-label is-hidden-touch">Edit on GitHub</span></a><a class="docs-settings-button fas fa-cog" id="documenter-settings-button" href="#" title="Settings"></a><a class="docs-sidebar-button fa fa-bars is-hidden-desktop" id="documenter-sidebar-button" href="#"></a></div></header><article class="content" id="documenter-page"><h1 id="BatchSizeUtilsAPI"><a class="docs-heading-anchor" href="#BatchSizeUtilsAPI">Batch Size Utilities</a><a id="BatchSizeUtilsAPI-1"></a><a class="docs-heading-anchor-permalink" href="#BatchSizeUtilsAPI" title="Permalink"></a></h1><article class="docstring"><header><a class="docstring-binding" id="NaiveGAflux.batchsizeselection" href="#NaiveGAflux.batchsizeselection"><code>NaiveGAflux.batchsizeselection</code></a> — <span class="docstring-category">Function</span></header><section><div><pre><code class="language-julia hljs">batchsizeselection(inshape_nobatch::Tuple; maxmemutil=0.7, uppersize=nothing, alternatives=nothing, batchsizefun=limit_maxbatchsize)</code></pre><p>Return a batch size selection callable which may be used to select an appropriate batch size when given a model and  a suggested batch size.</p><p><code>inshape_nobatch</code> is the size of the input without the batch dimension (e.g. 3 values for images) to be assumed. See <a href="#NaiveGAflux.BatchSizeSelectionWithDefaultInShape"><code>BatchSizeSelectionWithDefaultInShape</code></a></p><p><code>batchsizefun</code> is a function with the following signature:</p><p><code>batchsizefun(batchsize, model; inshape_nobatch, availablebytes)</code></p><p>It returns the largest batch size not larger than <code>batchsize</code> which can be used for <code>model</code> without using more than <code>availablebytes</code> bytes of memory. The type of <code>batchsize</code> may be used to e.g. determine if one shall account for backwards pass (if <code>typeof(batchsize) === TrainBatchSize</code>) or not (if <code>typeof(batchsize) == ValidationBatchSize</code>).</p><p><code>maxmemutil</code> is the maximum memory utilization which typically need to be <code>&lt; 1</code> to account for inaccuracies in the estimation. See <a href="#NaiveGAflux.BatchSizeSelectionScaled"><code>BatchSizeSelectionScaled</code></a></p><p>If <code>uppersize</code> is not <code>nothing</code> the maximum possible batchsize smaller or equal to <code>uppersize</code> will be used. See <a href="#NaiveGAflux.BatchSizeSelectionMaxSize"><code>BatchSizeSelectionMaxSize</code></a></p><p>If <code>alternatives</code> is not nothing, the returned batchsize will be quantized to the closest matching size in <code>alternatives</code> which is not bigger than the unquantized batch size. See <a href="#NaiveGAflux.BatchSizeSelectionFromAlternatives"><code>BatchSizeSelectionFromAlternatives</code></a>.</p><p><strong>Examples</strong></p><pre><code class="language-julia-repl hljs">julia&gt; using NaiveGAflux, Flux
+
+julia&gt; import NaiveGAflux: TrainBatchSize, ValidationBatchSize # Needed only for examples
+
+
+julia&gt; graph =  let 
+                    v0 = conv2dinputvertex(&quot;v0&quot;, 3);
+                    v1 = fluxvertex(&quot;v1&quot;, Conv((3,3), nout(v0) =&gt; 8), v0);
+                    CompGraph(v0, v1);
+                end;
+
+julia&gt; bs = batchsizeselection((32,32,3));
+
+julia&gt; bs(TrainBatchSize(128), graph; availablebytes = 10_000_000) # availablebytes supplied for doctest reasons
+84
+
+julia&gt; bs(ValidationBatchSize(128), graph; availablebytes = 10_000_000)
+128
+
+julia&gt; bs = batchsizeselection((32,32,3); maxmemutil=0.1);
+
+julia&gt; bs(TrainBatchSize(128), graph; availablebytes = 10_000_000)
+12
+
+julia&gt; bs(ValidationBatchSize(128), graph; availablebytes = 10_000_000)
+24
+
+julia&gt; bs = batchsizeselection((32,32,3); uppersize=1024);
+
+julia&gt; bs(TrainBatchSize(128), graph; availablebytes = 10_000_000)
+84
+
+julia&gt; bs(ValidationBatchSize(128), graph; availablebytes = 10_000_000)
+170
+
+julia&gt; bs = batchsizeselection((32,32,3); uppersize=1024, alternatives = 2 .^ (0:10));
+
+julia&gt; bs(TrainBatchSize(128), graph; availablebytes = 10_000_000)
+64
+
+julia&gt; bs(ValidationBatchSize(128), graph; availablebytes = 10_000_000)
+128</code></pre></div><a class="docs-sourcelink" target="_blank" href="https://github.com/DrChainsaw/NaiveGAflux.jl/blob/55505d288a4e2fc15fd3f3fa0c4263c96b36b31d/src/batchsize.jl#L224-L279">source</a></section></article><article class="docstring"><header><a class="docstring-binding" id="NaiveGAflux.BatchSizeSelectionWithDefaultInShape" href="#NaiveGAflux.BatchSizeSelectionWithDefaultInShape"><code>NaiveGAflux.BatchSizeSelectionWithDefaultInShape</code></a> — <span class="docstring-category">Type</span></header><section><div><pre><code class="language-julia hljs">BatchSizeSelectionWithDefaultInShape{T, F}
+BatchSizeSelectionWithDefaultInShape(default_inshape)
+BatchSizeSelectionWithDefaultInShape(default_inshape, batchsizefun)</code></pre><p>Batch size selection with a default assumed inshape used for estimating valid batch sizes.</p><p><code>batchsizefun</code> is a function with the following signature:</p><p><code>batchsizefun(batchsize, model; inshape_nobatch, availablebytes)</code></p><p>It returns the largest batch size not larger than <code>batchsize</code> which can be used for <code>model</code> without using more than <code>availablebytes</code> bytes of memory. The type of <code>batchsize</code> may be used to e.g. determine if one shall account for backwards pass (if <code>typeof(batchsize) === TrainBatchSize</code>) or not (if <code>typeof(batchsize) == ValidationBatchSize</code>).</p><p>Returns the result of <code>batchsizefun</code> with default value of <code>inshape_nobatch = default_inshape</code> when called as a function with valid inputs to <code>batchsizefun</code>.</p><p>Composable with other batch size selection types which may be used as <code>batchsizefun</code>. See examples.</p><p><strong>Examples</strong></p><pre><code class="language-julia-repl hljs">julia&gt; using NaiveGAflux, Flux
+
+julia&gt; import NaiveGAflux: TrainBatchSize, ValidationBatchSize # Needed only for examples
+
+
+julia&gt; graph =  let 
+                    v0 = conv2dinputvertex(&quot;v0&quot;, 3);
+                    v1 = fluxvertex(&quot;v1&quot;, Conv((3,3), nout(v0) =&gt; 8), v0);
+                    CompGraph(v0, v1);
+                end;
+
+julia&gt; bs = BatchSizeSelectionWithDefaultInShape((32,32,3));
+
+julia&gt; bs(TrainBatchSize(512), graph; availablebytes = 10_000_000) # availablebytes supplied for doctest reasons
+120
+
+julia&gt; bs(TrainBatchSize(512), graph; availablebytes = 1000_000_000)
+512
+
+julia&gt; sbs = BatchSizeSelectionWithDefaultInShape((32,32,3), BatchSizeSelectionScaled(0.5));
+
+julia&gt; sbs(TrainBatchSize(512), graph; availablebytes = 10_000_000)
+60
+
+julia&gt; sbs(TrainBatchSize(512), graph; availablebytes = 1000_000_000)
+512
+
+julia&gt; bs(ValidationBatchSize(512), graph; availablebytes=10_000_000)
+243
+</code></pre></div><a class="docs-sourcelink" target="_blank" href="https://github.com/DrChainsaw/NaiveGAflux.jl/blob/55505d288a4e2fc15fd3f3fa0c4263c96b36b31d/src/batchsize.jl#L52-L76">source</a></section></article><article class="docstring"><header><a class="docstring-binding" id="NaiveGAflux.BatchSizeSelectionScaled" href="#NaiveGAflux.BatchSizeSelectionScaled"><code>NaiveGAflux.BatchSizeSelectionScaled</code></a> — <span class="docstring-category">Type</span></header><section><div><pre><code class="language-julia hljs">BatchSizeSelectionScaled{F}
+BatchSizeSelectionScaled(scale)
+BatchSizeSelectionScaled(scale, batchsizefun)</code></pre><p>Batch size selection with a margin applied when estimating valid batch sizes.</p><p><code>batchsizefun</code> is a function with the following signature:</p><p><code>batchsizefun(batchsize, model; inshape_nobatch, availablebytes)</code></p><p>It returns the largest batch size not larger than <code>batchsize</code> which can be used for <code>model</code> without using more than <code>availablebytes</code> bytes of memory. The type of <code>batchsize</code> may be used to e.g. determine if one shall account for backwards pass (if <code>typeof(batchsize) === TrainBatchSize</code>) or not (if <code>typeof(batchsize) == ValidationBatchSize</code>).</p><p>Returns the result of <code>batchsizefun</code> with default value of <code>availablebytes = floor(scale * availablebytes)</code> when called as a function with valid inputs to <code>batchsizefun</code>.</p><p>Composable with other batch size selection types which may be used as <code>batchsizefun</code>. See examples.</p><p><strong>Examples</strong></p><pre><code class="language-julia-repl hljs">julia&gt; using NaiveGAflux, Flux
+
+julia&gt; import NaiveGAflux: TrainBatchSize, ValidationBatchSize # Needed only for examples
+
+
+julia&gt; graph =  let 
+                    v0 = conv2dinputvertex(&quot;v0&quot;, 3);
+                    v1 = fluxvertex(&quot;v1&quot;, Conv((3,3), nout(v0) =&gt; 8), v0);
+                    CompGraph(v0, v1);
+                end;
+
+julia&gt; bs = BatchSizeSelectionScaled(0.5);
+
+julia&gt; bs(TrainBatchSize(512), graph; inshape_nobatch=(32,32,3), availablebytes = 10_000_000) # availablebytes supplied for doctest reasons
+60
+
+julia&gt; bs(TrainBatchSize(512), graph; inshape_nobatch=(32,32,3), availablebytes = 1000_000_000)
+512
+
+julia&gt; sbs = BatchSizeSelectionScaled(0.5, BatchSizeSelectionWithDefaultInShape((32,32,3)));
+
+julia&gt; sbs(TrainBatchSize(512), graph; availablebytes = 10_000_000)
+60
+
+julia&gt; sbs(TrainBatchSize(512), graph; availablebytes = 1000_000_000)
+512
+
+julia&gt; bs(ValidationBatchSize(512), graph; inshape_nobatch=(32,32,3), availablebytes=10_000_000)
+121
+</code></pre></div><a class="docs-sourcelink" target="_blank" href="https://github.com/DrChainsaw/NaiveGAflux.jl/blob/55505d288a4e2fc15fd3f3fa0c4263c96b36b31d/src/batchsize.jl#L95-L119">source</a></section></article><article class="docstring"><header><a class="docstring-binding" id="NaiveGAflux.BatchSizeSelectionFromAlternatives" href="#NaiveGAflux.BatchSizeSelectionFromAlternatives"><code>NaiveGAflux.BatchSizeSelectionFromAlternatives</code></a> — <span class="docstring-category">Type</span></header><section><div><pre><code class="language-julia hljs">BatchSizeSelectionFromAlternatives{T, F}
+BatchSizeSelectionFromAlternatives(alts)
+BatchSizeSelectionFromAlternatives(alts, batchsizefun)</code></pre><p>Batch size selection from a set of available alternatives. Useful for iterators which need to be pre-loaded with batch size, for example the iterators in this package.</p><p><code>batchsizefun</code> is a function with the following signature:</p><p><code>batchsizefun(batchsize, model; inshape_nobatch, availablebytes)</code></p><p>It returns the largest batch size not larger than <code>batchsize</code> which can be used for <code>model</code> without using more than <code>availablebytes</code> bytes of memory. The type of <code>batchsize</code> may be used to e.g. determine if one shall account for backwards pass (if <code>typeof(batchsize) === TrainBatchSize</code>) or not (if <code>typeof(batchsize) == ValidationBatchSize</code>).</p><p>Returns the largest number in <code>alts</code> smaller than the result of <code>batchsizefun</code> when called as a function with valid inputs to <code>batchsizefun</code>.</p><p>Composable with other batch size selection types which may be used as <code>batchsizefun</code>. See examples.</p><p><strong>Examples</strong></p><pre><code class="language-julia-repl hljs">julia&gt; using NaiveGAflux, Flux
+
+julia&gt; import NaiveGAflux: TrainBatchSize, ValidationBatchSize # Needed only for examples
+
+
+julia&gt; graph =  let 
+                    v0 = conv2dinputvertex(&quot;v0&quot;, 3);
+                    v1 = fluxvertex(&quot;v1&quot;, Conv((3,3), nout(v0) =&gt; 8), v0);
+                    CompGraph(v0, v1);
+                end;
+
+julia&gt; bs = BatchSizeSelectionFromAlternatives(2 .^ (0:10));
+
+julia&gt; bs(TrainBatchSize(512), graph; inshape_nobatch=(32,32,3), availablebytes = 10_000_000) # availablebytes supplied for doctest reasons
+64
+
+julia&gt; bs(TrainBatchSize(512), graph; inshape_nobatch=(32,32,3), availablebytes = 1000_000_000)
+512
+
+julia&gt; sbs = BatchSizeSelectionFromAlternatives(2 .^ (0:10), BatchSizeSelectionScaled(0.5));
+
+julia&gt; sbs(TrainBatchSize(512), graph; inshape_nobatch=(32,32,3), availablebytes = 10_000_000)
+32
+
+julia&gt; sbs(TrainBatchSize(512), graph; inshape_nobatch=(32,32,3), availablebytes = 1000_000_000)
+512
+
+julia&gt; bs(ValidationBatchSize(512), graph; inshape_nobatch=(32,32,3), availablebytes=10_000_000)
+128
+</code></pre></div><a class="docs-sourcelink" target="_blank" href="https://github.com/DrChainsaw/NaiveGAflux.jl/blob/55505d288a4e2fc15fd3f3fa0c4263c96b36b31d/src/batchsize.jl#L135-L159">source</a></section></article><article class="docstring"><header><a class="docstring-binding" id="NaiveGAflux.BatchSizeSelectionMaxSize" href="#NaiveGAflux.BatchSizeSelectionMaxSize"><code>NaiveGAflux.BatchSizeSelectionMaxSize</code></a> — <span class="docstring-category">Type</span></header><section><div><pre><code class="language-julia hljs">BatchSizeSelectionMaxSize{F}
+BatchSizeSelectionMaxSize(uppersize) 
+BatchSizeSelectionMaxSize(uppersize, batchsizefun)</code></pre><p>Batch size selection which always try to select <code>uppersize</code>. Basically the strategy to select the largest batchsize which fits in memory.</p><p><code>batchsizefun</code> is a function with the following signature:</p><p><code>batchsizefun(batchsize, model; inshape_nobatch, availablebytes)</code></p><p>It returns the largest batch size not larger than <code>batchsize</code> which can be used for <code>model</code> without using more than <code>availablebytes</code> bytes of memory. The type of <code>batchsize</code> may be used to e.g. determine if one shall account for backwards pass (if <code>typeof(batchsize) === TrainBatchSize</code>) or not (if <code>typeof(batchsize) == ValidationBatchSize</code>).</p><p>Returns the result of <code>batchsizefun</code> but with the <code>batchsize</code> as <code>uppersize</code> of the same type as <code>batchsize</code> (i.e. to differentiate between train size and validation size).</p><p>Composable with other batch size selection types which may be used as <code>batchsizefun</code>. See examples.</p><p><strong>Examples</strong></p><pre><code class="language-julia-repl hljs">julia&gt; using NaiveGAflux, Flux
+
+julia&gt; import NaiveGAflux: TrainBatchSize, ValidationBatchSize # Needed only for examples
+
+
+julia&gt; graph =  let 
+                    v0 = conv2dinputvertex(&quot;v0&quot;, 3);
+                    v1 = fluxvertex(&quot;v1&quot;, Conv((3,3), nout(v0) =&gt; 8), v0);
+                    CompGraph(v0, v1);
+                end;
+
+julia&gt; bs = BatchSizeSelectionMaxSize(1024);
+
+julia&gt; bs(TrainBatchSize(512), graph; inshape_nobatch=(32,32,3), availablebytes = 10_000_000) # availablebytes supplied for doctest reasons
+120
+
+julia&gt; bs(TrainBatchSize(512), graph; inshape_nobatch=(32,32,3), availablebytes = 1000_000_000)
+1024
+
+julia&gt; sbs = BatchSizeSelectionMaxSize(1024, BatchSizeSelectionScaled(0.5));
+
+julia&gt; sbs(TrainBatchSize(512), graph; inshape_nobatch=(32,32,3), availablebytes = 10_000_000)
+60
+
+julia&gt; sbs(TrainBatchSize(512), graph; inshape_nobatch=(32,32,3), availablebytes = 1000_000_000)
+1024
+
+julia&gt; bs(ValidationBatchSize(512), graph; inshape_nobatch=(32,32,3), availablebytes=10_000_000)
+243
+</code></pre></div><a class="docs-sourcelink" target="_blank" href="https://github.com/DrChainsaw/NaiveGAflux.jl/blob/55505d288a4e2fc15fd3f3fa0c4263c96b36b31d/src/batchsize.jl#L182-L206">source</a></section></article></article><nav class="docs-footer"><a class="docs-footer-prevpage" href="../evolution/">« Evolution Strategies</a><a class="docs-footer-nextpage" href="../iteratormaps/">Iterator Maps »</a><div class="flexbox-break"></div><p class="footer-message">Powered by <a href="https://github.com/JuliaDocs/Documenter.jl">Documenter.jl</a> and the <a href="https://julialang.org/">Julia Programming Language</a>.</p></nav></div><div class="modal" id="documenter-settings"><div class="modal-background"></div><div class="modal-card"><header class="modal-card-head"><p class="modal-card-title">Settings</p><button class="delete"></button></header><section class="modal-card-body"><p><label class="label">Theme</label><div class="select"><select id="documenter-themepicker"><option value="documenter-light">documenter-light</option><option value="documenter-dark">documenter-dark</option></select></div></p><hr/><p>This document was generated with <a href="https://github.com/JuliaDocs/Documenter.jl">Documenter.jl</a> version 0.27.25 on <span class="colophon-date" title="Sunday 30 March 2025 14:47">Sunday 30 March 2025</span>. Using Julia version 1.10.9.</p></section><footer class="modal-card-foot"></footer></div></div></div></body></html>
