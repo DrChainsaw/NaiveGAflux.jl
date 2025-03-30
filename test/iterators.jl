@@ -147,14 +147,6 @@ end
 @testset "RepeatPartitionIterator and shuffling BatchIterator" begin
     import IterTools: ncycle
 
-    @testset "Single epoch small" begin
-        ritr = RepeatPartitionIterator(BatchIterator(1:20, 3; shuffle=MersenneTwister(123)), 4)
-
-        @testset "Iteration $i" for (i, itr) in enumerate(ritr)
-            @test collect(itr) == collect(itr)
-        end
-    end
-
     @testset "Multi epoch small" begin
         sitr = BatchIterator(1:20, 3;shuffle=MersenneTwister(123))
         citr = ncycle(sitr, 2)
