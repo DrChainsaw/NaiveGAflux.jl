@@ -1,5 +1,82 @@
 itergeneration(itr, gen) = itr
 
+struct MarkableIteratorState{S}
+    state::Union{S, Nothing}
+    cnt::Int
+end
+
+_nextstate(s::MarkableIteratorState{S}, nextstate) where S = MarkableIteratorState{S}(nextstate, s.cnt+1) 
+
+"""
+    MarkableStatefulIterator{S, I}
+
+Stateful iterator that can be marked to remember its current state. Will start from the current state whenever a new iteration begins.
+
+Intended to be used by [`RepeatPartitionIterator`](@ref).
+"""
+mutable struct MarkableStatefulIterator{S, I}
+    const base::I
+    laststate::MarkableIteratorState{S}
+    markedstate::MarkableIteratorState{S}
+end
+
+function MarkableStatefulIterator(itr)
+    firstvalstate = iterate(itr)
+    S = if isnothing(firstvalstate)
+        # Empty iterator. Weird, but ok
+        Nothing
+    else
+        # Discard first value which is a bit wasteful
+        # However, this iterator is intended to be used in a context
+        # where it is created very seldom and used for a very long time
+        # Since val is typically things like a large GPU array it is
+        # probably (hopefully) better to not hold on to it.
+        val, state = firstvalstate
+        typeof(state)
+    end
+
+    MarkableStatefulIterator(
+        itr,
+        MarkableIteratorState{S}(nothing, 0),
+        MarkableIteratorState{S}(nothing, 0)
+    )
+end
+
+
+function Base.iterate(itr::MarkableStatefulIterator, state = itr.markedstate)
+    nextvalstate = if isnothing(state.state)
+        iterate(itr.base)
+    else
+        iterate(itr.base, state.state)
+    end
+
+    if isnothing(nextvalstate)
+        itr.laststate = _nextstate(state, nothing)
+        nothing
+    else
+        val, nextstate = nextvalstate
+        itr.laststate = _nextstate(state, nextstate)
+        val, itr.laststate
+    end
+end
+
+function _reset!(itr::MarkableStatefulIterator{S}) where S
+    itr.markedstate = MarkableIteratorState{S}(nothing, 0)
+    itr.laststate = MarkableIteratorState{S}(nothing, 0)
+end
+
+function _mark!(itr::MarkableStatefulIterator)
+    itr.markedstate = itr.laststate
+end
+
+Base.eltype(::Type{MarkableStatefulIterator{S, I}}) where {S, I} = eltype(I)
+Base.size(itr::MarkableStatefulIterator) = size(itr.base)
+Base.length(itr::MarkableStatefulIterator) = length(itr.base) - itr.markedstate.cnt
+
+Base.IteratorSize(::Type{MarkableStatefulIterator{S, I}}) where {S, I} = Base.IteratorSize(I)
+Base.IteratorEltype(::Type{MarkableStatefulIterator{S, I}}) where {S, I} = Base.IteratorEltype(I)
+
+
 """
     RepeatPartitionIterator
     RepeatPartitionIterator(base, nrep)
@@ -25,98 +102,56 @@ end
 ```
 
 """
-struct RepeatPartitionIterator{I <: Iterators.Stateful}
+struct RepeatPartitionIterator{I <: MarkableStatefulIterator}
     base::I
     ntake::Int
 end
-RepeatPartitionIterator(base, nrep) = RepeatPartitionIterator(Iterators.Stateful(base), nrep)
-RepeatPartitionIterator(base::Iterators.Stateful, nrep) = RepeatPartitionIterator(base, nrep)
+RepeatPartitionIterator(base, nrep) = RepeatPartitionIterator(MarkableStatefulIterator(base), nrep)
+RepeatPartitionIterator(base::MarkableStatefulIterator, nrep) = RepeatPartitionIterator(base, nrep)
 
 function Base.iterate(itr::RepeatPartitionIterator, reset=true)
     if reset
-        Iterators.reset!(itr.base, itr.base.itr)
+        _reset!(itr.base)
+    else
+        _mark!(itr.base)
     end
     Base.IteratorSize(itr) !== Base.IsInfinite() && length(itr) == 0 && return nothing
-    return Iterators.take(RepeatStatefulIterator(itr.base), itr.ntake), false
+    return Iterators.take(itr.base, itr.ntake), false
 end
 
 Base.length(itr::RepeatPartitionIterator) = cld(length(itr.base), itr.ntake)
 Base.eltype(::Type{RepeatPartitionIterator{I}}) where {I} = eltype(I)
 Base.size(itr::RepeatPartitionIterator) = tuple(length(itr))
 
-
 Base.IteratorSize(::Type{RepeatPartitionIterator{I}}) where {I} = Base.IteratorSize(I)
 Base.IteratorEltype(::Type{RepeatPartitionIterator{I}}) where {I} = Base.IteratorEltype(I)
 
-
-struct RepeatStatefulIterator{I <: Iterators.Stateful, S}
-    base::I
-    initialstate::S
-end
-RepeatStatefulIterator(base) = RepeatStatefulIterator(base, statevars(base))
-
-# This is my punishment for accessing internals :(
-# One of these days I'm gonna rewrite this completely. It seems there should be a 
-# much simpler solution to the reapeat partitions of an iterator problem, but everytime 
-# I spend 5 minutes thinking about it the new design just reimplements Iterators.Stateful
-if VERSION <= v"1.8.99"
-    statevars(itr::Iterators.Stateful) = itr.nextvalstate, itr.taken
-    function setstate!(itr::Iterators.Stateful, nextvalstate, taken) 
-        itr.nextvalstate = nextvalstate
-        itr.taken = taken
-    end
-    # Note: We can't use length(itr.base) since we reset it every time we start iterating
-    Base.length(itr::RepeatStatefulIterator) = length(itr.base.itr) - itr.initialstate[2]
-else
-    statevars(itr::Iterators.Stateful) = itr.nextvalstate, itr.remaining
-    function setstate!(itr::Iterators.Stateful, nextvalstate, remaining) 
-        itr.nextvalstate = nextvalstate
-        itr.remaining = remaining
-    end
-    # Note: We can't use length(itr.base) since we reset it every time we start iterating
-    function Base.length(itr::RepeatStatefulIterator)
-        rem = itr.initialstate[2]
-        rem >= 0 ? rem : length(itr.base.itr) - (typeof(rem)(1) - rem)
-    end
-end
-
-function Base.iterate(itr::RepeatStatefulIterator, reset=true)
-    if reset
-        setstate!(itr.base, itr.initialstate...)
-    end
-    val, state = IterTools.@ifsomething iterate(itr.base)
-    return val, false
-end
-
-Base.eltype(::Type{RepeatStatefulIterator{I,VS}}) where {I,VS} = eltype(I)
-Base.size(itr::RepeatStatefulIterator) = size(itr.base.itr)
-
-Base.IteratorSize(::Type{RepeatStatefulIterator{I,VS}}) where {I,VS} = Base.IteratorSize(I)
-Base.IteratorEltype(::Type{RepeatStatefulIterator{I,VS}}) where {I,VS} = Base.IteratorEltype(I)
+_mark!(r::RepeatPartitionIterator) = _mark!(r.base)
+_reset!(r::RepeatPartitionIterator) = _reset(r.base)
 
 """
-    StatefulGenerationIter{T, VS}
+    StatefulGenerationIter{I, R}
 
 Uses a `RepeatPartitionIterator` to ensure that the same iterator is returned for the same generation number.
 """
-struct StatefulGenerationIter{I, R}
-    currgen::Base.RefValue{Int}
-    curriter::Base.RefValue{I}
-    iter::RepeatPartitionIterator{R}
+mutable struct StatefulGenerationIter{I, R}
+    currgen::Int
+    curriter::I
+    const iter::RepeatPartitionIterator{R}
 end
 # TODO : This is a bit of cludge-on-cludge. Try to refactor someday to a more straighforward design, perhaps use LearnBase.getobs
-StatefulGenerationIter(iter::RepeatPartitionIterator, gen=0) = StatefulGenerationIter(Ref(gen), Ref(first(iterate(iter))), iter)
+StatefulGenerationIter(iter::RepeatPartitionIterator, gen=0) = StatefulGenerationIter(gen, first(iterate(iter)), iter)
 
 function itergeneration(itr::StatefulGenerationIter, gen)
-    if gen != itr.currgen[]
-        itr.currgen[] = gen
+    if gen != itr.currgen
+        itr.currgen = gen
         newiterstate = iterate(itr.iter, false)
         if newiterstate === nothing
             newiterstate = iterate(itr.iter)
         end
-        itr.curriter[] = first(newiterstate)
+        itr.curriter = first(newiterstate)
     end
-    return itr.curriter[]
+    return itr.curriter
 end
 
 
@@ -128,7 +163,8 @@ Iterator which has the random seed of an `AbstractRNG` as state.
 
 Calls `Random.seed!(rng, seed)` every iteration so that wrapped iterators which depend on `rng` will produce the same sequence.
 
-Useful in conjunction with [`RepeatPartitionIterator`](@ref) and [`BatchIterator`](@ref) and/or random data augmentation so that all candidates in a generation are trained with identical data.
+Useful in conjunction with [`RepeatPartitionIterator`](@ref) and [`BatchIterator`](@ref) and/or random data augmentation so that 
+all candidates in a generation are trained with identical data.
 """
 struct SeedIterator{R <: AbstractRNG, T}
     rng::R
@@ -181,6 +217,9 @@ or all elements of `data` if `data` is a `Tuple` (e.g `(features, labels)`).
 
 Will shuffle examples if `shuffle` is `true` or an `AbstractRNG`. Shuffling will be 
 different each time iteration starts (subject to implementation of shuffle(rng,...)).  
+
+Remember to use a `SeedIterator` if using this with [`RepeatPartitionIterator`](@ref) or
+[`StatefulGenerationIter`](@ref).
 """
 struct BatchIterator{R, D}
     nobs::Int
@@ -299,7 +338,8 @@ setbatchsize(itr::TimedIterator, batchsize) = TimedIterator(itr.timelimit, itr.p
 
 Return and iterator which iterates `batchsize` samples from `base` where `base` is in itself assumed to provide batches of another batchsize.
 
-Reason for this convoluted construct is to provide a way to use different batch sizes for different models while still allowing all models to see the same samples (including data augmentation) in the same order. As we don't want to make assumption about what `base` is, this iterator is used by default. 
+Reason for this convoluted construct is to provide a way to use different batch sizes for different models while still allowing all models to 
+see the same samples (including data augmentation) in the same order. As we don't want to make assumption about what `base` is, this iterator is used by default. 
     
 Implement `setbatchsize(itr::T, batchsize::Int)` for iterator types `T` where it is possible to set the batch size (or create a new iterator).
 # Examples
